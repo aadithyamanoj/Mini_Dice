@@ -11,13 +11,13 @@ import dice_pkg::*;
 #(
     parameter int NUM_PORTS = DICE_NUM_BANKS,
     parameter int DATA_WIDTH = DICE_REG_DATA_WIDTH,
-    parameter int NUM_TID = 512,
+    parameter int NUM_TID = DICE_NUM_MAX_THREADS_PER_CORE,
     parameter int TID_WIDTH = $clog2(NUM_TID),
     parameter int DEPTH = NUM_TID,
     parameter int ADDR_WIDTH = $clog2(DEPTH),
-    parameter int NUM_SPECIAL_REG = 16,
-    parameter int MAX_CTA_ID = 65535,
-    parameter int CTA_ID_WIDTH = $clog2(MAX_CTA_ID),
+    parameter int NUM_SPECIAL_REG = DICE_PR_NUM,
+    parameter int MAX_CTA_ID = ,
+    parameter int CTA_ID_WIDTH = DICE_CTA_ID_WIDTH,
     parameter int BUF_DEPTH = 8
 )
 (

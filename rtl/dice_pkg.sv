@@ -24,7 +24,7 @@ package dice_pkg;
   parameter int DICE_SMEM_SIZE_WIDTH          = $clog2(`DICE_SMEM_SIZE_PER_CORE);
   parameter int DICE_BITSTREAM_SIZE           = 2048;  // 256 bytes max bitstream size
 
-  parameter int DICE_DATA_WIDTH               = 32;
+  parameter int DICE_DATA_WIDTH               = 8;
   parameter int DICE_NUMBER_OF_MAX_COALESCED_COMMANDS = 8;
   parameter int DICE_CACHE_LINE_SIZE          = 32;
   parameter int DICE_BASE_ADDRESS_OFFSET      = $clog2(DICE_CACHE_LINE_SIZE);
