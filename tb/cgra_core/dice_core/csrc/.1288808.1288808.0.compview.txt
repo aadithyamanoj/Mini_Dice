@@ -1,0 +1,6 @@
+{"vcs1":{"timestamp_begin":1771287986.950813861, "rt":0.09, "ut":0.02, "st":0.03}}
+{"SNPS_VCS_INTERNAL_ROOT_START_TIME": 1771287986.573395529}
+{"VCS_COMP_START_TIME": 1771287986.573395529}
+{"VCS_COMP_END_TIME": 1771287987.079492442}
+{"VCS_USER_OPTIONS": "-full64 -sverilog -f filelist.f +lint=TFIPC-L -top tb_dice_core -debug_access+pp+all -kdb -lca +vpi +define+FSDB +fsdb+struct=on -o simv"}
+{"kdb": {"elabcom_name":"<Kdbresolver>", "log_dir":"simv.daidir/kdbresolverLog"}}

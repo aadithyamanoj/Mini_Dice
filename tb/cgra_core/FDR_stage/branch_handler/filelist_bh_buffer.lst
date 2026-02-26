@@ -1,0 +1,3 @@
+-f common_files.lst
+${DICE_HOME}/dice_new/rtl/cgra_core/fetch_stage/branch_handler/bh_buffer.sv
+tb_bh_buffer.sv

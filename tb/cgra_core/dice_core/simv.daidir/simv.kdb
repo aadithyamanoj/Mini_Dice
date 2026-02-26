@@ -1,0 +1,24 @@
+rc file Version 1.0
+
+[Design]
+COMPILE_PATH=/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core
+VCS_HOME=/data/eda_tools/synopsys/tools/vcs/X-2025.06
+VERDI_HOME=/data/eda_tools/synopsys/tools/verdi/X-2025.06
+SystemC=FALSE
+UUM=FALSE
+KDB=TRUE
+USE_NOVAS_HOME=FALSE
+COSIM=FALSE
+TOP=tb_dice_core 
+OPTION=-ssv -ssy 
+ELAB_OPTION=-ssv -ssy 
+ELAB=TRUE
+COMMON_ELAB=TRUE
+SIMV_WRAPPER=FALSE
+ELABCOM_PARTAIL_LOAD=TRUE
+[Value]
+WREALX=ffff534e50535f58
+WREALZ=ffff534e50535f5a
+
+[CompInfo]
+FLOW_OPTS=-kdb=common_elab -ssv -ssy 

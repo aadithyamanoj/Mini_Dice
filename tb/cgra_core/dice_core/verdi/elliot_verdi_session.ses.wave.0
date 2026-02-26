@@ -1,0 +1,299 @@
+Magic 271485
+Revision Verdi_X-2025.06
+
+; Window Layout <x> <y> <width> <height> <signalwidth> <valuewidth>
+viewPort 0 11 2048 856 659 249
+
+; File list:
+; openDirFile [-d delimiter] [-s time_offset] [-rf auto_bus_rule_file] path_name file_name
+openDirFile -d / "" "/data2/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/build/tb_dice_core.fsdb"
+
+; file time scale:
+; fileTimeScale ### s|ms|us|ns|ps
+
+; signal spacing:
+signalSpacing 5
+
+; windowTimeUnit is used for zoom, cursor & marker
+; waveform viewport range
+zoom 0.000000 822.334061
+cursor 5.000000
+marker 0.000000
+
+; user define markers
+; userMarker time_pos marker_name color linestyle
+; visible top row signal index
+top 0
+; marker line index
+markerPos 19
+
+; rename signal list
+; addRenameSig new_name org_name
+activeDirFile "" "/data2/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/build/tb_dice_core.fsdb"
+
+addRenameSig "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/Stack 3 Valid" "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/stack_top_valid_o[3]" keep
+
+; rename signal list
+; addRenameSig new_name org_name
+
+addRenameSig "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/Stack 2 Valid" "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/stack_top_valid_o[2]" keep
+
+; rename signal list
+; addRenameSig new_name org_name
+
+addRenameSig "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/Stack 1 Valid" "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/stack_top_valid_o[1]" keep
+
+; rename signal list
+; addRenameSig new_name org_name
+
+addRenameSig "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/Stack 0 Valid" "/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/stack_top_valid_o[0]" keep
+
+; event list
+; addEvent event_name event_expression
+; curEvent event_name
+
+
+
+COMPLEX_EVENT_BEGIN
+
+
+COMPLEX_EVENT_END
+
+
+
+; toolbar current search type
+; curSTATUS search_type
+curSTATUS ByChange
+
+
+addGroup "Global" -e FALSE
+activeDirFile "" "/data2/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/build/tb_dice_core.fsdb"
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/cta_controller_inst/clk_i
+addSignal -h 16 -holdScope rst_i
+addGroup "New CTA" -e FALSE
+addSignal -h 16 -UNSIGNED /tb_dice_core/u_dut/u_cta_schedule_stage/cta_controller_inst/add_hw_cta_size_o[1:0]
+addSignal -expanded -h 16 /tb_dice_core/cta_dispatch_if_inst/data
+addSignal -expanded -h 16 -holdScope data.kernel_desc
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.kernel_id[15:0]
+addSignal -h 16 -holdScope data.kernel_desc.grid_size
+addSignal -expanded -h 16 -holdScope data.kernel_desc.cta_size
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.cta_size.x[9:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.cta_size.y[9:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.cta_size.z[9:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.smem_per_cta[13:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.start_pc[31:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.kernel_desc.arg_ptr[31:0]
+addSignal -h 16 -holdScope data.cta_id
+addSignal -h 16 -holdScope ready
+addSignal -h 16 -holdScope valid
+addGroup "CTA Status Table" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/cta_status_table_inst/cta_status_o[3:0]
+addSignal -h 16 -holdScope clear_entry_valid_i
+addSignal -h 16 -UNSIGNED -HEX -holdScope clear_entry_hw_id_i[1:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope bp_cta_id[1:0]
+addSignal -h 16 -holdScope branch_predict_info_i
+addSignal -h 16 -holdScope branch_predict_info_we_i
+addSignal -h 16 -holdScope brt_info_i
+addGroup "Init in SIMT" -e FALSE
+addSignal -h 16 -UNSIGNED -HEX /tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/init_hw_cta_id_i[1:0]
+addSignal -h 16 -UNSIGNED -holdScope init_hw_cta_size_i[1:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope init_pc_i[31:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope init_reconvergence_pc_i[31:0]
+addSignal -h 16 -mark ID_YELLOW5 -tri 1 { 145 } -holdScope init_valid_i
+addSignal -h 16 -holdScope init_ready_o
+addGroup "Init in Active CTA Table" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/active_cta_table_inst/add_ready_o
+addSignal -h 16 -holdScope add_valid_i
+addGroup "SIMT Stacks Status" -e FALSE
+addSignal -h 16 -UNSIGNED -UDEC /tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/num_active_stacks[2:0]
+addSignal -h 16 -holdScope Stack 3 Valid
+addSignal -h 16 -holdScope Stack 2 Valid
+addSignal -h 16 -holdScope Stack 1 Valid
+addSignal -h 16 -holdScope Stack 0 Valid
+addSignal -h 16 -UNSIGNED -HEX -holdScope stack_full_o[3:0]
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/unnamed$$_0/all_active_valid
+addSignal -h 16 -UNSIGNED -HEX /tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/hw_cta_id_q[1:0]
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/unnamed$$_0/all_active_valid
+addSignal -h 16 -UNSIGNED -HEX /tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/stack_empty_o[3:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope combined_stack_top_active_mask[511:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope combined_stack_top_next_pc[31:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope combined_stack_top_reconvergence_pc[31:0]
+addSignal -h 16 -holdScope stack_top_active_mask_o[3:0]
+addSignal -h 16 -UNSIGNED -mark ID_YELLOW5 -tri 1 { 155 } -holdScope next_state[2:0]
+addSignal -h 16 -UNSIGNED -holdScope current_state_q[2:0]
+addGroup "Active CTA Status" -e FALSE
+addSignal -h 16 -UNSIGNED -HEX /tb_dice_core/u_dut/u_cta_schedule_stage/active_cta_table_inst/entries_needed[2:0]
+addSignal -h 16 -holdScope entries_valid[3]
+addSignal -h 16 -holdScope entries_valid[2]
+addSignal -h 16 -holdScope entries_valid[1]
+addSignal -h 16 -holdScope entries_valid[0]
+addSignal -h 16 -holdScope found_empty_r
+addSignal -h 16 -UNSIGNED -HEX -holdScope empty_index[1:0]
+addSignal -h 16 -holdScope full_o
+addGroup "Active CTA Output Buffer" -e FALSE
+addSignal -h 16 -UNSIGNED /tb_dice_core/u_dut/u_cta_schedule_stage/active_cta_table_inst/output_buffer_cta_size_q[1:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope output_buffer_cta_thread_count_q[9:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope output_buffer_kernel_id_q[15:0]
+addSignal -h 16 -holdScope output_buffer_valid_q
+addGroup "Pop from active cta table" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/active_cta_table_inst/out_ready_i
+addSignal -h 16 -holdScope out_valid_o
+addSignal -h 16 -holdScope output_consumed_this_cycle
+addSignal -h 16 -UNSIGNED -HEX -holdScope pop_hw_cta_id_i[1:0]
+addSignal -h 16 -holdScope pop_ready_o
+addSignal -h 16 -holdScope pop_this_cycle
+addSignal -h 16 -holdScope pop_valid_i
+addGroup "CTA Scheduler" -e FALSE
+addSignal -h 16 -UNSIGNED -HEX /tb_dice_core/u_dut/u_cta_schedule_stage/cta_scheduler_inst/any_valid_candidates[3:0]
+addSignal -h 16 -holdScope any_valid_found
+addSignal -h 16 -UNSIGNED -HEX -holdScope cta_valid[3:0]
+addGroup "CS to FDR" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/schedule_if/ready
+addSignal -h 16 -holdScope valid
+addSignal -expanded -h 16 -UNSIGNED -HEX -PACKED /tb_dice_core/u_dut/schedule_if/data
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_hw_cta_id[1:0]
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_next_pc[31:0]
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_eblock_id[2:0]
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_active_mask[511:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope data.schedule_prefetch_block
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_cta_id
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_grid_size
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_cta_size
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_kernel_id[15:0]
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_smem_per_cta[13:0]
+addSignal -h 16 -UNSIGNED -PACKED -holdScope data.schedule_hw_cta_size[1:0]
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope data.schedule_cta_thread_count[9:0]
+addGroup "FDR Eblock Info" -e FALSE
+addSignal -h 16 -UNSIGNED -HEX -PACKED /tb_dice_core/u_dut/u_fdr_top/schedule_data_q
+addGroup "Meta Fetch New Eblock" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_meta_fetch/schedule_ready_o
+addSignal -h 16 -holdScope schedule_valid_i
+addGroup "Meta Cache OPs" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_meta_fetch/req_fire
+addSignal -h 16 -holdScope rsp_fire
+addSignal -h 16 -holdScope rsp_tag_match
+addGroup "Meta Mem Interface" -e FALSE
+addSignal -expanded -h 16 /tb_dice_core/u_dut/u_fdr_top/u_meta_fetch/meta_fetch_bus_if/req_data
+addSignal -h 16 -holdScope req_data.rw
+addSignal -h 16 -UNSIGNED -HEX -holdScope req_data.addr[23:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope req_data.data[2047:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope req_data.byteen[255:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope req_data.flags[2:0]
+addSignal -h 16 -holdScope req_data.tag
+addSignal -h 16 -holdScope req_ready
+addSignal -h 16 -holdScope req_valid
+addSignal -h 16 -holdScope rsp_data
+addSignal -h 16 -holdScope rsp_ready
+addSignal -h 16 -holdScope rsp_valid
+addGroup "FDR Meta" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_meta_fetch/meta_valid_o
+addSignal -expanded -h 16 -holdScope outgoing_meta_o
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.bitstream_addr[31:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.bitstream_length[7:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.unrolling_factor[1:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.lat[7:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.in_regs_bitmap[31:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.out_regs_bitmap[31:0]
+addSignal -h 16 -holdScope outgoing_meta_o.ld_dest_regs[2:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope outgoing_meta_o.num_stores[2:0]
+addSignal -h 16 -holdScope outgoing_meta_o.branch_meta
+addSignal -h 16 -holdScope outgoing_meta_o.barrier
+addSignal -h 16 -holdScope outgoing_meta_o.parameter_load
+addGroup "Branch Handler" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_branch_handler/branch_meta_valid_i
+addSignal -h 16 -holdScope branch_meta_valid_rise
+addSignal -h 16 -UNSIGNED -HEX -holdScope pc_i[31:0]
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_bitstream_fetch_load/flush_i
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_branch_handler/branch_meta_i
+addSignal -h 16 -UNSIGNED -HEX -holdScope hw_cta_id_i[1:0]
+addSignal -h 16 -UNSIGNED -HEX -PACKED -holdScope simt_stack_update_o
+addGroup "Bitstream Fetch" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_bitstream_fetch_load/meta_valid_i
+addSignal -h 16 -UNSIGNED -HEX -holdScope bitstream_addr_i[31:0]
+addSignal -h 16 -UNSIGNED -BIN -holdScope cm0_chunk_en_o[3:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope cm1_chunk_en_o[3:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope cm0_data_o[511:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope cm1_data_o[511:0]
+addSignal -h 16 -holdScope cm_num_o
+addSignal -h 16 -holdScope done_streaming_o
+addSignal -h 16 -holdScope flush_i
+addGroup "Bitstream Cache Interface" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/bitstream_cache_mem_if/req_valid
+addSignal -h 16 -holdScope req_ready
+addSignal -h 16 -holdScope req_data
+addSignal -h 16 -holdScope rsp_valid
+addSignal -h 16 -holdScope rsp_ready
+addSignal -h 16 -holdScope rsp_data
+addGroup "FDR Valid Check" -e FALSE
+addSignal -h 16 /tb_dice_core/u_dut/u_fdr_top/u_valid_check/fdr_valid_o
+addSignal -h 16 -holdScope ex_ready_i
+addSignal -h 16 -holdScope barrier_complete_i
+addSignal -h 16 -holdScope barrier_indicator_i
+addSignal -h 16 -holdScope decode_done_i
+addSignal -h 16 -holdScope bitstream_loaded_i
+addSignal -h 16 -holdScope clear_prefetch_o
+addSignal -h 16 -holdScope fire_eblock_o
+addSignal -h 16 -holdScope predict_miss_o
+addSignal -h 16 -holdScope prefetch_block_i
+addSignal -h 16 -holdScope prefetch_cleared_i
+addSignal -h 16 -holdScope unresolved_div_i
+addSignal -h 16 -UNSIGNED -HEX -holdScope eblock_pc_i[31:0]
+addSignal -h 16 -UNSIGNED -HEX -holdScope simt_stack_pc_i[31:0]
+addGroup "G21"
+
+; getSignalForm Scope Hierarchy Status
+; active file of getSignalForm
+activeDirFile "" "/data2/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/build/tb_dice_core.fsdb"
+
+GETSIGNALFORM_SCOPE_HIERARCHY_BEGIN
+getSignalForm close
+
+"/tb_dice_core"
+"/tb_dice_core/u_dut"
+"/tb_dice_core/u_dut/u_cta_schedule_stage"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/cta_status_table_inst"
+
+SCOPE_LIST_BEGIN
+"/tb_dice_core/u_dut/fronten"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/act"
+"/DE_pkg"
+"/tb_dice_core"
+"/tb_dice_core/bitstream_cache_mem_if"
+"/tb_dice_core/cta_complete_if_inst"
+"/tb_dice_core/u_dut"
+"/tb_dice_core/u_dut/u_fdr_top"
+"/tb_dice_core/u_dut/bitstream_cache_mem_if"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/cta_controller_inst"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/cta_scheduler_inst"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/cta_dispatch_if"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/schedule_if"
+"/tb_dice_core/u_dut/u_cta_schedule_stage"
+"/tb_dice_core/u_dut/simt_status_if"
+"/tb_dice_core/u_dut/cta_dispatch_if_inst"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/cta_complete_if"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/active_cta_table_inst"
+"/tb_dice_core/u_dut/schedule_if"
+"/tb_dice_core/u_dut/u_fdr_top/u_meta_fetch"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/gen_stacks[3]"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/gen_stacks[2]"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/gen_stacks[0]"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/gen_stacks[1]"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/unnamed$$_0/unnamed$$_1"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/unnamed$$_0/unnamed$$_2"
+"/tb_dice_core/u_dut/u_cta_schedule_stage/simt_stack_controller_inst/unnamed$$_0"
+"/tb_dice_core/u_dut/fdr_out_if"
+"/tb_dice_core/u_dut/u_fdr_top/u_meta_fetch/meta_fetch_bus_if"
+"/tb_dice_core/u_dut/u_fdr_top/u_decode"
+"/tb_dice_core/u_dut/u_fdr_top/u_branch_handler"
+"/tb_dice_core/u_dut/u_fdr_top/u_bitstream_fetch_load"
+"/tb_dice_core/u_dut/u_fdr_top/bitstream_cache_mem_if"
+"/tb_dice_core/u_dut/u_fdr_top/u_bitstream_fetch_load/cache_bus_if"
+"/tb_dice_core/cta_dispatch_if_inst"
+"/tb_dice_core/u_bitstream_mem"
+"/tb_dice_core/u_dut/u_fdr_top/u_valid_check"
+SCOPE_LIST_END
+
+GETSIGNALFORM_SCOPE_HIERARCHY_END
+
+

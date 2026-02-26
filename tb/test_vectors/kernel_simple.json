@@ -1,0 +1,139 @@
+{
+    "dice_cta_desc": {
+        "kernel_desc": {
+            "kernel_id": 12,
+            "grid_size": {
+                "x": 9,
+                "y": 2,
+                "z": 2
+            },
+            "cta_size": {
+                "x": 5,
+                "y": 5,
+                "z": 5
+            },
+            "smem_per_cta": 0,
+            "start_pc": "0x00001000",
+            "arg_ptr": "0x00002000"
+        },
+        "cta_id": {
+            "x": 10,
+            "y": 10,
+            "z": 10
+        }
+    },
+    "pgraph_metadata": [
+        {
+            "pc": "0x00001000",
+            "meta": {
+                "bitstream_addr": "0x00010000",
+                "bitstream_length": 4,
+                "unrolling_factor": 0,
+                "lat": 10,
+                "in_regs_bitmap": "0x00000003",
+                "out_regs_bitmap": "0x0000000C",
+                "ld_dest_regs": [
+                    2,
+                    3,
+                    0
+                ],
+                "num_stores": 0,
+                "branch_meta": {
+                    "branch_ena": false,
+                    "branch_uni": false,
+                    "branch_pred_reg": 0,
+                    "branch_neg_pred": false,
+                    "is_return": false,
+                    "branch_jump_target_offset": 0,
+                    "branch_reconv_offset": 0
+                },
+                "barrier": false,
+                "parameter_load": false
+            }
+        },
+        {
+            "pc": "0x00001100",
+            "meta": {
+                "bitstream_addr": "0x00011000",
+                "bitstream_length": 8,
+                "unrolling_factor": 1,
+                "lat": 15,
+                "in_regs_bitmap": "0x0000000C",
+                "out_regs_bitmap": "0x00000030",
+                "ld_dest_regs": [
+                    4,
+                    5,
+                    0
+                ],
+                "num_stores": 1,
+                "branch_meta": {
+                    "branch_ena": false,
+                    "branch_uni": false,
+                    "branch_pred_reg": 0,
+                    "branch_neg_pred": false,
+                    "is_return": false,
+                    "branch_jump_target_offset": 0,
+                    "branch_reconv_offset": 0
+                },
+                "barrier": false,
+                "parameter_load": false
+            }
+        },
+        {
+            "pc": "0x00001200",
+            "meta": {
+                "bitstream_addr": "0x00012000",
+                "bitstream_length": 2,
+                "unrolling_factor": 2,
+                "lat": 5,
+                "in_regs_bitmap": "0x00000030",
+                "out_regs_bitmap": "0x000000C0",
+                "ld_dest_regs": [
+                    6,
+                    7,
+                    0
+                ],
+                "num_stores": 2,
+                "branch_meta": {
+                    "branch_ena": false,
+                    "branch_uni": false,
+                    "branch_pred_reg": 0,
+                    "branch_neg_pred": false,
+                    "is_return": false,
+                    "branch_jump_target_offset": 0,
+                    "branch_reconv_offset": 0
+                },
+                "barrier": true,
+                "parameter_load": false
+            }
+        },
+        {
+            "pc": "0x00001300",
+            "meta": {
+                "bitstream_addr": "0x00013000",
+                "bitstream_length": 6,
+                "unrolling_factor": 0,
+                "lat": 20,
+                "in_regs_bitmap": "0x000000C0",
+                "out_regs_bitmap": "0x00000001",
+                "ld_dest_regs": [
+                    0,
+                    0,
+                    0
+                ],
+                "num_stores": 0,
+                "branch_meta": {
+                    "branch_ena": false,
+                    "branch_uni": false,
+                    "branch_pred_reg": 0,
+                    "branch_neg_pred": false,
+                    "is_return": true,
+                    "branch_jump_target_offset": 0,
+                    "branch_reconv_offset": 0
+                },
+                "barrier": false,
+                "parameter_load": true
+            }
+        }
+    ]
+}

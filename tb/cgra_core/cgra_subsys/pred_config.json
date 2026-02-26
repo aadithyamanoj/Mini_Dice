@@ -1,0 +1,48 @@
+{
+    "type": "pred",
+    "num_regs": 32,
+    "max_io_pipe_stages": 7,
+    "max_threads": 512,
+    "reg_config_0":{
+        "reg_index":[8,10,12,14],
+        "rf_rd_en": 1,
+        "rf_wr_en": 0,
+        "rf_latency_in": 3,
+        "rf_latency_out": 0
+    },
+    "reg_config_1":{
+        "reg_index":[9],
+        "rf_rd_en": 1,
+        "rf_wr_en": 0,
+        "rf_latency_in": 4,
+        "rf_latency_out": 0
+    },
+    "reg_config_2":{
+        "reg_index":[1],
+        "rf_rd_en": 1,
+        "rf_wr_en": 0,
+        "rf_latency_in": 6,
+        "rf_latency_out": 0
+    },
+    "reg_config_3":{
+        "reg_index":[3],
+        "rf_rd_en": 1,
+        "rf_wr_en": 0,
+        "rf_latency_in": 6,
+        "rf_latency_out": 0
+    },
+    "reg_config_4":{
+        "reg_index":[5],
+        "rf_rd_en": 1,
+        "rf_wr_en": 0,
+        "rf_latency_in": 6,
+        "rf_latency_out": 0
+    },
+    "reg_config_5":{
+        "reg_index":[7],
+        "rf_rd_en": 1,
+        "rf_wr_en": 0,
+        "rf_latency_in": 6,
+        "rf_latency_out": 0
+    }
+}

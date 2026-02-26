@@ -1,0 +1,42 @@
+verdiSetActWin -dock widgetDock_<Message>
+verdiSetActWin -dock widgetDock_MTB_SOURCE_TAB_1
+debRestoreSession \
+           /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/verdiLog/novas_autosave.ses
+verdiSetActWin -win $_OneSearch
+verdiWindowResize -win $_Verdi_1 "0" "27" "1920" "958"
+simSetSimulator "-vcssv" -exec \
+           "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/build/simv" \
+           -args
+debImport "-dbdir" \
+          "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/build/simv.daidir"
+debLoadSimResult \
+           /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/build/tb_dice_core.fsdb
+wvCreateWindow
+verdiFindBar -show -win nWave_2
+verdiSetActWin -win $_nWave2
+wvSetCursor -win $_nWave2 16.733693
+wvGetSignalOpen -win $_nWave2
+wvGetSignalSetScope -win $_nWave2 "/tb_dice_core"
+wvGetSignalSetScope -win $_nWave2 "/tb_dice_core/u_dut"
+wvSetPosition -win $_nWave2 {("G2" 2)}
+wvSetPosition -win $_nWave2 {("G2" 2)}
+wvAddSignal -win $_nWave2 -clear
+wvAddSignal -win $_nWave2 -group {"G1" \
+{/tb_dice_core/u_dut/u_dispatcher/clk_i} -height 16 \
+{/tb_dice_core/u_dut/u_dispatcher/rst_n} -height 16 \
+}
+wvAddSignal -win $_nWave2 -group {"G2" \
+{/tb_dice_core/u_dut/u_dispatcher/dispatch_tid_o\[35:0\]} -height 16 \
+{/tb_dice_core/u_dut/u_dispatcher/dispatch_valid_o\[3:0\]} -height 16 \
+}
+wvAddSignal -win $_nWave2 -group {"G3" \
+}
+wvAddSignal -win $_nWave2 -group {"G4" \
+}
+wvAddSignal -win $_nWave2 -group {"G5" \
+}
+wvSelectSignal -win $_nWave2 {( "G2" 2 )} 
+wvSetPosition -win $_nWave2 {("G2" 2)}
+wvGetSignalClose -win $_nWave2
+wvZoomAll -win $_nWave2
+debExit

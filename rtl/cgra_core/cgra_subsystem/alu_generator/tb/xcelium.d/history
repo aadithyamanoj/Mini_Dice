@@ -1,0 +1,7 @@
+//
+// File created by:  xrun
+// Do not modify this file
+
+s1::(04Oct2025:21:32:49):( xrun -64bit -sv ../output/dice_alu_pkg.sv ../output/dice_alu.sv tb_dice_alu.sv -sv_lib ./dice_alu_dpi )
+s2::(04Oct2025:21:33:02):( xrun -64bit -sv -access +rwc ../output/dice_alu_pkg.sv ../output/dice_alu.sv tb_dice_alu.sv -sv_lib ./dice_alu_dpi )
+s3::(04Oct2025:21:33:18):( xrun -64bit -sv -access +rwc ../output/dice_alu_pkg.sv ../output/dice_alu.sv tb_dice_alu.sv -sv_lib ./dice_alu_dpi )

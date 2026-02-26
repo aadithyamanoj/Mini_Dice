@@ -1,0 +1,3010 @@
+{
+  "dice_tile_0": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "N[1]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            "N[1]"
+          ],
+          "registered_mode_S_t1": [
+            1
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "W[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "N[1]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_1": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_2": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_3": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_4": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "N[1]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            "N[1]"
+          ],
+          "registered_mode_S_t1": [
+            1
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "W[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "N[1]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_5": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_6": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_7": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_8": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "N[1]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            "N[1]"
+          ],
+          "registered_mode_S_t1": [
+            1
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "W[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "N[1]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_9": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_10": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_11": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_12": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "N[1]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            "N[1]"
+          ],
+          "registered_mode_S_t1": [
+            1
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "W[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "N[1]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_13": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_14": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "dice_tile_15": [
+    {
+      "dice_2_1_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            ""
+          ],
+          "registered_mode_W_t1": [
+            0
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "N[0]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_2_32_router": [
+        {
+          "sel_N_t0": [
+            ""
+          ],
+          "registered_mode_N_t0": [
+            0
+          ],
+          "overload_en_N_t0": [
+            0
+          ],
+          "sel_N_t1": [
+            ""
+          ],
+          "registered_mode_N_t1": [
+            0
+          ],
+          "overload_en_N_t1": [
+            0
+          ],
+          "sel_E_t0": [
+            "W[0]"
+          ],
+          "registered_mode_E_t0": [
+            1
+          ],
+          "overload_en_E_t0": [
+            0
+          ],
+          "sel_E_t1": [
+            ""
+          ],
+          "registered_mode_E_t1": [
+            0
+          ],
+          "overload_en_E_t1": [
+            0
+          ],
+          "sel_S_t0": [
+            "N[0]"
+          ],
+          "registered_mode_S_t0": [
+            1
+          ],
+          "overload_en_S_t0": [
+            0
+          ],
+          "sel_S_t1": [
+            ""
+          ],
+          "registered_mode_S_t1": [
+            0
+          ],
+          "overload_en_S_t1": [
+            0
+          ],
+          "sel_W_t0": [
+            ""
+          ],
+          "registered_mode_W_t0": [
+            0
+          ],
+          "overload_en_W_t0": [
+            0
+          ],
+          "sel_W_t1": [
+            "E[1]"
+          ],
+          "registered_mode_W_t1": [
+            1
+          ],
+          "overload_en_W_t1": [
+            1
+          ],
+          "sel_L_t0": [
+            "W[0]"
+          ],
+          "registered_mode_L_t0": [
+            0
+          ],
+          "sel_L_t1": [
+            "N[0]"
+          ],
+          "registered_mode_L_t1": [
+            0
+          ],
+          "sel_L_t2": [
+            "L[1]"
+          ],
+          "registered_mode_L_t2": [
+            0
+          ],
+          "sel_L_t3": [
+            "E[1]"
+          ],
+          "registered_mode_L_t3": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dice_pe": [
+        {
+          "opcode": [
+            "MAD_U32"
+          ],
+          "out_sel": [
+            1
+          ]
+        }
+      ]
+    }
+  ]
+}

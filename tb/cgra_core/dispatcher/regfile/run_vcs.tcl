@@ -1,0 +1,16 @@
+# check top module 
+if { [info exists ::env(TB_TOP)] } {
+    set tb_top $::env(TB_TOP)
+} else {
+    set tb_top addr_swizzle_tb
+}
+
+puts "using top: $tb_top"
+
+exec vcs -full64 -sverilog -f filelist.f \
+    -top $tb_top \
+    -debug_access+pp+all -kdb -lca +vpi \
+    +define+FSDB \
+    -o simv
+
+exec ./simv >@stdout 2>@stderr
