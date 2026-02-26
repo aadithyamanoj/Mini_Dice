@@ -16,6 +16,7 @@
 
 // Architectural configurations
 `define DICE_ADDR_WIDTH              32
+`define DICE_DATA_WIDTH              8
 `define DICE_MAX_KERNEL_ID           65536
 `define DICE_MAX_GRID_SIZE           65536
 `define DICE_NUM_CGRA_CLUSTERS        4

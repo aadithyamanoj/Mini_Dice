@@ -18,12 +18,12 @@ import dice_pkg::*;
     //-------------------------------------------------------------------------
     localparam int NUM_PORTS       = DICE_NUM_BANKS;
     localparam int DATA_WIDTH      = DICE_REG_DATA_WIDTH;
-    localparam int NUM_TID         = 512;
+    localparam int NUM_TID         = DICE_NUM_MAX_THREADS_PER_CORE;
     localparam int TID_WIDTH       = $clog2(NUM_TID);
     localparam int DEPTH           = NUM_TID;
     localparam int ADDR_WIDTH      = $clog2(DEPTH);
-    localparam int NUM_SPECIAL_REG = 16;
-    localparam int MAX_CTA_ID      = 65535;
+    localparam int NUM_SPECIAL_REG = `DICE_PR_NUM;
+    localparam int MAX_CTA_ID      = `DICE_MAX_GRID_SIZE;
     localparam int CTA_ID_WIDTH    = $clog2(MAX_CTA_ID);
 
     // Clock period
@@ -299,7 +299,7 @@ import dice_pkg::*;
         reg_wr_cmd cmd;
         cmd.tid       = $urandom;
         cmd.data      = $urandom;
-        cmd.wr_bitmap = 1'b1;
+        cmd.mask = 1'b1;
         return cmd;
     endfunction
 
@@ -310,7 +310,7 @@ import dice_pkg::*;
         reg_wr_cmd cmd;
         cmd.tid       = tid;
         cmd.data      = $urandom;
-        cmd.wr_bitmap = 1'b1;
+        cmd.mask = 1'b1;
         return cmd;
     endfunction
 
@@ -318,12 +318,12 @@ import dice_pkg::*;
     function automatic reg_wr_cmd gen_reg_wr_cmd(
           input logic [$clog2(NUM_TID)-1:0]        tid
         , input logic [DICE_REG_DATA_WIDTH-1:0]    data
-        , input logic                              wr_bitmap
+        , input logic                              mask
     );
         reg_wr_cmd cmd;
         cmd.tid       = tid;
         cmd.data      = data;
-        cmd.wr_bitmap = wr_bitmap;
+        cmd.mask = mask;
         return cmd;
     endfunction
 
@@ -337,7 +337,7 @@ import dice_pkg::*;
                 cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH] = $urandom;
                 $display("Writing to bank %0d: data=%0h", i, cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH]);
             end
-            $display("CGRA write: tid=%0d, wr_bitmap=%0b", cgra_tid_i[0 +: TID_WIDTH], wr_bitmap_i);
+            $display("CGRA write: tid=%0d, mask=%0b", cgra_tid_i[0 +: TID_WIDTH], wr_bitmap_i);
             @(posedge clk_i);
             @(posedge clk_i);
             cgra_valid_i = 1'b0;

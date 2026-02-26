@@ -15,10 +15,10 @@ import dice_pkg::*;
     parameter int TID_WIDTH = $clog2(NUM_TID),
     parameter int DEPTH = NUM_TID,
     parameter int ADDR_WIDTH = $clog2(DEPTH),
-    parameter int NUM_SPECIAL_REG = DICE_PR_NUM,
-    parameter int MAX_CTA_ID = ,
+    parameter int NUM_SPECIAL_REG = `DICE_PR_NUM,
+    parameter int MAX_CTA_ID = `DICE_MAX_GRID_SIZE,
     parameter int CTA_ID_WIDTH = DICE_CTA_ID_WIDTH,
-    parameter int BUF_DEPTH = 8
+    parameter int BUF_DEPTH = LDST_BUF_DEPTH
 )
 (
       input  logic              clk_i

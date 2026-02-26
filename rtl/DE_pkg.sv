@@ -13,6 +13,7 @@ parameter int DICE_NUM_REGS = `DICE_GPR_NUM;
 parameter int DICE_NUM_BANKS = DICE_NUM_REGS;
 parameter int DICE_REGS_PER_BANK = `DICE_NUM_MAX_THREADS_PER_CORE;
 parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_NUM_BANKS)-1;
+parameter int LDST_BUF_DEPTH = 8;
 typedef struct packed {
     logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0]  outcmd_base_tid;
     logic [TID_BITMAP_WIDTH-1:0]                        outcmd_tid_bitmap;
