@@ -4,7 +4,7 @@
 +incdir+/data/amanoj3/basejump_stl/bsg_misc
 
 
-$DICE_HOME/rtl/cgra_core/cgra_subsystem/regfile/DE_pkg.sv
+$DICE_HOME/rtl/DE_pkg.sv
 $DICE_HOME/rtl/cgra_core/cgra_subsystem/regfile/addr_swizzle.sv
 $DICE_HOME/rtl/cgra_core/cgra_subsystem/regfile/dice_rd_ctrl_bank.sv
 $DICE_HOME/rtl/cgra_core/cgra_subsystem/regfile/dice_read_org.sv

@@ -1,0 +1,12 @@
+  =================
+   Message Summary
+  =================
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|   Id   |  Sev  |Count|                                                                        Message Text                                                                        |
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|CHNM-108|Warning|    1|Port names affected by this command do not automatically get updated in written out SV wrapper module.                                                      |
+|        |       |     |If user is setting write_sv_port_wrapper = true then the port names affected by this command need to be updated manually in the written out SV wrapper      |
+|        |       |     | module.                                                                                                                                                    |
+|MESG-11 |Warning|    7|Maximum message print count reached.                                                                                                                        |
+|SYNTH-8 |Info   |    1|Done incrementally optimizing.                                                                                                                              |
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -84,7 +84,7 @@ function automatic logic [$clog2(DICE_NUM_BANKS)-1:0] bank_select
       input logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid
     , input logic [$clog2(DICE_NUM_REGS)-1:0] rs
 );
-    return (tid[4:0] + rs[4:0]) & 5'h1F;
+    return (tid[$clog2(DICE_NUM_REGS)-1:0] + rs[$clog2(DICE_NUM_REGS)-1:0]) & ($clog2(DICE_NUM_REGS))'(DICE_NUM_REGS - 1);
 endfunction
 
 // Circular left shift of bitmap by tid[log2(NUM_BANKS)-1:0]

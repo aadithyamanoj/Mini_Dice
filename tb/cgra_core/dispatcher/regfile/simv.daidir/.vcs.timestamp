@@ -176,12 +176,12 @@ BASH_FUNC__module_raw%%=() {  unset _mlshdbg;_ if [ "${MODULES_SILENT_SHELL_DEBU
 1772144077 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/fifo_ctrl_credit.sv
 1772144077 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_wr_ctrl_bank.sv
 1772148146 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_special_reg.sv
-1772147815 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_rf_ctrl.sv
-1772144077 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_register_file.sv
+1772152425 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_rf_ctrl.sv
+1772152379 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_register_file.sv
 1772144077 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_read_org.sv
 1772144077 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/dice_rd_ctrl_bank.sv
 1772144077 /data/amanoj3/Mini_Dice/rtl/cgra_core/cgra_subsystem/regfile/addr_swizzle.sv
-1772147767 /data/amanoj3/Mini_Dice/rtl/DE_pkg.sv
+1772149026 /data/amanoj3/Mini_Dice/rtl/DE_pkg.sv
 1772148194 /data/amanoj3/Mini_Dice/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.sv
 1772144078 /data/amanoj3/Mini_Dice/tb/cgra_core/dispatcher/regfile/reg_wr_buffer_tb.sv
 1772144078 /data/amanoj3/Mini_Dice/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.sv
@@ -196,5 +196,5 @@ BASH_FUNC__module_raw%%=() {  unset _mlshdbg;_ if [ "${MODULES_SILENT_SHELL_DEBU
 1748748097 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/liberrorinf.so
 1748748087 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libsnpsmalloc.so
 1748748085 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libvfs.so
-1772148196 simv.daidir
+1772152476 simv.daidir
 -1 partitionlib

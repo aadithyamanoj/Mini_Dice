@@ -1,7 +1,10 @@
-module dice_register_file #(
-    parameter int NUM_BANK = 32,
-    parameter int WIDTH = 32,
-    parameter int DEPTH = 512,
+module dice_register_file 
+import dice_pkg::*;
+import DE_pkg::*;
+#(
+    parameter int NUM_BANK = DICE_NUM_BANKS,
+    parameter int WIDTH = DICE_REG_DATA_WIDTH,
+    parameter int DEPTH = DICE_REGS_PER_BANK,
     parameter int ADDR_WIDTH = $clog2(DEPTH)
 )(
     input  logic              clk,
@@ -14,6 +17,13 @@ module dice_register_file #(
     input  logic [NUM_BANK*WIDTH-1:0] wr_data
 );
 
+
+    
+    initial begin
+        $display("DICE_NUM_BANKS: %0d", NUM_BANK);
+        $display("DICE_REG_DATA_WIDTH: %0d", WIDTH);
+        $display("DICE_REGS_PER_BANK: %0d", DEPTH);
+    end
     genvar i;
     generate
         for (i = 0; i < NUM_BANK; i++) begin : gen_bank

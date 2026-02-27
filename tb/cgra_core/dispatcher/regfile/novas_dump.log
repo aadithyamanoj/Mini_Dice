@@ -169,7 +169,7 @@ LANG=C.UTF-8
 HISTCONTROL=ignoredups
 TB=dice_rf_ctrl_tb
 HOSTNAME=squire.ece.uw.edu
-OLDPWD=/data/amanoj3/Mini_Dice
+OLDPWD=/data/amanoj3/Mini_Dice/tb/cgra_core
 PATH_modshare=/usr/bin:1:/homes/amanoj3/.local/bin:1:/homes/amanoj3/bin:1:/usr/share/Modules/bin:1:/usr/local/bin:1:/home/amanoj3/.cursor-server/cli/servers/Stable-511523af765daeb1fa69500ab0df5b6524424610/server/bin/remote-cli:1:/opt/dell/srvadmin/bin:1:/usr/condabin:1:/usr/lib64/ccache:1:/data/eda_tools/cadence/DDI251/GENUS251/tools.lnx86/bin:1:/data/eda_tools/synopsys/tools/verdi/X-2025.06/bin:1:/usr/sbin:1:/data/eda_tools/synopsys/tools/vcs/X-2025.06/bin:1:/usr/local/sbin:1
 LOADEDMODULES_modshare=vcs/X-2025.06:1:genus/25.1:1:verdi/X-2025.06:1
 COLORTERM=truecolor
@@ -328,8 +328,8 @@ Runtime command line arguments:
 argv[0]=./simv
 **********Message Rewind**************
 245 profile - 100
-          CPU/Mem usage: 0.030 sys,  0.090 user,  251.97M mem
-246 Elapsed time:    0:00:00    Thu Feb 26 15:23:16 2026
+          CPU/Mem usage: 0.030 sys,  0.080 user,  251.90M mem
+246 Elapsed time:    0:00:00    Thu Feb 26 16:34:36 2026
 247 User CPU time used: 0 seconds
 248 System CPU time used: 0 seconds
 249 pliAppInit
@@ -337,10 +337,10 @@ argv[0]=./simv
 251 FSDB_RTL is set.
 252 FSDB_DYNAMIC_ALIAS is enabled.
 253 _numa_functions open successfully.
-254 Simulation_CPU:17 NUMA_node:0.
-255 NUMA node 0: availCpuCount(64) nodeMemSize(404777246720) freeMem(215629271040)
-256 NUMA node 1: availCpuCount(64) nodeMemSize(405829132288) freeMem(198093860864)
-257 FSDB_optimize_NUMA_node:1.
+254 Simulation_CPU:110 NUMA_node:1.
+255 NUMA node 0: availCpuCount(64) nodeMemSize(404777246720) freeMem(215391105024)
+256 NUMA node 1: availCpuCount(64) nodeMemSize(405829132288) freeMem(199920369664)
+257 FSDB_optimize_NUMA_node:0.
 258 FSDB_PACKED_MODE is enabled.
 259 FSDB_GATE_PACKED is enabled.
 260 [SC]Init: MemoryConsumed=0.00MB ElapsedTime=0hour 0min. 0sec.
@@ -369,57 +369,57 @@ argv[0]=./simv
 283 *Verdi* : Enable +all dumping.
 284 *Verdi* : End of traversing.
 285 pliAppHDL_DumpVarComplete traverse var: profile - 
-          CPU/Mem usage: 0.040 sys,  0.090 user,  370.61M mem
-                   incr: 0.000 sys,  0.000 user,  28.91M mem
-                   accu: 0.000 sys,  0.000 user,  28.91M mem
-              accu incr: 0.000 sys,  0.000 user,  28.91M mem
+          CPU/Mem usage: 0.030 sys,  0.090 user,  370.63M mem
+                   incr: 0.000 sys,  0.010 user,  29.00M mem
+                   accu: 0.000 sys,  0.010 user,  29.00M mem
+              accu incr: 0.000 sys,  0.010 user,  29.00M mem
 
-          Count usage: 17963 var,  1436 idcode,  313 callback
-                 incr: 17963 var,  1436 idcode,  313 callback
-                 accu: 17963 var,  1436 idcode,  313 callback
-            accu incr: 17963 var,  1436 idcode,  313 callback
-286 Idcode  0 - bc1:0  mda:16577
-287 Elapsed time:    0:00:00    Thu Feb 26 15:23:16 2026
+          Count usage: 1979 var,  1325 idcode,  265 callback
+                 incr: 1979 var,  1325 idcode,  265 callback
+                 accu: 1979 var,  1325 idcode,  265 callback
+            accu incr: 1979 var,  1325 idcode,  265 callback
+286 Idcode  0 - bc1:0  mda:689
+287 Elapsed time:    0:00:00    Thu Feb 26 16:34:36 2026
 288 User CPU time used: 0 seconds
 289 System CPU time used: 0 seconds
 290 pliAppHDL_DumpVarComplete: profile - 
-          CPU/Mem usage: 0.040 sys,  0.090 user,  370.61M mem
+          CPU/Mem usage: 0.030 sys,  0.090 user,  370.63M mem
                    incr: 0.000 sys,  0.000 user,  0.00M mem
-                   accu: 0.000 sys,  0.000 user,  28.91M mem
+                   accu: 0.000 sys,  0.010 user,  29.00M mem
               accu incr: 0.000 sys,  0.000 user,  0.00M mem
 
-          Count usage: 17963 var,  1436 idcode,  313 callback
+          Count usage: 1979 var,  1325 idcode,  265 callback
                  incr: 0 var,  0 idcode,  0 callback
-                 accu: 17963 var,  1436 idcode,  313 callback
+                 accu: 1979 var,  1325 idcode,  265 callback
             accu incr: 0 var,  0 idcode,  0 callback
-291 Idcode  0 - bc1:0  mda:16577
-292 Elapsed time:    0:00:00    Thu Feb 26 15:23:16 2026
+291 Idcode  0 - bc1:0  mda:689
+292 Elapsed time:    0:00:00    Thu Feb 26 16:34:36 2026
 293 User CPU time used: 0 seconds
 294 System CPU time used: 0 seconds
 295 End of simulation at 1205
-296 Memory usage: 370.614 M
+296 Memory usage: 370.631 M
 297 Maximum resident set size: 129 MB
 298 Hard page faults: 0
-299 Soft page faults: 13397
-300 Elapsed time:    0:00:00    Thu Feb 26 15:23:16 2026
+299 Soft page faults: 13246
+300 Elapsed time:    0:00:00    Thu Feb 26 16:34:36 2026
 301 User CPU time used: 0 seconds
 302 System CPU time used: 0 seconds
 303 Begin FSDB profile info:
-304 FSDB Writer : bc1(262) bcn(2103) mtf/stf(0/0)
-FSDB Writer elapsed time : flush(0.002468) io wait(0.000000) theadpool wait(0.000000)
+304 FSDB Writer : bc1(262) bcn(2312) mtf/stf(0/0)
+FSDB Writer elapsed time : flush(0.002510) io wait(0.000000) theadpool wait(0.000000)
 FSDB Writer cpu time : MT Compression : 0
 305 End FSDB profile info
-306 FSDB closed. Name: dice_rf_ctrl_tb.fsdb Size: 36143
+306 FSDB closed. Name: dice_rf_ctrl_tb.fsdb Size: 33009
 307 Parallel profile     - ProducerThread:1 ConsumerThread:1 Buffer:64MB
-308                      - BlockUsed:1 Acquire:0 BufferUsed:50448
+308                      - BlockUsed:1 Acquire:0 BufferUsed:53389
 309                      - Flush:3 Expand:0 ProducerWait:0 ConsumerWait:0
-310                      - MainProducerTime:0.149576269 TotalConsumerTime:0.000000000
-311                      - ElapsedTime:0.025932000
-312 Producer   0 profile - BlockUsed:2 Acquire:0 BufferUsed:50448
+310                      - MainProducerTime:0.142635624 TotalConsumerTime:0.000000000
+311                      - ElapsedTime:0.025278000
+312 Producer   0 profile - BlockUsed:2 Acquire:0 BufferUsed:53389
 313 Consumer   0 profile - Affinity:-2 CPUTime:0.000000000 LifeTime:0.000000000 (-nan%)
-314                      - BlockUsed:2 Acquire:0 BufferUsed:50448
+314                      - BlockUsed:2 Acquire:0 BufferUsed:53389
 315 SimExit
-316 Elapsed time:    0:00:00    Thu Feb 26 15:23:16 2026
+316 Elapsed time:    0:00:00    Thu Feb 26 16:34:36 2026
 317 User CPU time used: 0 seconds
 318 System CPU time used: 0 seconds
 319 Sim process exit

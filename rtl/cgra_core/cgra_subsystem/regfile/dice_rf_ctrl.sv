@@ -13,7 +13,7 @@ import dice_pkg::*;
     parameter int DATA_WIDTH = DICE_REG_DATA_WIDTH,
     parameter int NUM_TID = DICE_NUM_MAX_THREADS_PER_CORE,
     parameter int TID_WIDTH = $clog2(NUM_TID),
-    parameter int DEPTH = NUM_TID,
+    parameter int DEPTH = DICE_REGS_PER_BANK,
     parameter int ADDR_WIDTH = $clog2(DEPTH),
     parameter int NUM_SPECIAL_REG = `DICE_PR_NUM,
     parameter int MAX_CTA_ID = `DICE_MAX_GRID_SIZE,
