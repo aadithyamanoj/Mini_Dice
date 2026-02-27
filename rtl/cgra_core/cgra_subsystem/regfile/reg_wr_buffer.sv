@@ -3,14 +3,16 @@
 `include "dice_pkg.sv"
 
 
+
+
+module reg_wr_buffer 
+
 import DE_pkg::*;
 import dice_pkg::*;
-
-
-module reg_wr_buffer #(
-      parameter int WIDTH      = 32
+#(
+      parameter int WIDTH      = $bits(reg_wr_cmd)
     , parameter int ADDR_WIDTH = $clog2(512)
-    , parameter int DEPTH      = 8   // must be 8 for the casez below
+    , parameter int DEPTH      = LDST_BUF_DEPTH   // must be 8 for the casez below
 ) (
       input  logic            clk_i
     , input  logic            reset_i
@@ -39,66 +41,92 @@ module reg_wr_buffer #(
     // , output logic                  fw_data_valid_o
 );
 
-    localparam int ptr_width_lp = $clog2(DEPTH);
 
-    // ----------------------------------------------------------------
-    // Pointer tracker
-    // ----------------------------------------------------------------
-    logic [ptr_width_lp-1:0] wptr_r, rptr_r;
-    logic                    full, empty;
+    logic ready_lo;
 
-    logic enq_li, deq_li;
-
-    // Enqueue when we have a write and not full
-    assign enq_li =  valid_i & ~full;
-    // Dequeue when pop requested and not empty
-    assign deq_li = pop_i   & ~empty;
-
-    fifo_ctrl_credit #(
-        .els_p(DEPTH)
-    ) fifo_track (
-        .clk_i     (clk_i),
-        .reset_i   (reset_i),
-        .enq_i     (enq_li),
-        .deq_i     (deq_li),
-        .wptr_r_o  (wptr_r),
-        .rptr_r_o  (rptr_r),
-        .full_o    (full),
-        .empty_o   (empty)
-    );
-
-    // wire enq_r = fifo_track.enq_r;
-
-    assign full_o  = full;
-    assign empty_o = empty;
-
-    // ----------------------------------------------------------------
-    // 1R/1W memoryfully visible for forwarding
-    // ----------------------------------------------------------------
+    logic [$bits(reg_wr_cmd)-1:0] data_li, data_lo;
+    assign data_li = wr_i;
 
 
-    reg_wr_cmd buffer [DEPTH];
+    bsg_fifo_1r1w_small#
+        (.width_p  (WIDTH)
+        ,.els_p  (DEPTH)
+        )
+        wr_buf
+        (.clk_i (clk_i)
+        ,.reset_i  (reset_i)
 
-    integer i;
-    always_ff @(posedge clk_i) begin
-        if (reset_i) begin
-            for (i = 0; i < DEPTH; i++) begin
-                buffer[i] <= '0;
-            end
-        end else begin
-            // Enqueue: write new entry at current write pointer
-            if (enq_li && !full) begin
-                buffer[wptr_r] <= wr_i;
-            end
-        end
-    end
+        ,.v_i      (valid_i)
+        ,.ready_o  (ready_lo)
+        ,.data_i   (data_li)
 
-    // ----------------------------------------------------------------
-    // Oldest entry for writeback
-    // ----------------------------------------------------------------
-    always_comb begin
-        cmd_o = buffer[rptr_r];
-    end
+        ,.v_o      (wb_valid_o)
+        ,.data_o   (data_lo)
+        ,.yumi_i   (pop_i)
+        );
+
+    assign full_o = ~ready_lo;
+    assign cmd_o = data_lo;
+    // localparam int ptr_width_lp = $clog2(DEPTH);
+
+    // // ----------------------------------------------------------------
+    // // Pointer tracker
+    // // ----------------------------------------------------------------
+    // logic [ptr_width_lp-1:0] wptr_r, rptr_r;
+    // logic                    full, empty;
+
+    // logic enq_li, deq_li;
+
+    // // Enqueue when we have a write and not full
+    // assign enq_li =  valid_i & ~full;
+    // // Dequeue when pop requested and not empty
+    // assign deq_li = pop_i   & ~empty;
+
+    // fifo_ctrl_credit #(
+    //     .els_p(DEPTH)
+    // ) fifo_track (
+    //     .clk_i     (clk_i),
+    //     .reset_i   (reset_i),
+    //     .enq_i     (enq_li),
+    //     .deq_i     (deq_li),
+    //     .wptr_r_o  (wptr_r),
+    //     .rptr_r_o  (rptr_r),
+    //     .full_o    (full),
+    //     .empty_o   (empty)
+    // );
+
+    // // wire enq_r = fifo_track.enq_r;
+
+    // assign full_o  = full;
+    // assign empty_o = empty;
+
+    // // ----------------------------------------------------------------
+    // // 1R/1W memoryfully visible for forwarding
+    // // ----------------------------------------------------------------
+
+
+    // reg_wr_cmd buffer [DEPTH];
+
+    // integer i;
+    // always_ff @(posedge clk_i) begin
+    //     if (reset_i) begin
+    //         for (i = 0; i < DEPTH; i++) begin
+    //             buffer[i] <= '0;
+    //         end
+    //     end else begin
+    //         // Enqueue: write new entry at current write pointer
+    //         if (enq_li && !full) begin
+    //             buffer[wptr_r] <= wr_i;
+    //         end
+    //     end
+    // end
+
+    // // ----------------------------------------------------------------
+    // // Oldest entry for writeback
+    // // ----------------------------------------------------------------
+    // always_comb begin
+    //     cmd_o = buffer[rptr_r];
+    // end
 
 
     // assign fw_data_o = '0;
