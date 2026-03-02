@@ -1,19 +1,23 @@
-module next_thread_logic_top(
+module next_thread_logic_top
+    import dice_pkg::*,
+           dice_frontend_pkg::*,
+           DE_pkg::*;  // CHUNK_SIZE, CHUNK_ADDR_WIDTH, NUM_LANES from DE_pkg
+(
     input logic clk,
     input logic rst,
     input logic [1:0] unrolling_factor,     // 0=1, 1=2, 2=4
-    input logic [255:0] active_mask_chunk,  // 256-bit active mask chunk
-    input logic [1:0] chunk_base_addr,      // Base address of current chunk (00=0, 01=256, 10=512, 11=768)
+    input logic [CHUNK_SIZE-1:0] active_mask_chunk,  // 256-bit active mask chunk
+    input logic [CHUNK_ADDR_WIDTH-1:0] chunk_base_addr,      // Base address of current chunk (00=0, 01=256, 10=512, 11=768)
     
     input logic restart,                   // Restart signal to reset lane 0
     // FIFO control signals
     input logic fifo_pop,                   // Single FIFO pop signal to control all FIFOs
     
     // FIFO outputs (final outputs from thread filter) - simplified
-    output logic [9:0] next_tid_0,        // {tid} from FIFO 0
-    output logic [9:0] next_tid_1,        // {tid} from FIFO 1
-    output logic [9:0] next_tid_2,        // {tid} from FIFO 2
-    output logic [9:0] next_tid_3,        // {tid} from FIFO 3
+    output logic [DICE_TID_WIDTH-1:0] next_tid_0,        // {tid} from FIFO 0
+    output logic [DICE_TID_WIDTH-1:0] next_tid_1,        // {tid} from FIFO 1
+    output logic [DICE_TID_WIDTH-1:0] next_tid_2,        // {tid} from FIFO 2
+    output logic [DICE_TID_WIDTH-1:0] next_tid_3,        // {tid} from FIFO 3
     output logic valid_0,        // {valid} from FIFO 0
     output logic valid_1,        // {valid} from FIFO 1
     output logic valid_2,        // {valid} from FIFO 2
@@ -24,36 +28,36 @@ module next_thread_logic_top(
     output logic chunk_done
 );
 
-    logic [10:0] fifo_data_0; 
-    logic [10:0] fifo_data_1; 
-    logic [10:0] fifo_data_2; 
-    logic [10:0] fifo_data_3; 
+    logic [DICE_TID_WIDTH:0] fifo_data_0;
+    logic [DICE_TID_WIDTH:0] fifo_data_1;
+    logic [DICE_TID_WIDTH:0] fifo_data_2;
+    logic [DICE_TID_WIDTH:0] fifo_data_3;
 
-    assign next_tid_0 = fifo_data_0[9:0]; // Extract TID from FIFO data
-    assign next_tid_1 = fifo_data_1[9:0];
-    assign next_tid_2 = fifo_data_2[9:0];
-    assign next_tid_3 = fifo_data_3[9:0];
-    
-    assign valid_0 = fifo_data_0[10]; // Extract valid bit from FIFO data
-    assign valid_1 = fifo_data_1[10] && unrolling_factor >= 2'b01;
-    assign valid_2 = fifo_data_2[10] && unrolling_factor >= 2'b10;
-    assign valid_3 = fifo_data_3[10] && unrolling_factor >= 2'b10;
+    assign next_tid_0 = fifo_data_0[DICE_TID_WIDTH-1:0]; // Extract TID from FIFO data
+    assign next_tid_1 = fifo_data_1[DICE_TID_WIDTH-1:0];
+    assign next_tid_2 = fifo_data_2[DICE_TID_WIDTH-1:0];
+    assign next_tid_3 = fifo_data_3[DICE_TID_WIDTH-1:0];
+
+    assign valid_0 = fifo_data_0[DICE_TID_WIDTH]; // Extract valid bit from FIFO data
+    assign valid_1 = fifo_data_1[DICE_TID_WIDTH] && unrolling_factor >= 2'b01;
+    assign valid_2 = fifo_data_2[DICE_TID_WIDTH] && unrolling_factor >= 2'b10;
+    assign valid_3 = fifo_data_3[DICE_TID_WIDTH] && unrolling_factor >= 2'b10;
 
     // Internal signals for next thread logic
-    logic [3:0] update;                     // Update signals for each lane
-    logic [3:0] update_next_active_thread_logic; // Update signals for next active thread logic
-    logic [63:0] mask_lane0, mask_lane1, mask_lane2, mask_lane3;
-    logic [7:0] lane_index [4];             // Index from each lane (0-255)
-    logic [3:0] lane_valid;                   // Valid from each lane
-    logic [3:0] done;
-    
+    logic [NUM_LANES-1:0] update;                     // Update signals for each lane
+    logic [NUM_LANES-1:0] update_next_active_thread_logic; // Update signals for next active thread logic
+    logic [LANE_SIZE-1:0] mask_lane0, mask_lane1, mask_lane2, mask_lane3;
+    logic [$clog2(CHUNK_SIZE)-1:0] lane_index [NUM_LANES];             // Index from each lane (0-255)
+    logic [NUM_LANES-1:0] lane_valid;                   // Valid from each lane
+    logic [NUM_LANES-1:0] done;
+
     // Intermediate signals (outputs from next thread logic, inputs to thread filter)
-    logic [19:0] pre_next_tid_0, pre_next_tid_1, pre_next_tid_2, pre_next_tid_3;
+    logic [2*DICE_TID_WIDTH-1:0] pre_next_tid_0, pre_next_tid_1, pre_next_tid_2, pre_next_tid_3;
     logic pre_valid_0, pre_valid_1, pre_valid_2, pre_valid_3;
-    
+
     // Final output signals (combinational)
-    logic [19:0] final_tid [4];
-    logic [3:0] final_valid ;
+    logic [2*DICE_TID_WIDTH-1:0] final_tid [NUM_LANES];
+    logic [NUM_LANES-1:0] final_valid ;
 
     assign chunk_done = done[0] && done[1] && done[2] && done[3] && fifo_empty;
     
