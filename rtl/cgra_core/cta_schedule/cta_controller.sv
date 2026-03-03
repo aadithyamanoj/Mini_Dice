@@ -48,15 +48,17 @@ module cta_controller
 
   // Completion Logic
   logic victim_found;
+  logic pop_fire;
   assign victim_found = active_cta_valid_i
                         && !cta_status_i.has_pending_eblock // may not work
                         && cta_status_i.is_return;
 
   // POP FROM ACTIVE CTA TABLE
   assign pop_valid_o = victim_found && !pop_out_valid_i;
+  assign pop_fire = pop_valid_o && pop_ready_i;
 
   // CLEAR CTA STATUS TABLE ENTRY
-  assign clear_entry_valid_o = pop_valid_o;
+  assign clear_entry_valid_o = pop_fire;
 
   // TELL DISPATCHER CTA IS RETURNED
   assign cta_if_inst.complete_valid  = pop_out_valid_i;

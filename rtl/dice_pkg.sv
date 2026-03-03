@@ -63,6 +63,7 @@ package dice_pkg;
     // IDs and geometry
     logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
     dice_grid_size_t                 grid_size;
+    dice_cta_size_t                  cta_size;
     // Resources for backend to determine shared memory address for each CTA
     logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
 
@@ -91,7 +92,7 @@ package dice_pkg;
   } branch_predict_interface_t;  // Branch prediction interface descriptor
 
   typedef struct packed {
-    logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] hw_cta_pending;
+    logic has_pending_eblock;
   } block_retire_status_t;  // Block retire status descriptor
 
 endpackage

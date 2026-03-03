@@ -24,15 +24,10 @@ ${DICE_HOME}/rtl/dice_frontend_pkg.sv
 ${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/DE_pkg.sv
 
 // ==== DICE interfaces ====
+${DICE_HOME}/rtl/interfaces/cta_if.sv
 ${DICE_HOME}/rtl/interfaces/cta_sched_if.sv
 ${DICE_HOME}/rtl/interfaces/fdr_if.sv
-${DICE_HOME}/rtl/interfaces/simt_stack_status_if.sv
 ${DICE_HOME}/rtl/interfaces/cgra_cm_if.sv
-${DICE_HOME}/rtl/interfaces/cta_dispatch_if.sv
-${DICE_HOME}/rtl/interfaces/cta_complete_if.sv
-${DICE_HOME}/rtl/interfaces/branch_handler_if.sv
-${DICE_HOME}/rtl/interfaces/dice_bh_simt_if.sv
-${DICE_HOME}/rtl/interfaces/prf_if.sv
 
 // ==== DICE RAM primitives ====
 ${DICE_HOME}/rtl/dice_ram/dice_ram_1w1r.sv

@@ -9,6 +9,7 @@ module active_cta_table
     output logic           add_ready_o,
     input  logic           add_valid_i,
     input  dice_cta_desc_t add_cta_info_i,
+    input  logic [DICE_TID_WIDTH:0] add_cta_thread_count_i,
 
     // Pop interface
     input  logic           pop_valid_i,
@@ -87,6 +88,7 @@ module active_cta_table
         cta_entry_q.grid_size        <= add_cta_info_i.kernel_desc.grid_size;
         cta_entry_q.kernel_id        <= add_cta_info_i.kernel_desc.kernel_id;
         cta_entry_q.smem_per_cta     <= add_cta_info_i.kernel_desc.smem_per_cta;
+        cta_entry_q.cta_thread_count <= add_cta_thread_count_i;
       end
     end
   end
