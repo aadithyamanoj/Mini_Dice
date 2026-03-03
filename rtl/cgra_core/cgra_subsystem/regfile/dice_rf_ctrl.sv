@@ -54,7 +54,6 @@ import dice_pkg::*;
     // =========================================================================
     logic [NUM_PORTS-1:0] rf_rd_en;
     logic [NUM_PORTS*ADDR_WIDTH-1:0] rf_rd_addr;
-    logic [NUM_PORTS*DATA_WIDTH-1:0] rf_rd_data;
 
     logic [NUM_PORTS-1:0]    rf_wr_en;
     logic [NUM_PORTS*ADDR_WIDTH-1:0] rf_wr_addr;
@@ -124,18 +123,6 @@ import dice_pkg::*;
                 , .ws_o (rf_wr_addr[i*ADDR_WIDTH +: ADDR_WIDTH])
                 , .data_o (rf_wr_data[i*DATA_WIDTH +: DATA_WIDTH])
                 , .we_o (rf_wr_en[i])
-            );
-
-            dice_rd_ctrl_bank#
-            (
-                .WIDTH (DATA_WIDTH)
-                , .DEPTH (DEPTH)
-                , .ADDR_WIDTH (ADDR_WIDTH)
-            ) w_rd_ctrl (
-                .clk_i (clk_i)
-                , .reset_i (reset_i)
-                , .reg_data_i (rf_rd_data[i*DATA_WIDTH +: DATA_WIDTH])
-                , .data_o (rd_data_o[i*DATA_WIDTH +: DATA_WIDTH])
             );
         end
     endgenerate
@@ -270,7 +257,7 @@ import dice_pkg::*;
           .clk (clk_i)
 
         , .rd_addr (rf_rd_addr)
-        , .rd_data (rf_rd_data)
+        , .rd_data (rd_data_o[NUM_PORTS*DATA_WIDTH-1:0])
 
         , .wr_en   (rf_wr_en)
         , .wr_addr (rf_wr_addr)

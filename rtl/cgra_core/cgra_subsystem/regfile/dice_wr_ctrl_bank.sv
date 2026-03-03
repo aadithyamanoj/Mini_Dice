@@ -26,15 +26,9 @@ import dice_pkg::*;
     , input reg_wr_cmd   wr_ldst_i
     , input logic        ldst_valid_i
 
-    // forwarding for read
-    // , input [DICE_TID_WIDTH-1:0] fw_req_i
-
     // stall from either buffer
     , output logic       stall_o
-    // forwarding flags for each entry in buffer
-    // , output logic[7:0]         fw_hit_cgra_o
-    // , output logic[7:0]         fw_hit_ldst_o
-    // , output logic[WIDTH-1:0]   fw_data_o
+
 
     // signals out to register file
     , output logic[ADDR_WIDTH-1:0]   ws_o
@@ -44,42 +38,8 @@ import dice_pkg::*;
 
 
 
-
+  // arbitrated output
   reg_wr_cmd cmd_lo;
-
-
-// ---------------- CGRA buffer ----------------
-  logic                  cgra_full,  cgra_empty;
-  reg_wr_cmd             cgra_wb;
-  logic                  cgra_wb_valid;
-  // logic [BUF_DEPTH-1:0]  cgra_fw_hit;
-  // logic [WIDTH-1:0]      cgra_fw_data_o;
-  // logic                  cgra_fw_valid;
-  logic                  pop_cgra;
-
-
-  // single value write arbitration, does nothing right now :)
-
-  // reg_wr_single #(
-  //       .WIDTH     (WIDTH)
-  //     , .ADDR_WIDTH(ADDR_WIDTH)
-  // ) u_cgra_buf (
-  //         .clk_i             (clk_i)
-  //       , .reset_i           (reset_i)
-  //       , .cgra_valid_i      (cgra_valid_i)
-  //       , .cgra_ready_o      ()
-  //       , .cgra_wr_i         (cgra_wr_i)
-  //       , .valid_o           (cgra_wb_valid)
-  //       , .cgra_wr_o         (cgra_wb)
-  //       // , .fw_req_i          (fw_req_i)
-  //       // , .fw_hit_o          () // forwarding unconnected for now
-  //       // , .fw_data_o       () // forwarding unconnected for now 
-  //       // , .fw_data_valid_o ()
-  // );
-
-  assign cgra_wb_valid = cgra_valid_i;
-  assign cgra_wb = cgra_wr_i;
-
   // ---------------- LDST buffer ----------------
   logic                 ldst_full,  ldst_empty;
   reg_wr_cmd             ldst_wb;
@@ -97,36 +57,16 @@ import dice_pkg::*;
           .clk_i          (clk_i)
         , .reset_i        (reset_i)
         , .wr_i           (wr_ldst_i)
-        // , .fw_req_i       (fw_req_i)
         , .pop_i          (pop_ldst)
         , .valid_i        (ldst_valid_i)
         , .full_o         (ldst_full)
         , .empty_o        (ldst_empty)
         , .cmd_o          (ldst_wb)
         , .wb_valid_o     (ldst_wb_valid)
-        // , .fw_hit_o       () // forwarding unconnected for now
-        // , .fw_data_o      () // forwarding unconnected for now
-        // , .fw_data_valid_o() // forwarding unconnected for now
+
     );
 
   assign stall_o = ldst_full;
-
-  // assign fw_hit_ldst_o = ldst_fw_hit;
-  // assign fw_hit_cgra_o = cgra_fw_hit;
-
-  //fw data
-
-  // always_comb begin
-  //   if (cgra_fw_valid) begin
-  //     fw_data_o = cgra_fw_data_o;
-  //   end else if (ldst_fw_valid) begin
-  //     fw_data_o = ldst_fw_data_o;
-  //   end else begin
-  //     fw_data_o = '0;
-  //   end
-  // end
-
-  // wb arbitration
 
   always_comb begin
     cmd_lo   = cgra_valid_i ? cgra_wr_i : ldst_wb;
