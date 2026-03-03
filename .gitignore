@@ -4,6 +4,9 @@ simv.daidir/
 csrc/
 build/
 
+# Verilator
+obj_dir/
+
 # Verdi
 verdi/
 verdiLog/
@@ -20,6 +23,11 @@ sysProgressP*
 *.vcd
 *.log
 *.key
+
+# Synthesis
+*.db
+*.DB
+*.sdb
 
 # OS / Editor
 .DS_Store
