@@ -6,9 +6,6 @@ module simt_stack_controller
     input logic rst_i,
 
     // ============== BRANCH HANDLER ==============
-    input logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id_i,
-    input cta_size_e hw_cta_size_i,  // CTA_SIZE_1/2/4
-
     // Update request interface (valid/ready handshake) - BRANCH HANDLER
     input logic update_valid_i,
     input logic update_with_divergence_i,  // 0 = no divergence, 1 = with divergence
@@ -22,28 +19,24 @@ module simt_stack_controller
 
     // ============== CTA CONTROLLER ==============
     input logic init_valid_i,
-    input logic [DICE_HW_CTA_ID_WIDTH-1:0] init_hw_cta_id_i,
-    input cta_size_e init_hw_cta_size_i,
     input logic [DICE_ADDR_WIDTH-1:0] init_pc_i,
     input logic [DICE_ADDR_WIDTH-1:0] init_reconvergence_pc_i,
     output logic init_ready_o,
 
     // ============== STACK TOP ==============
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_valid_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0] stack_top_next_pc_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0][DICE_NUM_MAX_THREADS_PER_CORE/DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_top_active_mask_o,
+    output logic stack_top_valid_o,
+    output logic [DICE_ADDR_WIDTH-1:0] stack_top_next_pc_o,
+    output logic [DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_o,
+    output thread_mask_t stack_top_active_mask_o,
 
     // ============== STACK STATUS ==============
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_empty_o,
-    output logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_full_o
+    output logic stack_empty_o,
+    output logic stack_full_o
 );
 
   // ===========================================================================
   // LOCAL PARAMETERS AND TYPES
   // ===========================================================================
-
-  localparam int THREAD_WIDTH = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
 
   // FSM States
   typedef enum logic [2:0] {
@@ -74,19 +67,6 @@ module simt_stack_controller
   // FSM state registers
   state_e current_state_q, next_state;
 
-  // CTA configuration registers
-  logic [$clog2(DICE_NUM_MAX_CTA_PER_CORE)-1:0] hw_cta_id_q;
-  cta_size_e hw_cta_size_q;
-
-  // Number of stacks this CTA spans = cta_size_encoding + 1
-  // Encoding: 00→1, 01→2, 11→4
-  // Used to select stacks [hw_cta_id_q : hw_cta_id_q + num_active_stacks - 1]
-  logic [2:0] num_active_stacks;
-
-  // Effective thread width = THREAD_WIDTH * num_active_stacks
-  // Max value = DICE_NUM_MAX_THREADS_PER_CORE, needs DICE_TID_WIDTH+1 bits
-  logic [DICE_TID_WIDTH:0] effective_thread_width;
-
   // Captured input registers - from branch handler
   logic update_with_divergence_q;
   logic [DICE_ADDR_WIDTH-1:0] update_next_pc_q;
@@ -98,28 +78,20 @@ module simt_stack_controller
   logic [DICE_ADDR_WIDTH-1:0] init_pc_q;
   logic [DICE_ADDR_WIDTH-1:0] init_reconvergence_pc_q;
 
-  // Per-stack control signals
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_push;
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_modify_top;
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_pop;
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_read_top;
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_out_valid;
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_empty_individual;
-  logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] stack_full_individual;
+  // Stack control signals
+  logic stack_push;
+  logic stack_modify_top;
+  logic stack_pop;
+  logic stack_read_top;
+  logic stack_out_valid;
 
-  // Per-stack data signals
-  logic [DICE_ADDR_WIDTH-1:0] stack_push_next_pc[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [DICE_ADDR_WIDTH-1:0] stack_push_reconvergence_pc[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [THREAD_WIDTH-1:0]     stack_push_active_mask[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [DICE_ADDR_WIDTH-1:0] stack_top_next_pc_int[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_int[DICE_NUM_MAX_CTA_PER_CORE];
-  logic [THREAD_WIDTH-1:0]     stack_top_active_mask_int[DICE_NUM_MAX_CTA_PER_CORE];
-
-  // Combined stack output signals
-  logic                       combined_stack_out_valid;
-  logic [DICE_ADDR_WIDTH-1:0] combined_stack_top_next_pc;
-  logic [DICE_ADDR_WIDTH-1:0] combined_stack_top_reconvergence_pc;
-  thread_mask_t               combined_stack_top_active_mask;
+  // Stack data signals
+  logic [DICE_ADDR_WIDTH-1:0] stack_push_next_pc;
+  logic [DICE_ADDR_WIDTH-1:0] stack_push_reconvergence_pc;
+  thread_mask_t               stack_push_active_mask;
+  logic [DICE_ADDR_WIDTH-1:0] stack_top_next_pc_int;
+  logic [DICE_ADDR_WIDTH-1:0] stack_top_reconvergence_pc_int;
+  thread_mask_t               stack_top_active_mask_int;
 
   // Divergence analysis signals
   thread_mask_t taken_active_mask;
@@ -148,72 +120,53 @@ module simt_stack_controller
   // DERIVED SIGNAL ASSIGNMENTS
   // ===========================================================================
 
-  assign num_active_stacks = 3'(hw_cta_size_q) + 3'd1;
-  assign effective_thread_width = (DICE_TID_WIDTH+1)'(THREAD_WIDTH) * (DICE_TID_WIDTH+1)'(num_active_stacks);
+  // Output status signals - direct pass-through from single stack
+  assign stack_empty_o = stack_empty_internal;
+  assign stack_full_o = stack_full_internal;
 
-  // Output status signals - direct pass-through
-  assign stack_empty_o = stack_empty_individual;
-  assign stack_full_o = stack_full_individual;
+  // Output data signals - direct pass-through from single stack
+  assign stack_top_valid_o = stack_out_valid && !stack_empty_internal;
+  assign stack_top_next_pc_o = stack_top_next_pc_int;
+  assign stack_top_reconvergence_pc_o = stack_top_reconvergence_pc_int;
+  assign stack_top_active_mask_o = stack_top_active_mask_int;
 
   // Handshake ready signals
   assign update_ready_o = (current_state_q == StateIdle) && (init_valid_i == 1'b0);
   assign init_ready_o = (current_state_q == StateIdle);
 
+  // With 1 CTA, the effective active mask is just the stack top active mask
+  assign effective_active_mask = stack_top_active_mask_int;
+
   // ===========================================================================
   // SIMT STACK INSTANTIATION
   // ===========================================================================
 
-  genvar i;
-  generate
-    for (i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin : gen_stacks
-      simt_stack stack_inst (
-          .clk_i                  (clk_i),
-          .rst_i                  (rst_i),
-          .push_i                 (stack_push[i]),
-          .modify_top_i           (stack_modify_top[i]),
-          .push_next_pc_i         (stack_push_next_pc[i]),
-          .push_reconvergence_pc_i(stack_push_reconvergence_pc[i]),
-          .push_active_mask_i     (stack_push_active_mask[i]),
-          .pop_i                  (stack_pop[i]),
-          .read_top_i             (stack_read_top[i]),
-          .top_next_pc_o          (stack_top_next_pc_int[i]),
-          .top_reconvergence_pc_o (stack_top_reconvergence_pc_int[i]),
-          .top_active_mask_o      (stack_top_active_mask_int[i]),
-          .out_valid_o            (stack_out_valid[i]),
-          .stack_empty_o          (stack_empty_individual[i]),
-          .stack_full_o           (stack_full_individual[i])
-      );
-    end
-  endgenerate
+  logic stack_empty_internal;
+  logic stack_full_internal;
+
+  simt_stack stack_inst (
+      .clk_i                  (clk_i),
+      .rst_i                  (rst_i),
+      .push_i                 (stack_push),
+      .modify_top_i           (stack_modify_top),
+      .push_next_pc_i         (stack_push_next_pc),
+      .push_reconvergence_pc_i(stack_push_reconvergence_pc),
+      .push_active_mask_i     (stack_push_active_mask),
+      .pop_i                  (stack_pop),
+      .read_top_i             (stack_read_top),
+      .top_next_pc_o          (stack_top_next_pc_int),
+      .top_reconvergence_pc_o (stack_top_reconvergence_pc_int),
+      .top_active_mask_o      (stack_top_active_mask_int),
+      .out_valid_o            (stack_out_valid),
+      .stack_empty_o          (stack_empty_internal),
+      .stack_full_o           (stack_full_internal)
+  );
 
   // ===========================================================================
   // HELPER FUNCTIONS
   // ===========================================================================
 
-  // Extract effective mask based on CTA size
-  // Operates on the COMBINED mask already aggregated from stacks [hw_cta_id : hw_cta_id + n]
-  function automatic thread_mask_t get_effective_mask(input cta_size_e cta_size,
-                                                      input thread_mask_t full_mask);
-    case (cta_size)
-      CTA_SIZE_1:
-      return {{(DICE_NUM_MAX_CTA_PER_CORE - 1) * THREAD_WIDTH{1'b0}}, full_mask[THREAD_WIDTH-1:0]};
-      CTA_SIZE_2:
-      return {{(DICE_NUM_MAX_CTA_PER_CORE - 2) * THREAD_WIDTH{1'b0}}, full_mask[2*THREAD_WIDTH-1:0]};
-      CTA_SIZE_4: return full_mask;
-      default:
-      return {{(DICE_NUM_MAX_CTA_PER_CORE - 1) * THREAD_WIDTH{1'b0}}, full_mask[THREAD_WIDTH-1:0]};
-    endcase
-  endfunction
-
-  // Check if a stack index is part of the current CTA's allocation
-  // Returns true if stack_idx is within [hw_cta_id_q, hw_cta_id_q + num_active_stacks)
-  function automatic logic is_active_stack(input int stack_idx);
-    return (stack_idx >= hw_cta_id_q) && (stack_idx < (hw_cta_id_q + num_active_stacks));
-  endfunction
-
   // Compute the new top PC based on divergence state
-  // Accesses module-level signals: update_with_divergence_q, update_next_pc_q,
-  // branch_not_taken_pc_q, all_taken, all_not_taken
   function automatic logic [DICE_ADDR_WIDTH-1:0] compute_new_top_pc();
     if (!update_with_divergence_q || all_taken) return update_next_pc_q;
     else if (all_not_taken) return branch_not_taken_pc_q;
@@ -283,62 +236,13 @@ module simt_stack_controller
   endfunction
 
   // ===========================================================================
-  // COMBINATIONAL LOGIC: STACK OUTPUT COMBINING
-  // ===========================================================================
-
-  // Combine outputs from active stacks for multi-CTA configurations
-  always_comb begin
-    logic all_active_valid;
-    int   mask_offset;
-    mask_offset = 0;
-    combined_stack_out_valid = 1'b0;
-    combined_stack_top_next_pc = '0;
-    combined_stack_top_reconvergence_pc = '0;
-    combined_stack_top_active_mask = '0;
-
-    // Check if all active stacks have valid output
-    all_active_valid = 1'b1;
-    for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
-      if (j >= hw_cta_id_q && j < (hw_cta_id_q + num_active_stacks)) begin
-        all_active_valid &= stack_out_valid[j];
-      end
-    end
-
-    if (all_active_valid == 1'b1) begin
-      combined_stack_out_valid = 1'b1;
-      // Use the PC from the first active stack (they should all be the same for valid operations)
-      combined_stack_top_next_pc = stack_top_next_pc_int[hw_cta_id_q];
-      combined_stack_top_reconvergence_pc = stack_top_reconvergence_pc_int[hw_cta_id_q];
-
-      // Combine active masks from all active stacks
-      for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
-        if (j >= hw_cta_id_q && j < (hw_cta_id_q + num_active_stacks)) begin
-          mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-          combined_stack_top_active_mask[mask_offset+:THREAD_WIDTH] = stack_top_active_mask_int[j];
-        end else begin
-          mask_offset = j * THREAD_WIDTH;
-          combined_stack_top_active_mask[mask_offset+:THREAD_WIDTH] = '0;
-        end
-      end
-    end
-  end
-
-  // Extract effective active mask based on CTA size
-  assign effective_active_mask = get_effective_mask(hw_cta_size_q, combined_stack_top_active_mask); //this may bne
-
-  // ===========================================================================
   // COMBINATIONAL LOGIC: DIVERGENCE ANALYSIS
   // ===========================================================================
 
   // Compute taken/not-taken masks and divergence flags
   always_comb begin
-    thread_mask_t effective_predicate;
-
-    // Extract effective predicate based on CTA size
-    effective_predicate = get_effective_mask(hw_cta_size_q, predicate_regs_value_q);
-
-    taken_active_mask = effective_active_mask & effective_predicate;
-    not_taken_active_mask = effective_active_mask & ~effective_predicate;
+    taken_active_mask = effective_active_mask & predicate_regs_value_q;
+    not_taken_active_mask = effective_active_mask & ~predicate_regs_value_q;
     all_taken = (taken_active_mask == effective_active_mask) && (effective_active_mask != '0);
     all_not_taken = (not_taken_active_mask == effective_active_mask) &&
                     (effective_active_mask != '0);
@@ -353,7 +257,7 @@ module simt_stack_controller
       update_next_pc_q,
       branch_not_taken_pc_q,
       branch_reconvergence_pc_q,
-      combined_stack_top_reconvergence_pc,
+      stack_top_reconvergence_pc_int,
       all_taken,
       all_not_taken,
       has_divergence
@@ -372,7 +276,7 @@ module simt_stack_controller
     need_push_first_next = 1'b0;
     need_push_second_next = 1'b0;
 
-    if ((current_state_q == StateReadTop) && (combined_stack_out_valid == 1'b1)) begin
+    if ((current_state_q == StateReadTop) && (stack_out_valid == 1'b1)) begin
       case (current_div_case)
         DIV_POP: begin
           need_pop_next = 1'b1;
@@ -406,17 +310,17 @@ module simt_stack_controller
     push_entry_1_next  = '0;
     push_entry_2_next  = '0;
 
-    if ((current_state_q == StateReadTop) && (combined_stack_out_valid == 1'b1)) begin
+    if ((current_state_q == StateReadTop) && (stack_out_valid == 1'b1)) begin
       case (current_div_case)
         DIV_MODIFY_ONLY: begin
           new_top_entry_next.pc = compute_new_top_pc();
-          new_top_entry_next.reconvergence_pc = combined_stack_top_reconvergence_pc;
+          new_top_entry_next.reconvergence_pc = stack_top_reconvergence_pc_int;
           new_top_entry_next.active_mask = effective_active_mask;
         end
         DIV_PUSH_ONE: begin
           // Modify top to reconvergence point, push not-taken path
           new_top_entry_next.pc = branch_reconvergence_pc_q;
-          new_top_entry_next.reconvergence_pc = combined_stack_top_reconvergence_pc;
+          new_top_entry_next.reconvergence_pc = stack_top_reconvergence_pc_int;
           new_top_entry_next.active_mask = effective_active_mask;
           push_entry_1_next.pc = branch_not_taken_pc_q;
           push_entry_1_next.reconvergence_pc = branch_reconvergence_pc_q;
@@ -425,7 +329,7 @@ module simt_stack_controller
         DIV_PUSH_TWO: begin
           // Modify top to reconvergence point, push both paths
           new_top_entry_next.pc = branch_reconvergence_pc_q;
-          new_top_entry_next.reconvergence_pc = combined_stack_top_reconvergence_pc;
+          new_top_entry_next.reconvergence_pc = stack_top_reconvergence_pc_int;
           new_top_entry_next.active_mask = effective_active_mask;
           push_entry_1_next.pc = update_next_pc_q;  // taken target
           push_entry_1_next.reconvergence_pc = branch_reconvergence_pc_q;
@@ -440,92 +344,56 @@ module simt_stack_controller
   end
 
   // ===========================================================================
-  // COMBINATIONAL LOGIC: STACK SIGNAL DISTRIBUTION
+  // COMBINATIONAL LOGIC: STACK SIGNAL DRIVE
   // ===========================================================================
 
-  // Distribute control signals to individual stacks based on active configuration
+  // Drive control and data signals to the single stack based on FSM state
   always_comb begin
-    int mask_offset;
-    mask_offset = 0;
+    // Defaults
+    stack_push = 1'b0;
+    stack_modify_top = 1'b0;
+    stack_pop = 1'b0;
+    stack_read_top = 1'b1;  // Always read to keep top valid
+    stack_push_next_pc = '0;
+    stack_push_reconvergence_pc = '0;
+    stack_push_active_mask = '0;
 
-    // Initialize all stacks to inactive
-    for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
-      stack_push[j] = 1'b0;
-      stack_modify_top[j] = 1'b0;
-      stack_pop[j] = 1'b0;
-      stack_read_top[j] = 1'b0;
-      stack_push_next_pc[j] = '0;
-      stack_push_reconvergence_pc[j] = '0;
-      stack_push_active_mask[j] = '0;
-    end
-
-    // Always read from all stacks to keep outputs valid
-    for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
-      stack_read_top[j] = 1'b1;
-    end
-
-    // Activate only the stacks in the current CTA for operations
-    for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
-      if (is_active_stack(j)) begin
-        case (current_state_q)
-          StateModifyTop: begin
-            stack_push[j] = 1'b1;
-            stack_modify_top[j] = 1'b1;
-            stack_push_next_pc[j] = new_top_entry_q.pc;
-            stack_push_reconvergence_pc[j] = new_top_entry_q.reconvergence_pc;
-            // Distribute active mask across stacks
-            mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-            stack_push_active_mask[j] = new_top_entry_q.active_mask[mask_offset+:THREAD_WIDTH];
-          end
-
-          StatePushFirst: begin
-            stack_push[j] = 1'b1;
-            stack_push_next_pc[j] = push_entry_1_q.pc;
-            stack_push_reconvergence_pc[j] = push_entry_1_q.reconvergence_pc;
-            // Distribute active mask across stacks
-            mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-            stack_push_active_mask[j] = push_entry_1_q.active_mask[mask_offset+:THREAD_WIDTH];
-          end
-
-          StatePushSecond: begin
-            stack_push[j] = 1'b1;
-            stack_push_next_pc[j] = push_entry_2_q.pc;
-            stack_push_reconvergence_pc[j] = push_entry_2_q.reconvergence_pc;
-            // Distribute active mask across stacks
-            mask_offset = (j - hw_cta_id_q) * THREAD_WIDTH;
-            stack_push_active_mask[j] = push_entry_2_q.active_mask[mask_offset+:THREAD_WIDTH];
-          end
-
-          StatePopStack: begin
-            stack_pop[j] = 1'b1;
-          end
-
-          StateInitPush: begin
-            stack_push[j] = 1'b1;
-            stack_modify_top[j] = 1'b0;
-            stack_push_next_pc[j] = init_pc_q;
-            stack_push_reconvergence_pc[j] = init_reconvergence_pc_q;
-            stack_push_active_mask[j] = '1;  // All threads active
-          end
-          default: ;
-        endcase
+    case (current_state_q)
+      StateModifyTop: begin
+        stack_push = 1'b1;
+        stack_modify_top = 1'b1;
+        stack_push_next_pc = new_top_entry_q.pc;
+        stack_push_reconvergence_pc = new_top_entry_q.reconvergence_pc;
+        stack_push_active_mask = new_top_entry_q.active_mask;
       end
-    end
-  end
 
-  // ===========================================================================
-  // COMBINATIONAL LOGIC: OUTPUT ASSIGNMENTS
-  // ===========================================================================
+      StatePushFirst: begin
+        stack_push = 1'b1;
+        stack_push_next_pc = push_entry_1_q.pc;
+        stack_push_reconvergence_pc = push_entry_1_q.reconvergence_pc;
+        stack_push_active_mask = push_entry_1_q.active_mask;
+      end
 
-  // Convert unpacked arrays to packed arrays for outputs
-  // stack_top_valid is always available when stack has data (not dependent on state)
-  always_comb begin
-    for (int j = 0; j < DICE_NUM_MAX_CTA_PER_CORE; j++) begin
-      stack_top_valid_o[j] = stack_out_valid[j] && (stack_empty_individual[j] == 1'b0);
-      stack_top_next_pc_o[j] = stack_top_next_pc_int[j];
-      stack_top_reconvergence_pc_o[j] = stack_top_reconvergence_pc_int[j];
-      stack_top_active_mask_o[j] = stack_top_active_mask_int[j];
-    end
+      StatePushSecond: begin
+        stack_push = 1'b1;
+        stack_push_next_pc = push_entry_2_q.pc;
+        stack_push_reconvergence_pc = push_entry_2_q.reconvergence_pc;
+        stack_push_active_mask = push_entry_2_q.active_mask;
+      end
+
+      StatePopStack: begin
+        stack_pop = 1'b1;
+      end
+
+      StateInitPush: begin
+        stack_push = 1'b1;
+        stack_push_next_pc = init_pc_q;
+        stack_push_reconvergence_pc = init_reconvergence_pc_q;
+        stack_push_active_mask = '1;  // All threads active
+      end
+
+      default: ;
+    endcase
   end
 
   // ===========================================================================
@@ -545,7 +413,7 @@ module simt_stack_controller
       end
 
       StateReadTop: begin
-        if (combined_stack_out_valid == 1'b1) begin
+        if (stack_out_valid == 1'b1) begin
           if (need_pop_next == 1'b1) begin
             next_state = StatePopStack;
           end else if (need_modify_top_next == 1'b1) begin
@@ -587,7 +455,7 @@ module simt_stack_controller
       end
 
       StateFinalRead: begin
-        if ((combined_stack_out_valid == 1'b1) || (stack_empty_o != '0)) begin
+        if ((stack_out_valid == 1'b1) || (stack_empty_o == 1'b1)) begin
           next_state = StateIdle;
         end
       end
@@ -607,10 +475,6 @@ module simt_stack_controller
       // -------- Reset All Registers --------
       // FSM state
       current_state_q <= StateIdle;
-
-      // CTA configuration
-      hw_cta_id_q <= '0;
-      hw_cta_size_q <= CTA_SIZE_1;
 
       // Captured inputs - branch handler
       update_with_divergence_q <= 1'b0;
@@ -642,8 +506,6 @@ module simt_stack_controller
       if ((current_state_q == StateIdle) && (init_valid_i == 1'b1)) begin
         init_pc_q <= init_pc_i;
         init_reconvergence_pc_q <= init_reconvergence_pc_i;
-        hw_cta_id_q <= init_hw_cta_id_i;
-        hw_cta_size_q <= init_hw_cta_size_i;
 
       end else if ((current_state_q == StateIdle) && (update_valid_i == 1'b1)) begin
         update_with_divergence_q <= update_with_divergence_i;
@@ -651,12 +513,10 @@ module simt_stack_controller
         predicate_regs_value_q <= predicate_regs_value_i;
         branch_not_taken_pc_q <= branch_not_taken_pc_i;
         branch_reconvergence_pc_q <= branch_reconvergence_pc_i;
-        hw_cta_id_q <= hw_cta_id_i;
-        hw_cta_size_q <= hw_cta_size_i;
       end
 
       // -------- Register Computed Divergence Values --------
-      if ((current_state_q == StateReadTop) && (combined_stack_out_valid == 1'b1)) begin
+      if ((current_state_q == StateReadTop) && (stack_out_valid == 1'b1)) begin
         // Capture operation flags
         need_pop_q <= need_pop_next;
         need_modify_top_q <= need_modify_top_next;
@@ -670,45 +530,5 @@ module simt_stack_controller
       end
     end
   end
-
-  // ===========================================================================
-  // DEBUG ASSERTIONS
-  // ===========================================================================
-
-`ifndef SYNTHESIS
-  always @(posedge clk_i) begin
-    if (rst_i == 1'b0) begin
-      if ((update_valid_i == 1'b1) && (update_ready_o == 1'b1) &&
-          (hw_cta_id_i + hw_cta_size_i >= DICE_NUM_MAX_CTA_PER_CORE)) begin
-        $error(
-            "SIMT Stack Controller: CTA configuration exceeds available stacks " + "(hw_cta_id=%0d, hw_cta_size=%0d, max=%0d)",
-            hw_cta_id_i, hw_cta_size_i, DICE_NUM_MAX_CTA_PER_CORE);
-      end
-
-      if ((init_valid_i == 1'b1) && (init_ready_o == 1'b1) &&
-          (init_hw_cta_id_i + init_hw_cta_size_i >= DICE_NUM_MAX_CTA_PER_CORE)) begin
-        $error(
-            "SIMT Stack Controller: Init CTA configuration exceeds available stacks " + "(init_hw_cta_id=%0d, init_hw_cta_size=%0d, max=%0d)",
-            init_hw_cta_id_i, init_hw_cta_size_i, DICE_NUM_MAX_CTA_PER_CORE);
-      end
-
-      // Debug state transitions and operations
-      if (current_state_q != next_state) begin
-        $display("SIMT Controller: State %0s -> %0s", current_state_q.name(), next_state.name());
-      end
-
-      // Debug operation decisions in StateReadTop
-      if ((current_state_q == StateReadTop) && (combined_stack_out_valid == 1'b1)) begin
-        $display("SIMT Controller: StateReadTop analysis - pop=%b, modify=%b, push1=%b, push2=%b",
-                 need_pop_next, need_modify_top_next, need_push_first_next, need_push_second_next);
-        if (need_modify_top_next == 1'b1) begin
-          $display(
-              "SIMT Controller: Will use new_top_pc=0x%h in next cycle",
-              (update_with_divergence_q == 1'b0) ? update_next_pc_q : (all_taken == 1'b1) ? update_next_pc_q : (all_not_taken == 1'b1) ? branch_not_taken_pc_q : branch_reconvergence_pc_q);
-        end
-      end
-    end
-  end
-`endif
 
 endmodule

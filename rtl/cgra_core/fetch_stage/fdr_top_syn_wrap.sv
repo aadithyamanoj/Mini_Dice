@@ -32,8 +32,8 @@ module fdr_top_syn_wrap
   input  logic fdr_ready_i,
 
   // Scheduler status/SIMT context -> FDR
-  input simt_stack_status_entry_t [DICE_NUM_MAX_CTA_PER_CORE-1:0] simt_status_i,
-  input dice_cta_status_t         [DICE_NUM_MAX_CTA_PER_CORE-1:0] cta_status_data_i,
+  input simt_stack_status_entry_t simt_status_i,
+  input dice_cta_status_t         cta_status_data_i,
 
   // Meta cache bus (wrapper environment <-> FDR)
   input  logic                                      metacache_req_ready_i,
@@ -71,8 +71,6 @@ module fdr_top_syn_wrap
   output logic                            simt_update_valid_o,
   input  logic                            simt_update_ready_i,
   output simt_stack_update_t              simt_update_stack_data_o,
-  output logic [DICE_HW_CTA_ID_WIDTH-1:0] simt_update_hw_cta_id_o,
-  output cta_size_e                       simt_update_hw_cta_size_o,
 
   // CGRA configuration memory outputs
   output logic [CM_DATA_WIDTH_P-1:0]  cm0_data_o,
@@ -103,7 +101,7 @@ module fdr_top_syn_wrap
 
   cta_sched_if         schedule_if_inst ();
   fdr_if               fdr_if_inst ();
-  simt_stack_status_if simt_status_if_inst ();
+
   cgra_cm_if           cm0_if_inst ();
   cgra_cm_if           cm1_if_inst ();
 
@@ -115,7 +113,7 @@ module fdr_top_syn_wrap
   assign fdr_valid_o       = fdr_if_inst.valid;
   assign fdr_data_o        = fdr_if_inst.data;
 
-  assign simt_status_if_inst.status = simt_status_i;
+
 
   assign metacache_mem_if.req_ready        = metacache_req_ready_i;
   assign metacache_mem_if.rsp_valid        = metacache_rsp_valid_i;
@@ -160,15 +158,13 @@ module fdr_top_syn_wrap
     .bitstream_cache_mem_if(bitstream_cache_mem_if),
     .schedule_if(schedule_if_inst),
     .fdr_if(fdr_if_inst),
-    .simt_status_if(simt_status_if_inst),
+    .simt_status_i(simt_status_i),
     .bh_branch_predict_info_o(bh_branch_predict_info_o),
     .bh_branch_predict_info_we_o(bh_branch_predict_info_we_o),
     .cta_status_data_i(cta_status_data_i),
     .simt_update_valid_o(simt_update_valid_o),
     .simt_update_ready_i(simt_update_ready_i),
     .simt_update_stack_data_o(simt_update_stack_data_o),
-    .simt_update_hw_cta_id_o(simt_update_hw_cta_id_o),
-    .simt_update_hw_cta_size_o(simt_update_hw_cta_size_o),
     .cm0_if(cm0_if_inst),
     .cm1_if(cm1_if_inst),
     .eblock_flush_valid_o(eblock_flush_valid_o),
