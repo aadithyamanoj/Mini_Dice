@@ -1,6 +1,7 @@
 module dispatcher_dataflow
-    import dice_pkg::*, 
-           dice_frontend_pkg::*;
+    import dice_pkg::*,
+           dice_frontend_pkg::*,
+           DE_pkg::*;  // CHUNK_ADDR_WIDTH from DE_pkg
 (
     // Output Data
     output logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] latched_active_mask,
@@ -8,7 +9,7 @@ module dispatcher_dataflow
     output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE+1)-1:0] dispatched_count,
     output logic [1:0] latched_unrolling_factor,
     output logic [1:0] latched_cta_size,
-    output logic [1:0] chunk_counter,
+    output logic [CHUNK_ADDR_WIDTH-1:0] chunk_counter,
     output logic last_chunk_done,
     output logic restart,
     
@@ -19,7 +20,7 @@ module dispatcher_dataflow
     input cta_size_e cta_size,                 // 0=256, 1=512, 3=1024
     input logic dispatch_valid_0, dispatch_valid_1,
                 dispatch_valid_2, dispatch_valid_3,
-    input logic [1:0] max_chunks,
+    input logic [CHUNK_ADDR_WIDTH-1:0] max_chunks,
 
     // Control Signals
     input logic latch_inputs,

@@ -2,24 +2,22 @@
 
 module dispatcher_fsm
     import dice_pkg::*,
-           dice_frontend_pkg::*;
-#(
-    parameter int CHUNK_SIZE = 256,
-    parameter int CHUNK_ADDR_WIDTH = 2
-)(
-    output logic [CHUNK_SIZE-1:0] current_chunk, // CHUNK_SIZE
-    output logic [`DICE_GPR_NUM-1:0] gpr_bitmap, // Need metadata parameter for gpr_bitmap width
-    output logic [`DICE_CR_NUM-1:0] const_bitmap, // Need metadata parameter for const_bitmap width
-    output logic [`DICE_PR_NUM-1:0] pred_bitmap, // Need metadata parameter for pred_bitmap width
-    output logic [CHUNK_ADDR_WIDTH-1:0] chunk_base_addr, // CHUNK_ADDR_WIDTH
+           dice_frontend_pkg::*,
+           DE_pkg::*;  // CHUNK_SIZE, CHUNK_ADDR_WIDTH, NUM_SCOREBOARDS from DE_pkg
+(
+    output logic [CHUNK_SIZE-1:0] current_chunk,
+    output logic [`DICE_GPR_NUM-1:0] gpr_bitmap,
+    output logic [`DICE_CR_NUM-1:0] const_bitmap,
+    output logic [`DICE_PR_NUM-1:0] pred_bitmap,
+    output logic [CHUNK_ADDR_WIDTH-1:0] chunk_base_addr,
     output logic [1:0] latched_unrolling_factor,
     output logic start_new_cta,
     output logic dispatcher_busy,
     output logic dispatcher_done,
     output logic restart,
 
-    input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask, // DICE_NUM_MAX_THREADS_PER_CORE
-    input logic [REG_NUM-1:0] input_register_bitmap, 
+    input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask,
+    input logic [REG_NUM-1:0] input_register_bitmap,
     input logic [1:0] unrolling_factor,
     input cta_size_e cta_size, // 0=256, 1=512, 3=1024
     input logic dispatch_valid_0,
@@ -37,7 +35,7 @@ module dispatcher_fsm
     logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE+1)-1:0] dispatched_count;
     logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE+1)-1:0] cta_total_size;
     logic [1:0] latched_cta_size;
-    logic [1:0] chunk_counter;
+    logic [CHUNK_ADDR_WIDTH-1:0] chunk_counter;
     logic last_chunk_done;
     logic latch_inputs,
           update_count,
@@ -57,21 +55,22 @@ module dispatcher_fsm
         endcase
     end
 
-    // Calculate maximum chunks needed
-    logic [1:0] max_chunks;
+    // Calculate maximum chunks needed — parameterized by CHUNK_SIZE from DE_pkg.
+    // cta_size encodes absolute thread counts (256/512/1024).
+    // max_chunks = (cta_threads / CHUNK_SIZE) - 1, capped at NUM_SCOREBOARDS-1 via truncation.
+    logic [CHUNK_ADDR_WIDTH-1:0] max_chunks;
     always_comb begin
         case (latched_cta_size)
-            2'b00: max_chunks = 2'b00;        // 1 chunk (0)
-            2'b01: max_chunks = 2'b01;        // 2 chunks (0-1)
-            2'b11: max_chunks = 2'b11;        // 4 chunks (0-3)
-            default: max_chunks = 2'b00;
+            2'b00: max_chunks = 0;
+            2'b01: max_chunks = 1;
+            2'b11: max_chunks = 3;
+            default: max_chunks = '0;
         endcase
     end
 
-    // Chunk selection
+    // Chunk selection — fully parameterized
     always_comb begin
         chunk_base_addr = chunk_counter;
-        
         case (chunk_counter)
             2'b00: current_chunk = latched_active_mask[1*CHUNK_SIZE-1:0*CHUNK_SIZE];  // Chunk 0
             2'b01: current_chunk = latched_active_mask[2*CHUNK_SIZE-1:1*CHUNK_SIZE];  // Chunk 1
@@ -82,8 +81,8 @@ module dispatcher_fsm
 
     // Extract register bitmaps from latched input
     assign gpr_bitmap   = latched_input_regs[`DICE_GPR_NUM-1:0];      // GPR (bits 0-31)
-    assign const_bitmap = latched_input_regs[(`DICE_GPR_NUM+`DICE_CR_NUM)-1:`DICE_GPR_NUM];   // Constants (bits 32-63)
-    assign pred_bitmap  = latched_input_regs[(`DICE_GPR_NUM+`DICE_CR_NUM+`DICE_PR_NUM)-1:`DICE_GPR_NUM+`DICE_CR_NUM];    // Predicates (bits 64-65)
+    assign const_bitmap = latched_input_regs[(`DICE_GPR_NUM+`DICE_CR_NUM)-1:`DICE_GPR_NUM];   // Constants
+    assign pred_bitmap  = latched_input_regs[(`DICE_GPR_NUM+`DICE_CR_NUM+`DICE_PR_NUM)-1:`DICE_GPR_NUM+`DICE_CR_NUM];    // Predicates
 
     dispatcher_dataflow dispatcher_df_inst (
         .latched_active_mask(latched_active_mask),
