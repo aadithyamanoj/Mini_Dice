@@ -9,7 +9,7 @@ import dice_pkg::*;
 
 
     initial begin
-        $fsdbDumpfile("dice_rf_ctrl_tb.fsdb");
+        $fsdbDumpfile("waveform.fsdb");
         $fsdbDumpvars(0, "+all");
     end
 
@@ -20,14 +20,15 @@ import dice_pkg::*;
     localparam int DATA_WIDTH      = DICE_REG_DATA_WIDTH;
     localparam int NUM_TID         = DICE_NUM_MAX_THREADS_PER_CORE;
     localparam int TID_WIDTH       = $clog2(NUM_TID);
-    localparam int DEPTH           = NUM_TID;
+    localparam int DEPTH           = DICE_REGS_PER_BANK;
     localparam int ADDR_WIDTH      = $clog2(DEPTH);
     localparam int NUM_SPECIAL_REG = `DICE_PR_NUM;
     localparam int MAX_CTA_ID      = `DICE_MAX_GRID_SIZE;
-    localparam int CTA_ID_WIDTH    = $clog2(MAX_CTA_ID);
+    localparam int CTA_ID_WIDTH    = DICE_CTA_ID_WIDTH;
+    localparam int BUF_DEPTH       = LDST_BUF_DEPTH;
 
     // Clock period
-    localparam int CLK_PERIOD = 10;
+    localparam int CLK_PERIOD = 20000;
 
     //-------------------------------------------------------------------------
     // Clock and Reset
@@ -57,7 +58,7 @@ import dice_pkg::*;
     //-------------------------------------------------------------------------
     // Write Interface Signals (LDST)
     //-------------------------------------------------------------------------
-    reg_wr_cmd [NUM_PORTS-1:0]        ldst_wr_i;
+    logic [$bits(cache_wr_cmd)-1:0]   ldst_wr_i;
     logic                             ldst_valid_i;
     logic                             ldst_ready_o;
 
@@ -92,6 +93,7 @@ import dice_pkg::*;
     //-------------------------------------------------------------------------
     initial begin
         clk_i = 1'b0;
+        reset_i = 1;
         forever #(CLK_PERIOD/2) clk_i = ~clk_i;
     end
 
@@ -108,6 +110,7 @@ import dice_pkg::*;
         , .NUM_SPECIAL_REG (NUM_SPECIAL_REG)
         , .MAX_CTA_ID      (MAX_CTA_ID)
         , .CTA_ID_WIDTH    (CTA_ID_WIDTH)
+        , .BUF_DEPTH       (BUF_DEPTH)
     ) dut (
           .clk_i              (clk_i)           // clock
         , .reset_i            (reset_i)
@@ -155,51 +158,68 @@ import dice_pkg::*;
     // Tasks
     //-------------------------------------------------------------------------
 
+    // Dump all localparams defined in this module
+    task dump_params();
+        begin
+            $display("=== Module Parameters ===");
+            $display("  NUM_PORTS       = %0d", NUM_PORTS);
+            $display("  DATA_WIDTH      = %0d", DATA_WIDTH);
+            $display("  NUM_TID         = %0d", NUM_TID);
+            $display("  TID_WIDTH       = %0d", TID_WIDTH);
+            $display("  DEPTH           = %0d", DEPTH);
+            $display("  ADDR_WIDTH      = %0d", ADDR_WIDTH);
+            $display("  NUM_SPECIAL_REG = %0d", NUM_SPECIAL_REG);
+            $display("  MAX_CTA_ID      = %0d", MAX_CTA_ID);
+            $display("  CTA_ID_WIDTH    = %0d", CTA_ID_WIDTH);
+            $display("  BUF_DEPTH       = %0d", BUF_DEPTH);
+            $display("  CLK_PERIOD      = %0d", CLK_PERIOD);
+            $display("=========================");
+        end
+    endtask
+
     // Reset DUT task
     // Asserts reset for a specified number of cycles, then deasserts
     task reset_dut(input int num_cycles = 5);
         begin
             // Initialize all inputs to known state
-            rd_tid_valid_i     = 1'b0;
-            rd_unroll_factor_i = 2'b0;
-            rd_en_i            = 1'b0;
-            rd_tid_i           = '0;
-            rd_bitmap_i        = '0;
+            rd_tid_valid_i     <= 1'b0;
+            rd_unroll_factor_i <= 2'b0;
+            rd_en_i            <= 1'b0;
+            rd_tid_i           <= '0;
+            rd_bitmap_i        <= '0;
 
-            cgra_tid_i   = '0;
-            cgra_data_i  = '0;
-            wr_bitmap_i  = '0;
-            cgra_valid_i = 1'b0;
+            cgra_tid_i   <= '0;
+            cgra_data_i  <= '0;
+            wr_bitmap_i  <= '0;
+            cgra_valid_i <= 1'b0;
 
-            for (int i = 0; i < NUM_PORTS; i++) begin
-                ldst_wr_i[i] = '0;
-            end
-            ldst_valid_i = 1'b0;
+            ldst_wr_i <= '0;
+            ldst_valid_i <= 1'b0;
 
-            clear_i          = '0;
-            spec_rd_enable_i = '0;
-            spec_reg_sel_i   = '0;
-            const_reg_i      = '0;
+            clear_i          <= '0;
+            spec_rd_enable_i <= '0;
+            spec_reg_sel_i   <= '0;
+            const_reg_i      <= '0;
 
-            tid_x_i    = '0;
-            tid_y_i    = '0;
-            tid_z_i    = '0;
-            ntid_x_i   = '0;
-            ntid_y_i   = '0;
-            ntid_z_i   = '0;
-            ctaid_x_i  = '0;
-            ctaid_y_i  = '0;
-            ctaid_z_i  = '0;
-            nctaid_x_i = '0;
-            nctaid_y_i = '0;
-            nctaid_z_i = '0;
+            tid_x_i    <= '0;
+            tid_y_i    <= '0;
+            tid_z_i    <= '0;
+            ntid_x_i   <= '0;
+            ntid_y_i   <= '0;
+            ntid_z_i   <= '0;
+            ctaid_x_i  <= '0;
+            ctaid_y_i  <= '0;
+            ctaid_z_i  <= '0;
+            nctaid_x_i <= '0;
+            nctaid_y_i <= '0;
+            nctaid_z_i <= '0;
 
             // Assert reset
-            reset_i = 1'b1;
+            reset_i <= 1'b1;
             repeat (num_cycles) @(posedge clk_i);
 
             // Deassert reset
-            reset_i = 1'b0;
+            reset_i <= 1'b0;
             @(posedge clk_i);
 
             // Write all registers to zero
@@ -290,6 +310,8 @@ import dice_pkg::*;
         void'($urandom(32'hdead_beef)); // seed once
     end
 
+    
+
     //-------------------------------------------------------------------------
     // Functions
     //-------------------------------------------------------------------------
@@ -371,8 +393,11 @@ import dice_pkg::*;
     initial begin
         $display("=== dice_rf_ctrl Testbench Start ===");
 
+        dump_params();
+        $display("reg_wr_cmd_width: %0d: ", $bits(reg_wr_cmd));
+
         // Apply reset
-        reset_dut(5);
+        reset_dut(20);
 
         write_cgra_only(0);
         @(posedge clk_i);

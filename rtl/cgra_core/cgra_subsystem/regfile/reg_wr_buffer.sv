@@ -44,7 +44,7 @@ import dice_pkg::*;
 
     logic ready_lo;
 
-    logic [$bits(reg_wr_cmd)-1:0] data_li, data_lo;
+    logic [WIDTH-1:0] data_li, data_lo;
     assign data_li = wr_i;
 
 

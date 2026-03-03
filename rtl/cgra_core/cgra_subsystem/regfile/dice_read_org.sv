@@ -64,15 +64,8 @@ import dice_pkg::*;
               
 
                 2'b00: begin
-                    // Set valid bits from shifted bitmap
                     rd_en_o = shifted_bitmap;
-
-                    // For each bank with valid bit set, place the TID
-                    for (int i = 0; i < NUM_PORTS; i++) begin
-                        if (shifted_bitmap[i]) begin
-                            rd_sel_o[i*TID_WIDTH +: TID_WIDTH] = tid_0;
-                        end
-                    end
+                    rd_sel_o = {NUM_PORTS{tid_0}};
                 end
 
                 // Unroll factor 1: 2 TIDs

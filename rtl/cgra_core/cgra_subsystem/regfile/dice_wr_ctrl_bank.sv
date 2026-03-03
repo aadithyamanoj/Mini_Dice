@@ -60,22 +60,25 @@ import dice_pkg::*;
 
   // single value write arbitration, does nothing right now :)
 
-  reg_wr_single #(
-        .WIDTH     (WIDTH)
-      , .ADDR_WIDTH(ADDR_WIDTH)
-  ) u_cgra_buf (
-          .clk_i             (clk_i)
-        , .reset_i           (reset_i)
-        , .cgra_valid_i      (cgra_valid_i)
-        , .cgra_ready_o      ()
-        , .cgra_wr_i         (cgra_wr_i)
-        , .valid_o           (cgra_wb_valid)
-        , .cgra_wr_o         (cgra_wb)
-        // , .fw_req_i          (fw_req_i)
-        // , .fw_hit_o          () // forwarding unconnected for now
-        // , .fw_data_o       () // forwarding unconnected for now 
-        // , .fw_data_valid_o ()
-  );
+  // reg_wr_single #(
+  //       .WIDTH     (WIDTH)
+  //     , .ADDR_WIDTH(ADDR_WIDTH)
+  // ) u_cgra_buf (
+  //         .clk_i             (clk_i)
+  //       , .reset_i           (reset_i)
+  //       , .cgra_valid_i      (cgra_valid_i)
+  //       , .cgra_ready_o      ()
+  //       , .cgra_wr_i         (cgra_wr_i)
+  //       , .valid_o           (cgra_wb_valid)
+  //       , .cgra_wr_o         (cgra_wb)
+  //       // , .fw_req_i          (fw_req_i)
+  //       // , .fw_hit_o          () // forwarding unconnected for now
+  //       // , .fw_data_o       () // forwarding unconnected for now 
+  //       // , .fw_data_valid_o ()
+  // );
+
+  assign cgra_wb_valid = cgra_valid_i;
+  assign cgra_wb = cgra_wr_i;
 
   // ---------------- LDST buffer ----------------
   logic                 ldst_full,  ldst_empty;
@@ -126,12 +129,12 @@ import dice_pkg::*;
   // wb arbitration
 
   always_comb begin
-    cmd_lo = cgra_wb_valid ? cgra_wb : ldst_wb;
-    pop_ldst = !cgra_wb_valid;
+    cmd_lo   = cgra_valid_i ? cgra_wr_i : ldst_wb;
+    pop_ldst = !cgra_valid_i && ldst_wb_valid;
 
     data_o = cmd_lo.data;
-    we_o = cmd_lo.mask;
-    ws_o = cmd_lo.tid;
+    we_o   = (cgra_valid_i | ldst_wb_valid) & cmd_lo.mask;
+    ws_o   = cmd_lo.tid;
   end
 
 

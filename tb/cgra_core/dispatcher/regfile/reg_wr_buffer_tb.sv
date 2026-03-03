@@ -2,7 +2,7 @@
 
 `include "DE_pkg.sv"
 `include "dice_pkg.sv"
-`include "bsg_defines.sv"   // for bsg_fifo_tracker inside DUT
+`include "bsg_defines.v"   // for bsg_fifo_tracker inside DUT
 
 import DE_pkg::*;
 import dice_pkg::*;
