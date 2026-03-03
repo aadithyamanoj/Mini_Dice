@@ -23,7 +23,7 @@ module cta_status_table
 
   always_comb begin
     cta_status_d = cta_status_q;
-    cta_status_d.has_pending_eblock = brt_info_i.hw_cta_pending[0];
+    cta_status_d.has_pending_eblock = brt_info_i.has_pending_eblock;
     if (branch_predict_info_we_i) begin
       if (branch_predict_info_i.valid_edits_bitmap[2])
         cta_status_d.unresolved_control_divergence = branch_predict_info_i.unresolved_control_divergence;

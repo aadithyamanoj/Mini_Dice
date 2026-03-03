@@ -84,7 +84,7 @@ module dice_core
       .unrolling_factor(fdr_out_if.data.metadata.unrolling_factor),
       .input_register_bitmap(fdr_out_if.data.metadata.in_regs_bitmap),
       .active_mask(fdr_out_if.data.real_active_mask),
-      .cta_size(fdr_out_if.data.schedule_hw_cta_size),
+      .cta_size(),
       .fetch_done(fdr_out_if.valid),
       .wb_valid(),          // comes from cgra
       .wb_tid_bitmap(),     // comes from cgra

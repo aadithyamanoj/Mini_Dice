@@ -3,7 +3,7 @@
 
 +incdir+${DICE_HOME}/rtl
 +incdir+${DICE_HOME}/rtl/interfaces
-+incdir+${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile
++incdir+${DICE_HOME}/rtl/cgra_core/regfile
 +incdir+${DICE_HOME}/rtl/dice_ram
 
 // ==== DICE configs and packages ====

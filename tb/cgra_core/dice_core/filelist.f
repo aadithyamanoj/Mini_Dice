@@ -7,7 +7,7 @@
 +incdir+${DICE_HOME}/rtl/interfaces
 +incdir+${DICE_HOME}/../hw/rtl
 +incdir+${DICE_HOME}/../hw/rtl/mem
-+incdir+${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile
++incdir+${DICE_HOME}/rtl/cgra_core/regfile
 
 // ==== Vortex base RTL (configs, packages, interfaces) ====
 ${DICE_HOME}/../hw/rtl/VX_config.vh
@@ -21,7 +21,7 @@ ${DICE_HOME}/rtl/dice_config.vh
 ${DICE_HOME}/rtl/dice_define.vh
 ${DICE_HOME}/rtl/dice_pkg.sv
 ${DICE_HOME}/rtl/dice_frontend_pkg.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/DE_pkg.sv
+${DICE_HOME}/rtl/cgra_core/regfile/DE_pkg.sv
 
 // ==== DICE interfaces ====
 ${DICE_HOME}/rtl/interfaces/cta_if.sv
@@ -71,16 +71,16 @@ ${DICE_HOME}/rtl/cgra_core/dispatcher/dispatcher_refactor/dispatcher_fsm.sv
 ${DICE_HOME}/rtl/cgra_core/dispatcher/dispatcher_refactor/dispatcher_refactored.sv
 
 // ==== Register File ====
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/addr_swizzle.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/fifo_ctrl_credit.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/reg_wr_single_entry.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/reg_wr_buffer.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/dice_register_file.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/dice_rd_ctrl_bank.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/dice_read_org.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/dice_wr_ctrl_bank.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/dice_special_reg.sv
-${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile/dice_rf_ctrl.sv
+${DICE_HOME}/rtl/cgra_core/regfile/addr_swizzle.sv
+${DICE_HOME}/rtl/cgra_core/regfile/fifo_ctrl_credit.sv
+${DICE_HOME}/rtl/cgra_core/regfile/reg_wr_single_entry.sv
+${DICE_HOME}/rtl/cgra_core/regfile/reg_wr_buffer.sv
+${DICE_HOME}/rtl/cgra_core/regfile/dice_register_file.sv
+${DICE_HOME}/rtl/cgra_core/regfile/dice_rd_ctrl_bank.sv
+${DICE_HOME}/rtl/cgra_core/regfile/dice_read_org.sv
+${DICE_HOME}/rtl/cgra_core/regfile/dice_wr_ctrl_bank.sv
+${DICE_HOME}/rtl/cgra_core/regfile/dice_special_reg.sv
+${DICE_HOME}/rtl/cgra_core/regfile/dice_rf_ctrl.sv
 
 // ==== Dummy CGRA ====
 ${DICE_HOME}/rtl/cgra_core/dummy_cgra.sv

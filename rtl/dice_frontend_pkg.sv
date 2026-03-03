@@ -104,7 +104,6 @@ package dice_frontend_pkg;
     dice_cta_size_t                  cta_size;
     logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
     logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
-    cta_size_e                       hw_cta_size;
     logic [DICE_TID_WIDTH:0]         cta_thread_count; // Exact number of threads in this CTA
   } active_cta_t;
 
@@ -128,7 +127,6 @@ package dice_frontend_pkg;
   typedef struct packed {
       // CTA info
       logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id;
-      cta_size_e                       cta_size;
       logic                            branch_ena;
       logic                            branch_uni;
       logic [DICE_ADDR_WIDTH-1:0]      branch_taken_pc;

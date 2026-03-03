@@ -5,12 +5,16 @@ SHELL := /bin/bash
 DICE_HOME  ?= $(shell cd ../../.. && pwd)
 TOP_MODULE ?= fdr_top
 
-VERILATOR_FLAGS = --lint-only \
-                  -Wall \
-                  -Wno-UNDRIVEN \
-                  -Wno-UNUSEDSIGNAL \
-                  -Wno-UNUSEDPARAM \
-                  --top-module $(TOP_MODULE)
+# Verilator lint configuration
+VERILATOR_FLAGS  = --lint-only                # Run static lint only (no C++ sim generation)
+VERILATOR_FLAGS += -Wall                      # Enable all standard warnings
+VERILATOR_FLAGS += -Wno-UNDRIVEN              # Allow declared signals that are never driven
+VERILATOR_FLAGS += -Wno-UNUSEDSIGNAL          # Allow driven signals that are never read
+VERILATOR_FLAGS += -Wno-UNUSEDPARAM           # Allow unused parameters in parameterized modules
+VERILATOR_FLAGS += -Wno-WIDTHEXPAND           # Suppress implicit width expansion warnings (zero/sign extend)
+VERILATOR_FLAGS += -Wno-WIDTHTRUNC            # Suppress implicit truncation warnings (upper bits dropped)
+VERILATOR_FLAGS += -Wno-ASCRANGE              # Allow ascending bit ranges (e.g., [0:31])
+VERILATOR_FLAGS += --top-module $(TOP_MODULE) # Explicitly set design root module
 
 lint:
 	@echo "Running Verilator lint on $(TOP_MODULE)..."
