@@ -2,7 +2,7 @@
 
 module sync_fifo_read_unreg #(
     parameter int DATA_WIDTH = 8,           // Width of data bus
-    parameter int DEPTH = 16,               // FIFO depth (must be power of 2)
+    parameter int DEPTH = 8,               // FIFO depth (must be power of 2)
     parameter int ADDR_WIDTH = $clog2(DEPTH) // Address width (automatically calculated)
 )(
     input logic clk_i,                        // Clock
