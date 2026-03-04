@@ -10,7 +10,7 @@ module simt_stack
     input logic modify_top_i,  // When 1, don't increment stack, just update top
     input logic [DICE_ADDR_WIDTH-1:0] push_next_pc_i,
     input logic [DICE_ADDR_WIDTH-1:0] push_reconvergence_pc_i,
-    input logic [DICE_NUM_MAX_THREADS_PER_CORE/DICE_NUM_MAX_CTA_PER_CORE-1:0] push_active_mask_i,
+    input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] push_active_mask_i,
 
     // Pop interface
     input logic pop_i,
@@ -21,7 +21,7 @@ module simt_stack
     // Stack top outputs (registered - valid next cycle after read_top)
     output logic [DICE_ADDR_WIDTH-1:0] top_next_pc_o,
     output logic [DICE_ADDR_WIDTH-1:0] top_reconvergence_pc_o,
-    output logic [DICE_NUM_MAX_THREADS_PER_CORE/DICE_NUM_MAX_CTA_PER_CORE-1:0] top_active_mask_o,
+    output logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] top_active_mask_o,
     output logic out_valid_o,  // Indicates top outputs are valid
 
     // Stack status outputs
@@ -30,12 +30,11 @@ module simt_stack
 );
 
     // Local Parameters (derived from packages)
-    localparam int ThreadWidth = DICE_NUM_MAX_THREADS_PER_CORE / DICE_NUM_MAX_CTA_PER_CORE;
     localparam int StackIndexWidth = $clog2(SIMT_STACK_DEPTH);
 
     // Constants
     localparam int EntryWidth = DICE_ADDR_WIDTH + DICE_ADDR_WIDTH +
-                                ThreadWidth;
+                                DICE_NUM_MAX_THREADS_PER_CORE;
 
     // Stack pointer (0 = empty, points to top of stack + 1)
     logic [StackIndexWidth:0] stack_ptr_q;  // Extra bit to represent SIMT_STACK_DEPTH
@@ -52,24 +51,24 @@ module simt_stack
     function automatic [EntryWidth-1:0] pack_entry(
         input logic [DICE_ADDR_WIDTH-1:0] next_pc,
         input logic [DICE_ADDR_WIDTH-1:0] reconvergence_pc,
-        input logic [ThreadWidth-1:0] active_mask
+        input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask
     );
         return {next_pc, reconvergence_pc, active_mask};
     endfunction
 
     function automatic logic [DICE_ADDR_WIDTH-1:0] unpack_next_pc(
         input logic [EntryWidth-1:0] entry);
-        return entry[EntryWidth-1:DICE_ADDR_WIDTH+ThreadWidth];
+        return entry[EntryWidth-1:DICE_ADDR_WIDTH+DICE_NUM_MAX_THREADS_PER_CORE];
     endfunction
 
     function automatic logic [DICE_ADDR_WIDTH-1:0] unpack_reconvergence_pc(
         input logic [EntryWidth-1:0] entry);
-        return entry[DICE_ADDR_WIDTH+ThreadWidth-1:ThreadWidth];
+        return entry[DICE_ADDR_WIDTH+DICE_NUM_MAX_THREADS_PER_CORE-1:DICE_NUM_MAX_THREADS_PER_CORE];
     endfunction
 
-    function automatic logic [ThreadWidth-1:0] unpack_active_mask(
+    function automatic logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] unpack_active_mask(
         input logic [EntryWidth-1:0] entry);
-        return entry[ThreadWidth-1:0];
+        return entry[DICE_NUM_MAX_THREADS_PER_CORE-1:0];
     endfunction
 
     // Instantiate DICE RAM for stack entries

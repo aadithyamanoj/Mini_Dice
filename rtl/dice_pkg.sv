@@ -24,7 +24,7 @@ package dice_pkg;
   parameter int DICE_SMEM_SIZE_WIDTH          = $clog2(`DICE_SMEM_SIZE_PER_CORE);
   parameter int DICE_BITSTREAM_SIZE           = 2048;  // 256 bytes max bitstream size
 
-  parameter int DICE_DATA_WIDTH               = 8;
+  parameter int DICE_DATA_WIDTH               = 32;
   parameter int DICE_NUMBER_OF_MAX_COALESCED_COMMANDS = 8;
   parameter int DICE_CACHE_LINE_SIZE          = 32;
   parameter int DICE_BASE_ADDRESS_OFFSET      = $clog2(DICE_CACHE_LINE_SIZE);
@@ -86,22 +86,13 @@ package dice_pkg;
 
   typedef struct packed {
     logic [2:0]                      valid_edits_bitmap;
-    logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id;
     logic                            unresolved_control_divergence; // [100]
     logic [DICE_ADDR_WIDTH-1:0]      predict_pc; // [010]
     logic                            is_return; // [001]
   } branch_predict_interface_t;  // Branch prediction interface descriptor
 
-  // CTA size encoding for SIMT stack allocation
-  // Represents number of stacks a CTA spans: 1, 2, or 4
-  typedef enum logic [1:0] {
-    CTA_SIZE_1  = 2'b00,  // 1 stack
-    CTA_SIZE_2  = 2'b01,  // 2 stacks
-    CTA_SIZE_4  = 2'b11   // 4 stacks
-  } cta_size_e;
-
   typedef struct packed {
-    logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] hw_cta_pending;
+    logic has_pending_eblock;
   } block_retire_status_t;  // Block retire status descriptor
 
 endpackage

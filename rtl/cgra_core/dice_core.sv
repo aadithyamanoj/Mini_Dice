@@ -6,8 +6,7 @@ module dice_core
     input logic clk_i,
     input logic rst_i,
 
-    cta_dispatch_if.slave cta_dispatch_if_inst,
-    cta_complete_if.master cta_complete_if_inst,
+    cta_if.slave cta_if_inst,
 
     // Memory Bus Interfaces
     VX_mem_bus_if.master metacache_mem_if,
@@ -17,7 +16,7 @@ module dice_core
   // Internal Interfaces
   cta_sched_if         schedule_if          (); // between cta scheduler and fdr stages
   fdr_if               fdr_out_if           (); // between fdr and backend stages
-  simt_stack_status_if simt_status_if       (); // exposes simt stack entries to modules that need it
+  simt_stack_status_entry_t simt_status; // exposes simt stack entry to modules that need it
   cgra_cm_if           cm0_if               ();
   cgra_cm_if           cm1_if               ();
 
@@ -25,14 +24,12 @@ module dice_core
   branch_predict_interface_t bh_branch_predict_info;
   logic                      bh_branch_predict_info_we; //after recent chances i don't think this signal is needed
   // but i haven't deleted it from all modules yet (enable signal is now a bitmap and is part of the struct)
-  dice_cta_status_t [DICE_NUM_MAX_CTA_PER_CORE-1:0] cta_status_data;
+  dice_cta_status_t cta_status_data;
 
   // FDR -> scheduler SIMT update wires
   logic                            simt_update_valid;
   logic                            simt_update_ready;
   simt_stack_update_t              simt_update_stack_data;
-  logic [DICE_HW_CTA_ID_WIDTH-1:0] simt_update_hw_cta_id;
-  cta_size_e                       simt_update_hw_cta_size;
 
   // Eblock flush wires (FDR -> Scheduler)
   logic                       eblock_flush_valid;
@@ -41,8 +38,7 @@ module dice_core
   cta_schedule_stage u_cta_schedule_stage (
       .clk_i                   (clk_i),
       .rst_i                   (rst_i),
-      .cta_dispatch_if         (cta_dispatch_if_inst),
-      .cta_complete_if         (cta_complete_if_inst),
+      .cta_if_inst             (cta_if_inst),
       .schedule_if             (schedule_if),
       .eblock_commit_valid_i   (),
       .eblock_commit_id_i      (),
@@ -56,9 +52,7 @@ module dice_core
       .simt_update_valid_i     (simt_update_valid),
       .simt_update_ready_o     (simt_update_ready),
       .simt_update_stack_data_i(simt_update_stack_data),
-      .simt_update_hw_cta_id_i (simt_update_hw_cta_id),
-      .simt_update_hw_cta_size_i(simt_update_hw_cta_size),
-      .simt_status_if          (simt_status_if)
+      .simt_status_o           (simt_status)
   );
 
   fdr_top u_fdr_top (
@@ -68,15 +62,13 @@ module dice_core
       .bitstream_cache_mem_if(bitstream_cache_mem_if),
       .schedule_if(schedule_if),
       .fdr_if(fdr_out_if),
-      .simt_status_if(simt_status_if),
+      .simt_status_i(simt_status),
       .bh_branch_predict_info_o(bh_branch_predict_info),
       .bh_branch_predict_info_we_o(bh_branch_predict_info_we),
       .cta_status_data_i(cta_status_data),
       .simt_update_valid_o(simt_update_valid),
       .simt_update_ready_i(simt_update_ready),
       .simt_update_stack_data_o(simt_update_stack_data),
-      .simt_update_hw_cta_id_o(simt_update_hw_cta_id),
-      .simt_update_hw_cta_size_o(simt_update_hw_cta_size),
       .cm0_if(cm0_if),
       .cm1_if(cm1_if),
       .eblock_flush_valid_o(eblock_flush_valid),
@@ -92,7 +84,7 @@ module dice_core
       .unrolling_factor(fdr_out_if.data.metadata.unrolling_factor),
       .input_register_bitmap(fdr_out_if.data.metadata.in_regs_bitmap),
       .active_mask(fdr_out_if.data.real_active_mask),
-      .cta_size(fdr_out_if.data.schedule_hw_cta_size),
+      .cta_size(),
       .fetch_done(fdr_out_if.valid),
       .wb_valid(),          // comes from cgra
       .wb_tid_bitmap(),     // comes from cgra

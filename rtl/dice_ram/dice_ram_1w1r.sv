@@ -1,6 +1,5 @@
 `include "dice_pkg.sv"
 `include "dice_define.vh"
-`include "bsg_defines.v"
 `define ASIC_FP45
 module dice_ram_1w1r
 import dice_pkg::*;
@@ -125,39 +124,21 @@ sram_512x32_inst
 // simulation
     // RAM storage array
 
-    // logic [DATA_WIDTH-1:0] ram_array [DEPTH-1:0];
-    // logic [DATA_WIDTH-1:0] rd_data_reg;
+    logic [DATA_WIDTH-1:0] ram_array [DEPTH-1:0];
+    logic [DATA_WIDTH-1:0] rd_data_reg;
 
-    // assign rd_data = rd_data_reg;
+    assign rd_data = rd_data_reg;
 
-    // // Write operation
-    // always_ff @(posedge clk) begin
-    //     if (wr_en) begin
-    //         ram_array[wr_addr] <= wr_data;
-    //     end
-    // end
+    // Write operation
+    always_ff @(posedge clk) begin
+        if (wr_en) begin
+            ram_array[wr_addr] <= wr_data;
+        end
+    end
 
-    // // Read operation
-    // always_ff @(posedge clk) begin
-    //     rd_data_reg <= ram_array[rd_addr];
-    // end
-
-    bsg_mem_1r1w_sync 
-        #(.width_p (DATA_WIDTH)
-         ,.els_p   (DEPTH)
-         ,.read_write_same_addr_p(1)
-        ) mem
-        (.clk_i (clk)
-        ,.reset_i ('0)
-        
-        ,.w_v_i (wr_en)
-        ,.w_addr_i (wr_addr)
-        ,.w_data_i (wr_data)
-
-        ,.r_v_i ('1)
-        ,.r_addr_i (rd_addr)
-        ,.r_data_o (rd_data)
-
-        );
+    // Read operation
+    always_ff @(posedge clk) begin
+        rd_data_reg <= ram_array[rd_addr];
+    end
 `endif
 endmodule

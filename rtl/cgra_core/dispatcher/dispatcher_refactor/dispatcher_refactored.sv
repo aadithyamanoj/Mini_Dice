@@ -2,7 +2,8 @@
 
 module dispatcher
     import dice_pkg::*, 
-           dice_frontend_pkg::*;
+           dice_frontend_pkg::*,
+           DE_pkg::*;
 (
     input logic clk_i,
     input logic rst,
@@ -27,7 +28,7 @@ module dispatcher
     
     // Output signals - dispatched threads packed to one bus
     output logic [4*DICE_TID_WIDTH-1:0] dispatch_tid_o, // Combined TID output for all lanes
-    output logic [3:0] dispatch_valid_o,                      // Combined valid signal for all lanes
+    output logic [NUM_LANES-1:0] dispatch_valid_o,                      // Combined valid signal for all lanes
 
     // 
     output logic [`DICE_GPR_NUM-1:0] gpr_bitmap_o,
@@ -36,14 +37,9 @@ module dispatcher
     output logic dispatcher_busy,              // Dispatcher is active
     output logic dispatcher_done               //  
 );
-    // Local parameters derived from package parameters
-    localparam int NUM_LANES = 4;  // 4-way SIMD dispatcher
-    localparam int NUM_SCOREBOARDS = 4;  // One scoreboard per 256 TIDs
-    localparam int THREADS_PER_SCOREBOARD = DICE_NUM_MAX_THREADS_PER_CORE / NUM_SCOREBOARDS;
-    localparam int SCOREBOARD_TID_WIDTH = $clog2(THREADS_PER_SCOREBOARD);  // 8 bits for 256 threads
-    localparam int CHUNK_SIZE = THREADS_PER_SCOREBOARD;  // 256 threads per chunk
-    localparam int NUM_CHUNKS = DICE_NUM_MAX_THREADS_PER_CORE / CHUNK_SIZE;  // 4 chunks
-    localparam int CHUNK_ADDR_WIDTH = $clog2(NUM_CHUNKS);  // 2 bits for 4 chunks
+    // Local parameters — NUM_LANES, NUM_SCOREBOARDS, CHUNK_SIZE, CHUNK_ADDR_WIDTH from DE_pkg
+    localparam int THREADS_PER_SCOREBOARD = CHUNK_SIZE;            // alias: entries per scoreboard
+    localparam int SCOREBOARD_TID_WIDTH   = $clog2(CHUNK_SIZE);    // TID bit-width within one SB
 
     // load destination registers (ld_dest_reg) bitmap assembly
     localparam int NUM_LD_DEST_REGS = $clog2(`DICE_CGRA_MEM_PORTS-1) + 1; // number of ld_dest entries
@@ -73,7 +69,7 @@ module dispatcher
     // Scoreboard signals // BITMAP BASED SCOREBAORD INTERFACE USING METADATA INPUT BITMAP SUBJECT TO CHANGE
     logic [`DICE_GPR_NUM-1:0] gpr_bitmap;                   // GPR portion of input registers
     logic [`DICE_CR_NUM-1:0] const_bitmap;                 // Constant portion of input registers
-    logic [`DICE_PR_NUM-1] pred_bitmap;                   // Predicate portion of input registers
+    logic [`DICE_PR_NUM-1:0] pred_bitmap;                   // Predicate portion of input registers
 
     assign gpr_bitmap_o = gpr_bitmap; // Output the GPR bitmap to the RF controller
 
@@ -85,7 +81,7 @@ module dispatcher
     logic [NUM_LANES-1:0] sb_rsv_valid;                  // Reserve valid signals for scoreboards
     logic const_rd_valid;                      // Read valid for constant scoreboard
     logic const_rsv_valid;                     // Reserve valid for constant scoreboard
-    logic clear_scoreboard;                    // Signal to clear scoreboards
+    logic start_new_cta;                       // Clears scoreboards on new CTA dispatch
     // syn_keep
     logic [THREADS_PER_SCOREBOARD-1:0] wb_tid_sb [NUM_SCOREBOARDS];               // Write-back bitmaps for each scoreboard
     
@@ -110,10 +106,7 @@ module dispatcher
     // Component Instantiations
     // ============================================================
 
-    dispatcher_fsm #(
-        .CHUNK_SIZE(CHUNK_SIZE),
-        .CHUNK_ADDR_WIDTH(CHUNK_ADDR_WIDTH)
-    ) dispatcher_fsm_inst (
+    dispatcher_fsm dispatcher_fsm_inst (
         .current_chunk(current_chunk),
         .gpr_bitmap(gpr_bitmap),
         .const_bitmap(const_bitmap),
@@ -247,6 +240,20 @@ module dispatcher
         end
     end
     
+    // For each SB, pick the rd_tid from whichever lane is actually targeting it
+    logic [SCOREBOARD_TID_WIDTH-1:0] sb_rd_tid [NUM_SCOREBOARDS];
+    logic [SCOREBOARD_TID_WIDTH-1:0] sb_rsv_tid [NUM_SCOREBOARDS];
+    always_comb begin
+        for (int sb = 0; sb < NUM_SCOREBOARDS; sb++) begin
+            sb_rd_tid[sb]  = '0;
+            sb_rsv_tid[sb] = '0;
+            for (int lane = 0; lane < NUM_LANES; lane++) begin
+                if (sb_rd_valid_per_sb[sb][lane])  sb_rd_tid[sb]  = check_tid[lane];
+                if (sb_rsv_valid_per_sb[sb][lane]) sb_rsv_tid[sb] = reserve_tid[lane];
+            end
+        end
+    end
+
     // Scoreboards for collision detection (4 scoreboards, one for each TID range)
     genvar i;
     generate
@@ -258,10 +265,10 @@ module dispatcher
                 .clk(clk_i),
                 .rst(rst),
                 .input_regs_map(input_register_bitmap), // Direct from input: 32GPR + 2PR (34 bits)
-                .rd_tid(check_tid[i]),
+                .rd_tid(sb_rd_tid[i]),
                 .rd_valid(sb_rd_valid[i]),              // Valid signal for read operation
-                .rsv_tid(reserve_tid[i]),
-                .rsv_valid(sb_rsv_valid[i]),            // Valid signal for reserve operation
+                .rsv_tid(sb_rsv_tid[i]),
+                .rsv_valid(|sb_rsv_valid_per_sb[i]),            // Valid signal for reserve operation
                 .wb_tid_bitmap(wb_tid_sb[i]),           // Each scoreboard gets its 256-bit slice
                 .ld_dest_regs_bitmap(ld_dest_regs_bitmap),         // Convert to 7 bits for scoreboard (GPR+Pred only)
                 .wb_valid(wb_valid), 
@@ -272,7 +279,7 @@ module dispatcher
     endgenerate
     
     // Constant scoreboard for shared constant collision detection
-    constant_scoreboard #(.NUM_CONSTANT_REGS(32)) const_sb (
+    constant_scoreboard #(.NUM_CONSTANT_REGS(`DICE_CR_NUM)) const_sb (
         .clk(clk_i),
         .rst(rst),
         .input_const_map(const_bitmap),         // 32-bit constant register map
@@ -316,14 +323,20 @@ module dispatcher
     end
 
     always_comb begin
+        // Default:
+        is_checking_collision_next = is_checking_collision;
         // Determine if there are any valid TIDs checking collision
         if (is_checking_collision == 1'b0) begin
-            if (thread_fifo_pop) is_checking_collision_next = 1'b1;
-            else is_checking_collision_next = 1'b0;
+            if (thread_fifo_pop) 
+                is_checking_collision_next = 1'b1;
+            else 
+                is_checking_collision_next = 1'b0;
         end else begin //clear or maintain the flag
-            if(all_lane_can_dispatch && ready_fifo_not_full) begin
-                if(thread_fifo_pop) is_checking_collision_next = 1'b1; //next valid tid coming, maintain the flag
-                else is_checking_collision_next = 1'b0; //clear, no more valid tids
+            if (all_lane_can_dispatch && ready_fifo_not_full) begin
+                if(thread_fifo_pop) 
+                    is_checking_collision_next = 1'b1; //next valid tid coming, maintain the flag
+                else 
+                    is_checking_collision_next = 1'b0; //clear, no more valid tids
             end
         end
     end
