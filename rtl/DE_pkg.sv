@@ -4,6 +4,16 @@
 package DE_pkg;
 
 
+// =========================================================
+// Dispatcher architecture constants
+// =========================================================
+parameter int NUM_SCOREBOARDS  = 1;
+parameter int NUM_LANES        = 1;
+parameter int CHUNK_SIZE       = `DICE_NUM_MAX_THREADS_PER_CORE / NUM_SCOREBOARDS;
+parameter int CHUNK_ADDR_WIDTH = (NUM_SCOREBOARDS == 1) ? 1 : $clog2(NUM_SCOREBOARDS);
+parameter int LANE_SIZE        = CHUNK_SIZE / NUM_LANES;
+parameter int LANE_WIDTH       = $clog2(LANE_SIZE);
+
 parameter int DICE_REG_DATA_WIDTH = 8;
 parameter int CACHE_LINE_SIZE = 32;
 parameter int NUMBER_OF_MAX_COALESCED_COMMANDS = CACHE_LINE_SIZE/4;
