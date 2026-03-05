@@ -11,7 +11,6 @@
 module meta_fetch
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-  import VX_gpu_pkg::*;
 #(
     // TAG_WIDTH kept for interface parameterization compatibility
     parameter int TAG_WIDTH = DICE_ADDR_WIDTH
@@ -52,9 +51,11 @@ module meta_fetch
   pgraph_meta_t outgoing_meta_q;
 
   // fdr_next_pc_i is already registered in fdr_top (schedule_data_q), so use directly
-  localparam int AddrShift = $clog2($bits(meta_fetch_bus_if.rsp_data.data) / 8);
-  logic [ICACHE_ADDR_WIDTH-1:0] meta_cache_req_addr;
-  assign meta_cache_req_addr = (fdr_next_pc_i >> AddrShift);
+  localparam int BusDataBytes = DICE_MEM_DATA_WIDTH / 8;
+  localparam int AddrShift = $clog2(BusDataBytes);
+  localparam int BusAddrWidth = DICE_MEM_ADDR_WIDTH - $clog2(BusDataBytes);
+  logic [BusAddrWidth-1:0] meta_cache_req_addr;
+  assign meta_cache_req_addr = BusAddrWidth'(fdr_next_pc_i >> AddrShift);
   // 4-byte aligned addresses
 
   logic rsp_fire, req_fire;
@@ -131,7 +132,7 @@ module meta_fetch
 
   // Use pre-registered PC as tag for request/response matching
   // (fdr_next_pc_i is already registered in fdr_top via schedule_data_q)
-  assign meta_fetch_bus_if.req_data.tag    = $bits(meta_fetch_bus_if.req_data.tag)'(fdr_next_pc_i);
+  assign meta_fetch_bus_if.req_data.tag.uuid = TAG_WIDTH'(fdr_next_pc_i);
 
   assign meta_fetch_bus_if.req_data.addr   = meta_cache_req_addr;
   assign meta_fetch_bus_if.req_valid       = (state_q == StateReqVal);

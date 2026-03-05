@@ -26,8 +26,7 @@ module tb_dice_core;
   // =========================================================================
   // Interfaces
   // =========================================================================
-  cta_dispatch_if cta_dispatch_if_inst();
-  cta_complete_if cta_complete_if_inst();
+  cta_if cta_if_inst();
 
   VX_mem_bus_if #(
       .DATA_SIZE(256), //change
@@ -94,8 +93,7 @@ module tb_dice_core;
   dice_core u_dut (
       .clk_i                   (clk),
       .rst_i                   (reset),
-      .cta_dispatch_if_inst    (cta_dispatch_if_inst),
-      .cta_complete_if_inst    (cta_complete_if_inst),
+      .cta_if_inst             (cta_if_inst),
       .metacache_mem_if        (metacache_mem_if[0]),
       .bitstream_cache_mem_if  (bitstream_cache_mem_if[0])
   );
@@ -176,9 +174,9 @@ module tb_dice_core;
 
   //Initializes inputs to the DUT
   task automatic init_inputs();
-    cta_dispatch_if_inst.valid = 1'b0;
-    cta_dispatch_if_inst.data  = '0;
-    cta_complete_if_inst.ready = 1'b1;
+    cta_if_inst.dispatch_valid = 1'b0;
+    cta_if_inst.dispatch_data  = '0;
+    cta_if_inst.complete_ready = 1'b1;
   endtask
 
   //Resets the DUT
@@ -190,14 +188,14 @@ module tb_dice_core;
 
   //Dispatches CTA into the core with specified description
   task automatic dispatch_cta(input dice_cta_desc_t desc);
-    cta_dispatch_if_inst.valid = 1'b1;
-    cta_dispatch_if_inst.data  = desc;
+    cta_if_inst.dispatch_valid = 1'b1;
+    cta_if_inst.dispatch_data  = desc;
 
     do begin
       @(posedge clk);
-    end while (!cta_dispatch_if_inst.ready);
+    end while (!cta_if_inst.dispatch_ready);
 
-    cta_dispatch_if_inst.valid = 1'b0;
+    cta_if_inst.dispatch_valid = 1'b0;
   endtask
 
   // Load CTA descriptor from generated .mem file (produced by gen_memfile.py)

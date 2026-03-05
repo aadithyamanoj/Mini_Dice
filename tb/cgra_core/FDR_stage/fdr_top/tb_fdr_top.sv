@@ -31,7 +31,7 @@ module tb_fdr_top;
 
   cta_sched_if schedule_if ();
   fdr_if fdr_if ();
-  simt_stack_status_if simt_status_if();
+  simt_stack_status_entry_t simt_status;
   branch_predict_interface_t bh_branch_predict_info_o;
   logic                      bh_branch_predict_info_we_o;
   dice_cta_status_t [DICE_NUM_MAX_CTA_PER_CORE-1:0] cta_status_data_i;
@@ -57,7 +57,7 @@ module tb_fdr_top;
       .bitstream_cache_mem_if (bitstream_cache_mem_if),
       .schedule_if            (schedule_if),
       .fdr_if                 (fdr_if),
-      .simt_status_if         (simt_status_if),
+      .simt_status_i          (simt_status),
       .bh_branch_predict_info_o(bh_branch_predict_info_o),
       .bh_branch_predict_info_we_o(bh_branch_predict_info_we_o),
       .cta_status_data_i      (cta_status_data_i),
@@ -93,7 +93,7 @@ module tb_fdr_top;
 
     fdr_if.ready = 1'b1;
 
-    simt_status_if.status = '0;
+    simt_status = '0;
 
     metacache_mem_if.req_ready = 1'b1;
     metacache_mem_if.rsp_valid = 1'b0;
@@ -140,11 +140,11 @@ module tb_fdr_top;
     sched.schedule_hw_cta_size      = CTA_SIZE_1;
     sched.schedule_cta_thread_count = 1;
 
-    simt_status_if.status[0].valid = 1'b1;
-    simt_status_if.status[0].next_pc = start_pc;
-    simt_status_if.status[0].active_mask = {DICE_NUM_MAX_THREADS_PER_CORE{1'b1}};
-    simt_status_if.status[0].empty = 1'b0;
-    simt_status_if.status[0].full = 1'b0;
+    simt_status.valid = 1'b1;
+    simt_status.next_pc = start_pc;
+    simt_status.active_mask = {DICE_NUM_MAX_THREADS_PER_CORE{1'b1}};
+    simt_status.empty = 1'b0;
+    simt_status.full = 1'b0;
 
     cta_status_data_i = '0;
 
