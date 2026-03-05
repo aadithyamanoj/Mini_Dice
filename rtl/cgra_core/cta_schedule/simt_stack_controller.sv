@@ -106,6 +106,10 @@ module simt_stack_controller
   // Operation control signals - registered
   logic need_pop_q, need_modify_top_q, need_push_first_q, need_push_second_q;
 
+  // Stack status signals
+  logic stack_empty_internal;
+  logic stack_full_internal;
+
   // Stack entry signals - combinational (computed in always_comb)
   stack_entry_t new_top_entry_next;
   stack_entry_t push_entry_1_next;
@@ -140,9 +144,6 @@ module simt_stack_controller
   // ===========================================================================
   // SIMT STACK INSTANTIATION
   // ===========================================================================
-
-  logic stack_empty_internal;
-  logic stack_full_internal;
 
   simt_stack stack_inst (
       .clk_i                  (clk_i),

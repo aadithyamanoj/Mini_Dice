@@ -32,6 +32,11 @@ package dice_pkg;
   parameter int DICE_TID_BITMAP_WIDTH         = DICE_NUMBER_OF_MAX_COALESCED_COMMANDS;
   parameter int DICE_MAX_REG_WIDTH            = `DICE_CR_NUM;
 
+  // Memory bus parameters (for VX_mem_bus_if / cgra_cm_if)
+  parameter int DICE_MEM_DATA_WIDTH           = 512;
+  parameter int DICE_MEM_ADDR_WIDTH           = 32;
+  parameter int DICE_MEM_FLAGS_WIDTH          = 4;
+
   // =========================================================
   // Type definitions
   // =========================================================

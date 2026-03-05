@@ -54,11 +54,18 @@ module dice_backend
   logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_lo;
   logic [DICE_NUM_PRED-1:0] pred_lo;
 
+
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                    ldst_cmd;
   logic [$bits(cache_wr_cmd)-1:0] ldst_wr_lo;
   logic                           ldst_valid_lo;
   logic                           ldst_ready_lo;
+
+
+  logic [DICE_TID_WIDTH-1:0] cgra_tid_li; // out of rf, in to shift reg and cgra
+
+  logic [DICE_TOTAL_REGS-1:0] wb_map_li; // shifted form metadata, goes to rf
+
 
   // CGRA write-back wires (undriven for now)
   logic                                          cgra_v_lo;
@@ -138,6 +145,7 @@ module dice_backend
       .rd_bitmap_i(gpr_bitmap),
       .rd_data_o(rd_data_lo),
       .rf_rd_valid_o(rf_rd_valid_lo),
+      .tid_o        (cgra_tid_li)
 
       // Predicate output
       .pred_o(pred_lo),
@@ -145,7 +153,7 @@ module dice_backend
       // Write Interface — CGRA
       .cgra_tid_i(cgra_tid_lo),
       .cgra_data_i(cgra_data_lo),
-      .wr_bitmap_i(fdr_if_i.data.metadata.out_regs_bitmap),
+      .wr_bitmap_i(wb_map_li),
       .cgra_valid_i(cgra_v_lo),
 
       // Write Interface — LDST
@@ -153,6 +161,34 @@ module dice_backend
       .ldst_valid_i(ldst_valid_lo),
       .ldst_ready_o(ldst_ready_lo)
   );
+
+    shift_reg
+        #(.WIDTH          (DICE_TID_WIDTH)
+         ,.MAX_PIPE_STAGE (128) // 
+        )
+        TID_SHIFT
+        (.clk_i(clk_i)
+        ,.reset_i(reset_i)   
+        
+        ,.latency (fdr_if_i.data.metadata.lat) // 
+
+        ,.in_data (cgra_tid_li) // as if it comes out of the cgra
+        ,.out_data (cgra_tid_lo)
+        );
+    
+    shif_reg
+        #(.WIDTH          (DICE_TOTAL_REGS)
+         ,.MAX_PIPE_STAGE (128+1) // 
+        )
+        TID_SHIFT
+        (.clk_i(clk_i)
+        ,.reset_i(reset_i)   
+        
+        ,.latency (fdr_if_i.data.metadata.lat+1) // 
+
+        ,.in_data (fdr_if_i.data.metadata.out_regs_bitmap) //straight from metadata
+        ,.out_data (wb_map_li) //
+        );
 
   // =========================================================================
   // Temporal Coalescing Unit (TMCU)

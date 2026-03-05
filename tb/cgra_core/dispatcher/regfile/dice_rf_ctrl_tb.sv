@@ -1,4 +1,4 @@
-// verilator lint_off 
+// verilator lint_off
 `include "DE_pkg.sv"
 `include "dice_pkg.sv"
 
@@ -46,6 +46,7 @@ import dice_pkg::*;
     logic [TOTAL_REGS-1:0]            rd_bitmap_i;
     logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] rd_data_o;
     logic                             rf_rd_valid_o;
+    logic [TID_WIDTH-1:0]             tid_o;
     //-------------------------------------------------------------------------
     // Write Interface Signals (CGRA)
     //-------------------------------------------------------------------------
@@ -61,9 +62,9 @@ import dice_pkg::*;
     logic                             ldst_valid_i;
     logic                             ldst_ready_o;
 
-    
+    // Predicate output — per-TID, all preds
+    logic [NUM_PRED*NUM_TID-1:0] pred_o;
 
-    logic [NUM_PRED-1:0] pred_o;
     //-------------------------------------------------------------------------
     // Clock Generation
     //-------------------------------------------------------------------------
@@ -98,6 +99,7 @@ import dice_pkg::*;
         , .rd_bitmap_i        (rd_bitmap_i)
         , .rd_data_o          (rd_data_o)
         , .rf_rd_valid_o      (rf_rd_valid_o)
+        , .tid_o              (tid_o)
         // Predicate output
         , .pred_o             (pred_o)
         // CGRA write interface
@@ -181,7 +183,7 @@ import dice_pkg::*;
                 @(posedge clk_i);
             end
 
-            // Wait one more cycle to let the last write (tid=511) propagate
+            // Wait one more cycle to let the last write propagate
             // through the single-entry buffer before deasserting valid
             @(posedge clk_i);
 
@@ -238,13 +240,18 @@ import dice_pkg::*;
                 end
             end
 
-            // Check pred registers (shared, 1-bit each)
-            if (pred_o !== '0) begin
-                $error("[%0t] Pred regs not zero! pred_o=%0b", $time, pred_o);
-                error_count++;
-            end else begin
-                $display("[%0t] Pred regs are zero! pred_o=%0b", $time, pred_o);
+            // Check pred registers — per-TID
+            for (int tid = 0; tid < NUM_TID; tid++) begin
+                for (int p = 0; p < NUM_PRED; p++) begin
+                    if (pred_o[tid*NUM_PRED + p] !== 1'b0) begin
+                        $error("[%0t] Pred reg not zero! TID=%0d, Pred=%0d, Val=%0b",
+                               $time, tid, p, pred_o[tid*NUM_PRED + p]);
+                        error_count++;
+                    end
+                end
             end
+            if (pred_o === '0)
+                $display("[%0t] All pred regs are zero", $time);
 
             rd_tid_valid_i = 1'b0;
             rd_en_i        = 1'b0;
@@ -252,8 +259,8 @@ import dice_pkg::*;
             @(posedge clk_i);
 
             if (error_count == 0) begin
-                $display("[%0t] PASS: All registers verified as zero (GPR: %0d, Const: %0d, Pred: %0d)",
-                         $time, NUM_TID * NUM_PORTS, NUM_CONST, NUM_PRED);
+                $display("[%0t] PASS: All registers verified as zero (GPR: %0d, Const: %0d, Pred: %0d x %0d TIDs)",
+                         $time, NUM_TID * NUM_PORTS, NUM_CONST, NUM_PRED, NUM_TID);
             end else begin
                 $error("[%0t] FAIL: %0d registers were not zero", $time, error_count);
             end
@@ -266,7 +273,7 @@ import dice_pkg::*;
         void'($urandom(32'hdead_beef)); // seed once
     end
 
-    
+
 
     //-------------------------------------------------------------------------
     // Functions
@@ -305,6 +312,22 @@ import dice_pkg::*;
         return cmd;
     endfunction
 
+    // Build a cache_wr_cmd for LDST const/pred writes
+    function automatic cache_wr_cmd build_ldst_special_cmd(
+          input logic [DICE_REG_ADDR_WIDTH-1:0]    dest_reg
+        , input logic [TID_WIDTH-1:0]              base_tid
+        , input logic [DATA_WIDTH-1:0]             data_val
+    );
+        cache_wr_cmd cmd;
+        cmd = '0;
+        cmd.outcmd_ld_dest_reg = dest_reg;
+        cmd.outcmd_base_tid    = base_tid;
+        cmd.outcmd_tid_bitmap  = {{(TID_BITMAP_WIDTH-1){1'b0}}, 1'b1}; // single coalesced
+        cmd.outcmd_address_map[0] = '0; // offset 0 from base_tid
+        cmd.core_rsp_data[DATA_WIDTH-1:0] = data_val;
+        return cmd;
+    endfunction
+
     // Task write cgra only
     task write_cgra_only(input logic [TID_WIDTH-1:0] tid);
         begin
@@ -339,13 +362,59 @@ import dice_pkg::*;
             for (int i = 0; i < NUM_CONST; i++) begin
                 $display("Read const %0d: %0h", i, rd_data_o[(NUM_PORTS+i)*DATA_WIDTH +: DATA_WIDTH]);
             end
-            $display("Pred output: %0b", pred_o);
+            for (int p = 0; p < NUM_PRED; p++) begin
+                $display("Pred[%0d] for TID %0d: %0b", p, tid, pred_o[tid*NUM_PRED + p]);
+            end
             rd_tid_valid_i = 1'b0;
         end
     endtask
 
+    // LDST write to a const register
+    task write_ldst_const(
+          input logic [DICE_REG_ADDR_WIDTH-1:0] const_idx  // 0-based const index
+        , input logic [DATA_WIDTH-1:0]          data_val
+    );
+        cache_wr_cmd cmd;
+        begin
+            cmd = build_ldst_special_cmd(
+                DICE_REG_ADDR_WIDTH'(NUM_PORTS + const_idx),
+                '0,  // base_tid irrelevant for const
+                data_val
+            );
+            ldst_wr_i = cmd;
+            ldst_valid_i = 1'b1;
+            @(posedge clk_i);
+            ldst_valid_i = 1'b0;
+            // Wait for FIFO to drain (CGRA idle)
+            @(posedge clk_i);
+            @(posedge clk_i);
+            $display("[%0t] LDST const write: const_idx=%0d, data=0x%0h", $time, const_idx, data_val);
+        end
+    endtask
 
-
+    // LDST write to a pred register
+    task write_ldst_pred(
+          input logic [DICE_REG_ADDR_WIDTH-1:0] pred_idx   // 0-based pred index
+        , input logic [TID_WIDTH-1:0]           tid
+        , input logic                           pred_val
+    );
+        cache_wr_cmd cmd;
+        begin
+            cmd = build_ldst_special_cmd(
+                DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST + pred_idx),
+                tid,
+                DATA_WIDTH'(pred_val)
+            );
+            ldst_wr_i = cmd;
+            ldst_valid_i = 1'b1;
+            @(posedge clk_i);
+            ldst_valid_i = 1'b0;
+            // Wait for FIFO to drain
+            @(posedge clk_i);
+            @(posedge clk_i);
+            $display("[%0t] LDST pred write: pred_idx=%0d, tid=%0d, val=%0b", $time, pred_idx, tid, pred_val);
+        end
+    endtask
 
     //-------------------------------------------------------------------------
     // Main Test Sequence
@@ -359,14 +428,88 @@ import dice_pkg::*;
         // Apply reset
         reset_dut(20);
 
+        // ---- Test 1: CGRA write/read ----
+        $display("\n=== Test 1: CGRA write/read ===");
         write_cgra_only(0);
         @(posedge clk_i);
         read_cgra_only(0);
         @(posedge clk_i);
         $display("rf_rd_valid_o: %0b", rf_rd_valid_o);
+
+        // ---- Test 2: LDST const write ----
+        $display("\n=== Test 2: LDST const register write ===");
+        write_ldst_const(0, 8'hAB);
+        // Verify const reg 0 updated
+        for (int c = 0; c < NUM_CONST; c++) begin
+            $display("[%0t] Const[%0d] = 0x%0h", $time, c,
+                     rd_data_o[(NUM_PORTS+c)*DATA_WIDTH +: DATA_WIDTH]);
+        end
+        assert (rd_data_o[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH] === 8'hAB)
+            else $error("LDST const write failed: expected 0xAB, got 0x%0h",
+                        rd_data_o[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH]);
+
+        // Write to a different const reg
+        write_ldst_const(3, 8'hCD);
+        $display("[%0t] Const[3] = 0x%0h", $time,
+                 rd_data_o[(NUM_PORTS+3)*DATA_WIDTH +: DATA_WIDTH]);
+        assert (rd_data_o[(NUM_PORTS+3)*DATA_WIDTH +: DATA_WIDTH] === 8'hCD)
+            else $error("LDST const[3] write failed: expected 0xCD, got 0x%0h",
+                        rd_data_o[(NUM_PORTS+3)*DATA_WIDTH +: DATA_WIDTH]);
+
+        // ---- Test 3: LDST pred write (per-TID) ----
+        $display("\n=== Test 3: LDST pred register write (per-TID) ===");
+        // Write pred[0] = 1 for TID 0
+        write_ldst_pred(0, 0, 1'b1);
+        $display("[%0t] pred_o = %0b", $time, pred_o);
+        assert (pred_o[0*NUM_PRED + 0] === 1'b1)
+            else $error("LDST pred[0] TID=0 write failed: expected 1, got %0b",
+                        pred_o[0*NUM_PRED + 0]);
+
+        // Write pred[1] = 1 for TID 5
+        write_ldst_pred(1, 5, 1'b1);
+        $display("[%0t] pred_o = %0b", $time, pred_o);
+        assert (pred_o[5*NUM_PRED + 1] === 1'b1)
+            else $error("LDST pred[1] TID=5 write failed: expected 1, got %0b",
+                        pred_o[5*NUM_PRED + 1]);
+
+        // Verify TID 0 pred[0] is still set
+        assert (pred_o[0*NUM_PRED + 0] === 1'b1)
+            else $error("LDST pred[0] TID=0 was corrupted");
+
+        // Verify other TIDs pred[0] are still 0
+        for (int t = 1; t < NUM_TID; t++) begin
+            assert (pred_o[t*NUM_PRED + 0] === 1'b0)
+                else $error("LDST pred[0] TID=%0d should be 0, got %0b",
+                            t, pred_o[t*NUM_PRED + 0]);
+        end
+
+        // Write pred[0] = 0 for TID 0 (clear it)
+        write_ldst_pred(0, 0, 1'b0);
+        assert (pred_o[0*NUM_PRED + 0] === 1'b0)
+            else $error("LDST pred[0] TID=0 clear failed");
+
+        // ---- Test 4: CGRA pred write ----
+        $display("\n=== Test 4: CGRA pred write ===");
+        cgra_valid_i = 1'b1;
+        cgra_tid_i   = TID_WIDTH'(3);
+        cgra_data_i  = '0;
+        wr_bitmap_i  = '0;
+        // Set pred[0] bit in bitmap and data
+        wr_bitmap_i[NUM_PORTS + NUM_CONST + 0] = 1'b1;
+        cgra_data_i[(NUM_PORTS + NUM_CONST + 0)*DATA_WIDTH] = 1'b1;
+        @(posedge clk_i);
+        @(negedge clk_i);
+        cgra_valid_i = 1'b0;
+        wr_bitmap_i  = '0;
+        @(posedge clk_i);
+        $display("[%0t] After CGRA pred write: pred_o[TID=3, pred=0] = %0b",
+                 $time, pred_o[3*NUM_PRED + 0]);
+        assert (pred_o[3*NUM_PRED + 0] === 1'b1)
+            else $error("CGRA pred write TID=3 pred[0] failed");
+
         // End simulation
         #100;
-        $display("=== dice_rf_ctrl Testbench End ===");
+        $display("\n=== dice_rf_ctrl Testbench End ===");
         $finish;
     end
 

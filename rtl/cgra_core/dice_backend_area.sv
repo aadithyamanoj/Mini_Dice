@@ -46,7 +46,7 @@ module dice_backend_area
     output logic                                                          rf_rd_valid_o,           // PLACEHOLDER
     output logic                                                          rf_rd_ready_o,           // PLACEHOLDER
     output logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_o,             // PLACEHOLDER
-    output logic [DICE_NUM_PRED-1:0]                                      pred_o,                  // PLACEHOLDER
+    output logic [DICE_NUM_PRED*DICE_NUM_MAX_THREADS_PER_CORE-1:0]         pred_o,                  // PLACEHOLDER
     output logic                                                          ldst_ready_o,            // PLACEHOLDER
     output logic                                                          tmcu_incmd_ready_o,      // PLACEHOLDER
 
@@ -95,7 +95,7 @@ module dice_backend_area
   logic rf_rd_ready_lo;
 
   logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_lo;
-  logic [DICE_NUM_PRED-1:0] pred_lo;
+  logic [DICE_NUM_PRED*DICE_NUM_MAX_THREADS_PER_CORE-1:0] pred_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                    ldst_cmd;
@@ -195,6 +195,7 @@ module dice_backend_area
       .rd_bitmap_i(gpr_bitmap),
       .rd_data_o(rd_data_lo),
       .rf_rd_valid_o(rf_rd_valid_lo),
+      .tid_o(),
 
       // Predicate output
       .pred_o(pred_lo),

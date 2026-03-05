@@ -1,24 +1,22 @@
 `include "DE_pkg.sv"
 `include "dice_pkg.sv"
 
-
-
-module dice_rf_ctrl
+module dice_rf_square
 
 import DE_pkg::*;
 import dice_pkg::*;
 
 #(
-    parameter int NUM_PORTS = DICE_NUM_BANKS,
+    parameter int NUM_PORTS  = DICE_NUM_BANKS,
     parameter int DATA_WIDTH = DICE_REG_DATA_WIDTH,
-    parameter int NUM_TID = DICE_NUM_MAX_THREADS_PER_CORE,
-    parameter int TID_WIDTH = $clog2(NUM_TID),
-    parameter int DEPTH = DICE_REGS_PER_BANK,
+    parameter int NUM_TID    = DICE_NUM_MAX_THREADS_PER_CORE,
+    parameter int TID_WIDTH  = $clog2(NUM_TID),
+    parameter int DEPTH      = DICE_REGS_PER_BANK,
     parameter int ADDR_WIDTH = $clog2(DEPTH),
-    parameter int NUM_CONST = DICE_NUM_CONST,
-    parameter int NUM_PRED = DICE_NUM_PRED,
+    parameter int NUM_CONST  = DICE_NUM_CONST,
+    parameter int NUM_PRED   = DICE_NUM_PRED,
     parameter int TOTAL_REGS = DICE_TOTAL_REGS,
-    parameter int BUF_DEPTH = LDST_BUF_DEPTH
+    parameter int BUF_DEPTH  = LDST_BUF_DEPTH
 )
 (
       input  logic              clk_i
@@ -51,19 +49,42 @@ import dice_pkg::*;
 );
 
     // =========================================================================
-    // GPR bank signals
+    // Square layout local parameters
+    // Each row holds REGS_PER_ROW 8-bit regs (one per TID).
+    //   TID[TID_WIDTH-1 : SUB_IDX_WIDTH]  ->  row address
+    //   TID[SUB_IDX_WIDTH-1 : 0]          ->  sub-index within row
     // =========================================================================
-    logic [NUM_PORTS-1:0] rf_rd_en;
+    localparam int SUB_IDX_WIDTH  = TID_WIDTH / 2;
+    localparam int REGS_PER_ROW   = 2**SUB_IDX_WIDTH;
+    localparam int ROW_DEPTH      = DEPTH / REGS_PER_ROW;
+    localparam int ROW_ADDR_WIDTH = TID_WIDTH - SUB_IDX_WIDTH;
+
+    // Packed address split — computed once per TID
+    typedef struct packed {
+        logic [ROW_ADDR_WIDTH-1:0] row;
+        logic [SUB_IDX_WIDTH-1:0]  sub;
+    } tid_addr_t;
+
+    function automatic tid_addr_t split_tid(input logic [TID_WIDTH-1:0] tid);
+        tid_addr_t a;
+        a.row = tid[TID_WIDTH-1:SUB_IDX_WIDTH];
+        a.sub = tid[SUB_IDX_WIDTH-1:0];
+        return a;
+    endfunction
+
+    // =========================================================================
+    // GPR bank signals (same widths as original — wr_ctrl still outputs full TID)
+    // =========================================================================
+    logic [NUM_PORTS-1:0]            rf_rd_en;
     logic [NUM_PORTS*ADDR_WIDTH-1:0] rf_rd_addr;
 
-    logic [NUM_PORTS-1:0]    rf_wr_en;
+    logic [NUM_PORTS-1:0]            rf_wr_en;
     logic [NUM_PORTS*ADDR_WIDTH-1:0] rf_wr_addr;
     logic [NUM_PORTS*DATA_WIDTH-1:0] rf_wr_data;
 
     logic [NUM_PORTS-1:0] stall_o;
 
     logic special_fifo_full;
-    
 
     // =========================================================================
     // GPR write path (regs 0 .. NUM_PORTS-1)
@@ -71,15 +92,15 @@ import dice_pkg::*;
     reg_wr_cmd cgra_wr_li [NUM_PORTS-1:0];
 
     // GPR portion of the bitmap (no swizzling)
-    logic [NUM_PORTS-1:0] cgra_shifted_bitmap;
-    assign cgra_shifted_bitmap = wr_bitmap_i[NUM_PORTS-1:0];
+    logic [NUM_PORTS-1:0] cgra_bitmap;
+    assign cgra_bitmap = wr_bitmap_i[NUM_PORTS-1:0];
 
     genvar i;
     generate
-        for (i = 0; i < NUM_PORTS; i++) begin
+        for (i = 0; i < NUM_PORTS; i++) begin : gen_cgra_wr
             assign cgra_wr_li[i].data = cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH];
-            assign cgra_wr_li[i].mask = cgra_shifted_bitmap[i];
-            assign cgra_wr_li[i].tid = cgra_tid_i;
+            assign cgra_wr_li[i].mask = cgra_bitmap[i];
+            assign cgra_wr_li[i].tid  = cgra_tid_i;
         end
     endgenerate
 
@@ -87,49 +108,42 @@ import dice_pkg::*;
     cache_wr_cmd ldst_convert;
 
     assign ldst_convert = ldst_wr_i;
-    assign ldst_wr_li = unpack_ldsr_wr(assemble_ldst_wr(ldst_convert));
+    assign ldst_wr_li   = unpack_ldsr_wr(assemble_ldst_wr(ldst_convert));
 
     // =========================================================================
     // LDST target decode — GPR vs special (const/pred)
     // =========================================================================
     logic ldst_gpr_valid;
-    logic ldst_const_valid;
-    logic ldst_pred_valid;
     logic ldst_special_valid;
 
     assign ldst_gpr_valid     = ldst_valid_i
                                 && (ldst_convert.outcmd_ld_dest_reg < DICE_REG_ADDR_WIDTH'(NUM_PORTS));
-    assign ldst_const_valid   = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS))
-                                && (ldst_convert.outcmd_ld_dest_reg <  DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST));
-    assign ldst_pred_valid    = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST));
-    assign ldst_special_valid = ldst_const_valid || ldst_pred_valid;
+    assign ldst_special_valid = ldst_valid_i
+                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS));
 
     generate
-        for (i = 0; i < NUM_PORTS; i++) begin
-            dice_wr_ctrl_bank#
-            (
+        for (i = 0; i < NUM_PORTS; i++) begin : gen_wr_ctrl
+            dice_wr_ctrl_bank #(
                   .WIDTH(DATA_WIDTH)
-                , .DEPTH (DEPTH)
-                , .ADDR_WIDTH (ADDR_WIDTH)
-                , .BUF_DEPTH (BUF_DEPTH)
+                , .DEPTH(DEPTH)
+                , .ADDR_WIDTH(ADDR_WIDTH)
+                , .BUF_DEPTH(BUF_DEPTH)
             ) u_wr_ctrl (
-                .clk_i (clk_i)
-                , .reset_i (reset_i)
+                  .clk_i(clk_i)
+                , .reset_i(reset_i)
 
-                , .cgra_wr_i (cgra_wr_li[i])
-                , .cgra_valid_i (cgra_valid_i)
-                , .cgra_ready_o ()
+                , .cgra_wr_i(cgra_wr_li[i])
+                , .cgra_valid_i(cgra_valid_i)
+                , .cgra_ready_o()
 
-                , .wr_ldst_i (ldst_wr_li[i])
-                , .ldst_valid_i (ldst_gpr_valid)
+                , .wr_ldst_i(ldst_wr_li[i])
+                , .ldst_valid_i(ldst_gpr_valid)
 
-                , .stall_o (stall_o[i])
+                , .stall_o(stall_o[i])
 
-                , .ws_o (rf_wr_addr[i*ADDR_WIDTH +: ADDR_WIDTH])
-                , .data_o (rf_wr_data[i*DATA_WIDTH +: DATA_WIDTH])
-                , .we_o (rf_wr_en[i])
+                , .ws_o(rf_wr_addr[i*ADDR_WIDTH +: ADDR_WIDTH])
+                , .data_o(rf_wr_data[i*DATA_WIDTH +: DATA_WIDTH])
+                , .we_o(rf_wr_en[i])
             );
         end
     endgenerate
@@ -158,12 +172,21 @@ import dice_pkg::*;
     // LDST special regs command from cache response
     assign ldst_special_in = assemble_special_wr(ldst_convert);
 
-    // Extract TID for per-TID pred writes (single coalesced command only)
+    // Extract first matching TID from LDST command (for per-TID pred writes)
+    logic ldst_tid_found;
     logic [TID_WIDTH-1:0] ldst_special_tid_in;
 
-    assign ldst_special_tid_in = ldst_pred_valid
-        ? TID_WIDTH'(ldst_convert.outcmd_base_tid + ldst_convert.outcmd_address_map[0])
-        : ldst_convert.outcmd_base_tid;
+    always_comb begin
+        ldst_tid_found = 1'b0;
+        ldst_special_tid_in = ldst_convert.outcmd_base_tid;
+        for (int k = 0; k < NUMBER_OF_MAX_COALESCED_COMMANDS; k++) begin
+            if (ldst_convert.outcmd_tid_bitmap[k] && !ldst_tid_found) begin
+                ldst_special_tid_in = TID_WIDTH'(ldst_convert.outcmd_base_tid
+                                     + ldst_convert.outcmd_address_map[k]);
+                ldst_tid_found = 1'b1;
+            end
+        end
+    end
 
     // FIFO buffer for LDST special writes (widened to include TID for pred)
     localparam int SPECIAL_ENTRY_WIDTH = $bits(special_regs_cmd) + TID_WIDTH;
@@ -218,7 +241,6 @@ import dice_pkg::*;
         end
     end
 
-    // Const read: wire flip-flop outputs to rd_data_o positions [NUM_PORTS .. NUM_PORTS+NUM_CONST-1]
     generate
         for (i = 0; i < NUM_CONST; i++) begin : gen_const_rd
             assign rd_data_o[(NUM_PORTS + i)*DATA_WIDTH +: DATA_WIDTH] = const_regs[i];
@@ -227,6 +249,8 @@ import dice_pkg::*;
 
     // =========================================================================
     // Predicate registers — NUM_PRED banks × NUM_TID entries (1 bit each)
+    // Conceptually square (ROW_DEPTH rows × REGS_PER_ROW per row) but
+    // implemented as flat flip-flops since we read all continuously.
     // =========================================================================
     logic [NUM_TID-1:0][NUM_PRED-1:0] pred_regs;
 
@@ -245,46 +269,101 @@ import dice_pkg::*;
     assign pred_o = pred_regs;
 
     // =========================================================================
-    // GPR read path — only pass GPR portion of bitmap to read_org
+    // GPR read path
     // =========================================================================
-    dice_read_org#
-    (
-        .NUM_PORTS (NUM_PORTS)
-        , .DATA_WIDTH (DATA_WIDTH)
-        , .NUM_TID (NUM_TID)
-        , .TID_WIDTH (TID_WIDTH)
-        , .DEPTH (DEPTH)
-        , .ADDR_WIDTH (ADDR_WIDTH)
+    dice_read_org #(
+          .NUM_PORTS(NUM_PORTS)
+        , .DATA_WIDTH(DATA_WIDTH)
+        , .NUM_TID(NUM_TID)
+        , .TID_WIDTH(TID_WIDTH)
+        , .DEPTH(DEPTH)
+        , .ADDR_WIDTH(ADDR_WIDTH)
     ) read_org (
-        .clk_i (clk_i)
-        , .reset_i (reset_i)
+          .clk_i(clk_i)
+        , .reset_i(reset_i)
 
-        , .rd_tid_valid_i (rd_tid_valid_i)
-        , .rd_tid_ready_o (rd_tid_ready_o)
+        , .rd_tid_valid_i(rd_tid_valid_i)
+        , .rd_tid_ready_o(rd_tid_ready_o)
 
-        , .rd_en_i (rd_en_i)
-        , .rd_tid_i (rd_tid_i)
-        , .rd_bitmap_i (rd_bitmap_i[NUM_PORTS-1:0])
+        , .rd_en_i(rd_en_i)
+        , .rd_tid_i(rd_tid_i)
+        , .rd_bitmap_i(rd_bitmap_i[NUM_PORTS-1:0])
 
-        , .rd_sel_o (rf_rd_addr)
-        , .rd_en_o (rf_rd_en)
-        , .rd_valid_o (rf_rd_valid_o)
+        , .rd_sel_o(rf_rd_addr)
+        , .rd_en_o(rf_rd_en)
+        , .rd_valid_o(rf_rd_valid_o)
     );
 
-    dice_register_file
-     registers (
-          .clk (clk_i)
+    // =========================================================================
+    // Square GPR register file
+    //
+    // Each bank contains REGS_PER_ROW sub-SRAMs, each ROW_DEPTH × DATA_WIDTH.
+    //   - All sub-SRAMs in a bank share the same row address.
+    //   - Write: only the sub-SRAM selected by sub-index is written.
+    //   - Read:  all sub-SRAMs are read; output is muxed by pipelined sub-index.
+    // =========================================================================
 
-        , .rd_addr (rf_rd_addr)
-        , .rd_data (rd_data_o[NUM_PORTS*DATA_WIDTH-1:0])
+    // Split write addresses once per bank
+    tid_addr_t [NUM_PORTS-1:0] wr_addr_split;
+    generate
+        for (i = 0; i < NUM_PORTS; i++) begin : gen_wr_split
+            assign wr_addr_split[i] = split_tid(rf_wr_addr[i*ADDR_WIDTH +: ADDR_WIDTH]);
+        end
+    endgenerate
 
-        , .wr_en   (rf_wr_en)
-        , .wr_addr (rf_wr_addr)
-        , .wr_data (rf_wr_data)
-    );
+    // Split read addresses once per bank
+    tid_addr_t [NUM_PORTS-1:0] rd_addr_split;
+    generate
+        for (i = 0; i < NUM_PORTS; i++) begin : gen_rd_split
+            assign rd_addr_split[i] = split_tid(rf_rd_addr[i*ADDR_WIDTH +: ADDR_WIDTH]);
+        end
+    endgenerate
 
+    // Pipeline read sub-index (bsg_mem_1r1w_sync has 1-cycle read latency)
+    logic [NUM_PORTS-1:0][SUB_IDX_WIDTH-1:0] rd_sub_idx_r;
     always_ff @(posedge clk_i) begin
-        if(reset_i)
+        for (int k = 0; k < NUM_PORTS; k++)
+            rd_sub_idx_r[k] <= rd_addr_split[k].sub;
+    end
+
+    // Sub-SRAM read data (before mux)
+    logic [NUM_PORTS-1:0][REGS_PER_ROW-1:0][DATA_WIDTH-1:0] sub_rd_data;
+
+    // Instantiate sub-SRAMs: NUM_PORTS banks × REGS_PER_ROW sub-SRAMs each
+    genvar j;
+    generate
+        for (i = 0; i < NUM_PORTS; i++) begin : gen_bank
+            for (j = 0; j < REGS_PER_ROW; j++) begin : gen_sub
+                bsg_mem_1r1w_sync #(
+                      .width_p(DATA_WIDTH)
+                    , .els_p(ROW_DEPTH)
+                    , .read_write_same_addr_p(1)
+                ) u_sub_ram (
+                      .clk_i   (clk_i)
+                    , .reset_i (1'b0)
+                    , .w_v_i   (rf_wr_en[i] & (wr_addr_split[i].sub == SUB_IDX_WIDTH'(j)))
+                    , .w_addr_i(wr_addr_split[i].row)
+                    , .w_data_i(rf_wr_data[i*DATA_WIDTH +: DATA_WIDTH])
+                    , .r_v_i   (1'b1)
+                    , .r_addr_i(rd_addr_split[i].row)
+                    , .r_data_o(sub_rd_data[i][j])
+                );
+            end
+        end
+    endgenerate
+
+    // Mux read data by pipelined sub-index
+    generate
+        for (i = 0; i < NUM_PORTS; i++) begin : gen_rd_mux
+            assign rd_data_o[i*DATA_WIDTH +: DATA_WIDTH] = sub_rd_data[i][rd_sub_idx_r[i]];
+        end
+    endgenerate
+
+    // =========================================================================
+    // TID pipeline
+    // =========================================================================
+    always_ff @(posedge clk_i) begin
+        if (reset_i)
             tid_o <= '0;
         else
             tid_o <= rd_tid_i;

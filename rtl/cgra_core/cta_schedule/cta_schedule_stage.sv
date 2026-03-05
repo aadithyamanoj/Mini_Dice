@@ -110,7 +110,7 @@ module cta_schedule_stage
       .pop_ready_o           (active_table_pop_ready),
       .out_valid_o           (active_table_out_valid),
       .out_ready_i           (active_table_out_ready),
-      .active_cta_entry_o    (active_cta_entry),
+      .active_cta_entry_o    (active_cta_entry)
   );
 
   // ---- CTA Scheduler ----
