@@ -36,11 +36,11 @@ import dice_pkg::*;
     , output logic [TID_WIDTH-1:0]            tid_o
 
     // Predicate output — all TIDs, all preds, always valid
-    , output logic [NUM_PRED*NUM_TID-1:0]     pred_o
+    , output logic [NUM_PRED-1:0]              pred_o
 
     // Write Interface — CGRA
     , input logic [TID_WIDTH-1:0]               cgra_tid_i
-    , input logic [(TOTAL_REGS*DATA_WIDTH)-1:0] cgra_data_i
+    , input logic [((NUM_PORTS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_i
     , input logic [TOTAL_REGS-1:0]              wr_bitmap_i
     , input logic                               cgra_valid_i
 
@@ -147,11 +147,11 @@ import dice_pkg::*;
         for (int j = 0; j < NUM_CONST; j++) begin
             cgra_special.const_mask[j] = wr_bitmap_i[NUM_PORTS + j];
             cgra_special.const_data[j*DATA_WIDTH +: DATA_WIDTH] =
-                cgra_data_i[(NUM_PORTS + j)*DATA_WIDTH +: DATA_WIDTH];
+                cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH];
         end
         for (int j = 0; j < NUM_PRED; j++) begin
             cgra_special.pred_mask[j] = wr_bitmap_i[NUM_PORTS + NUM_CONST + j];
-            cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + NUM_CONST + j)*DATA_WIDTH];
+            cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + 1 + j)*DATA_WIDTH];
         end
     end
 
@@ -245,8 +245,8 @@ import dice_pkg::*;
         end
     end
 
-    // Predicate output — all TIDs driven continuously
-    assign pred_o = pred_regs;
+    // Predicate output — selected TID only
+    assign pred_o = pred_regs[rd_tid_i];
 
     // =========================================================================
     // GPR read path — only pass GPR portion of bitmap to read_org
