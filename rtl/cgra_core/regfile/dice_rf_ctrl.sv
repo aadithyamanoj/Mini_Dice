@@ -31,7 +31,7 @@ import dice_pkg::*;
     , input logic                             rd_en_i
     , input logic [TID_WIDTH-1:0]             rd_tid_i
     , input logic [TOTAL_REGS-1:0]            rd_bitmap_i
-    , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] rd_data_o
+    , output logic [(NUM_PORTS+1)*DATA_WIDTH-1:0] rd_data_o
     , output logic                            rf_rd_valid_o
     , output logic [TID_WIDTH-1:0]            tid_o
 
@@ -218,12 +218,16 @@ import dice_pkg::*;
         end
     end
 
-    // Const read: wire flip-flop outputs to rd_data_o positions [NUM_PORTS .. NUM_PORTS+NUM_CONST-1]
-    generate
-        for (i = 0; i < NUM_CONST; i++) begin : gen_const_rd
-            assign rd_data_o[(NUM_PORTS + i)*DATA_WIDTH +: DATA_WIDTH] = const_regs[i];
+    // Const read: mux one const register into rd_data_o[NUM_PORTS] based on bitmap
+    logic [DATA_WIDTH-1:0] const_rd_mux;
+    always_comb begin
+        const_rd_mux = '0;
+        for (int j = 0; j < NUM_CONST; j++) begin
+            if (rd_bitmap_i[NUM_PORTS + j])
+                const_rd_mux = const_regs[j];
         end
-    endgenerate
+    end
+    assign rd_data_o[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH] = const_rd_mux;
 
     // =========================================================================
     // Predicate registers — NUM_PRED banks × NUM_TID entries (1 bit each)
