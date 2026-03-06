@@ -4,20 +4,6 @@
 package DE_pkg;
 
 
-parameter int DICE_REG_DATA_WIDTH = 8;
-parameter int CACHE_LINE_SIZE = 32;
-parameter int NUMBER_OF_MAX_COALESCED_COMMANDS = CACHE_LINE_SIZE/4;
-parameter int TID_BITMAP_WIDTH = NUMBER_OF_MAX_COALESCED_COMMANDS;
-parameter int BASE_ADDRESS_OFFSET = $clog2(CACHE_LINE_SIZE);
-
-parameter int DICE_NUM_REGS = `DICE_GPR_NUM;
-parameter int DICE_NUM_CONST = `DICE_CR_NUM;
-parameter int DICE_NUM_PRED = `DICE_PR_NUM;
-parameter int DICE_NUM_BANKS = DICE_NUM_REGS;
-parameter int DICE_REGS_PER_BANK = `DICE_NUM_MAX_THREADS_PER_CORE;
-parameter int DICE_TOTAL_REGS = DICE_NUM_REGS + DICE_NUM_CONST + DICE_NUM_PRED;
-parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_TOTAL_REGS);
-parameter int LDST_BUF_DEPTH = 8;
 // =========================================================
 // Dispatcher architecture constants
 // =========================================================
@@ -27,6 +13,20 @@ parameter int CHUNK_SIZE       = `DICE_NUM_MAX_THREADS_PER_CORE / NUM_SCOREBOARD
 parameter int CHUNK_ADDR_WIDTH = (NUM_SCOREBOARDS == 1) ? 1 : $clog2(NUM_SCOREBOARDS);
 parameter int LANE_SIZE        = CHUNK_SIZE / NUM_LANES;
 parameter int LANE_WIDTH       = $clog2(LANE_SIZE);
+
+parameter int DICE_REG_DATA_WIDTH = 8;
+parameter int CACHE_LINE_SIZE = 32;
+parameter int NUMBER_OF_MAX_COALESCED_COMMANDS = CACHE_LINE_SIZE/4;
+parameter int TID_BITMAP_WIDTH = NUMBER_OF_MAX_COALESCED_COMMANDS;
+parameter int BASE_ADDRESS_OFFSET = $clog2(CACHE_LINE_SIZE);
+parameter int DICE_NUM_REGS = `DICE_GPR_NUM;
+parameter int DICE_NUM_CONST = `DICE_CR_NUM;
+parameter int DICE_NUM_PRED = `DICE_PR_NUM;
+parameter int DICE_NUM_BANKS = DICE_NUM_REGS;
+parameter int DICE_REGS_PER_BANK = `DICE_NUM_MAX_THREADS_PER_CORE;
+parameter int DICE_TOTAL_REGS = DICE_NUM_REGS + DICE_NUM_CONST + DICE_NUM_PRED;
+parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_TOTAL_REGS);
+parameter int LDST_BUF_DEPTH = 8;
 typedef struct packed {
     logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0]  outcmd_base_tid;
     logic [TID_BITMAP_WIDTH-1:0]                        outcmd_tid_bitmap;

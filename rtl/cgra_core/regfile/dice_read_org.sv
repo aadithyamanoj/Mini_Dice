@@ -27,11 +27,10 @@ import dice_pkg::*;
     , output logic                           rd_valid_o
 );
 
-    // Circular left shift of bitmap by shift_amt
-    // result = (bitmap << shift_amt) | (bitmap >> (NUM_PORTS - shift_amt))
+    // Direct bitmap (no swizzling)
     logic [NUM_PORTS-1:0] shifted_bitmap;
 
-    assign shifted_bitmap = shift_bitmap(rd_bitmap_i, rd_tid_i);
+    assign shifted_bitmap = rd_bitmap_i;
    
     // Ready when enabled
     assign rd_tid_ready_o = rd_en_i;
