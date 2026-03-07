@@ -54,6 +54,32 @@ module dice_backend
   logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_lo;
   logic [DICE_NUM_PRED-1:0] pred_lo;
 
+  // Crossbar parameters
+  localparam int NUM_PE_PORTS          = 8;                  // number of data inputs and ourputs to CGRA PE array
+  localparam int GPR_XBAR_NUM_INPUTS   = DICE_NUM_REGS + DICE_NUM_CONST; // GPRs + const regs
+  localparam int GPR_XBAR_NUM_OUTPUTS  = NUM_PE_PORTS;       // PE data input count
+
+  localparam int PRED_XBAR_NUM_INPUTS  = DICE_NUM_PRED;     // predicate regs = 2
+  localparam int PRED_XBAR_NUM_OUTPUTS = NUM_PE_PORTS;      // PE pred input count
+
+  // Crossbar -> feed into CGRA PE array inputs
+  logic [GPR_XBAR_NUM_OUTPUTS-1:0][DICE_REG_DATA_WIDTH-1:0] gpr_rd_xbar_lo;
+  logic [PRED_XBAR_NUM_OUTPUTS-1:0][0:0]                    pred_rd_xbar_lo;
+  // CGRA PE array outputs -> write-back crossbar -> register file
+  logic [GPR_XBAR_NUM_INPUTS-1:0][DICE_REG_DATA_WIDTH-1:0] gpr_wb_xbar_lo;   
+  logic [PRED_XBAR_NUM_INPUTS-1:0][0:0]                    pred_wb_xbar_lo;  
+
+  // Crossbar configuration — sourced from the CGRA bitstream.
+  // TODO: drive from bitstream decoder once that path is implemented.
+  //       cfg_sel_i layout: bits [(i+1)*SEL_WIDTH-1 : i*SEL_WIDTH] = selector for output i.
+  logic [GPR_XBAR_NUM_OUTPUTS*($clog2(GPR_XBAR_NUM_INPUTS))-1:0]    gpr_xbar_cfg_sel;
+  logic [PRED_XBAR_NUM_OUTPUTS*($clog2(PRED_XBAR_NUM_INPUTS))-1:0]  pred_xbar_cfg_sel;
+  logic                                                   xbar_cfg_load;
+
+  assign gpr_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
+  assign pred_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
+  assign xbar_cfg_load     = '0; // TODO: pulse when new p-graph bitstream config is ready
+
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                    ldst_cmd;
@@ -69,11 +95,16 @@ module dice_backend
 
   // CGRA write-back wires (undriven for now)
   logic                                          cgra_v_lo;
-  logic [DICE_TOTAL_REGS*DICE_REG_DATA_WIDTH-1:0] cgra_data_lo;
+  logic [NUM_PE_PORTS*DICE_REG_DATA_WIDTH-1:0] cgra_gpr_data_lo;
+  logic [NUM_PE_PORTS-1:0]                     cgra_pred_data_lo;
   logic [DICE_TID_WIDTH-1:0]                     cgra_tid_lo;
 
+  // Register file writeback from CGRA (after crossbar)
+  logic [((DICE_GPR_NUM+1)+DICE_PRED_NUM)-1:0]  cgra_data_lo; // combined GPR and predicate data
+  assign cgra_data_lo = {gpr_wb_xbar_lo, pred_wb_xbar_lo};
+
   // TMCU input-side wires (from CGRA)
-  logic                              tmcu_incmd_valid;
+  logic                              tmcu_incmd_valid; 
   logic [DICE_EBLOCK_ID_WIDTH-1:0]   tmcu_incmd_block_id;
   logic [DICE_TID_WIDTH-1:0]         tmcu_incmd_tid;
   logic                              tmcu_incmd_write_enable;
@@ -168,7 +199,7 @@ module dice_backend
         )
         TID_SHIFT
         (.clk_i(clk_i)
-        ,.reset_i(reset_i)   
+        ,.reset_i(rst_i)   
         
         ,.latency (fdr_if_i.data.metadata.lat) // 
 
@@ -176,13 +207,13 @@ module dice_backend
         ,.out_data (cgra_tid_lo)
         );
     
-    shif_reg
+    shift_reg
         #(.WIDTH          (DICE_TOTAL_REGS)
          ,.MAX_PIPE_STAGE (128+1) // 
         )
-        TID_SHIFT
+        WB_MAP_SHIFT
         (.clk_i(clk_i)
-        ,.reset_i(reset_i)   
+        ,.reset_i(rst_i)   
         
         ,.latency (fdr_if_i.data.metadata.lat+1) // 
 
@@ -223,6 +254,255 @@ module dice_backend
       .outcmd_ld_dest_reg (tmcu_ld_dest_reg_o),
       .outcmd_address_map (tmcu_address_map_o),
       .outcmd_ready       (tmcu_ready_i)
+  );
+
+  // =========================================================================
+  // Input Crossbar: register file -> CGRA PE array inputs
+  // =========================================================================
+  cgra_crossbar #(
+      .NUM_INPUTS  (GPR_XBAR_NUM_INPUTS),
+      .NUM_OUTPUTS (GPR_XBAR_NUM_OUTPUTS),
+      .DATA_WIDTH  (DICE_REG_DATA_WIDTH)
+  ) u_gpr_xbar_in (
+      .clk_i      (clk_i),
+      .rst_i      (rst_i),
+      .data_i     (rd_data_lo),       
+      .cfg_load_i (xbar_cfg_load),
+      .cfg_sel_i  (gpr_xbar_cfg_sel),
+      .data_o     (gpr_rd_xbar_lo)   // TODO: connect to CGRA PE data inputs
+  );
+
+  cgra_crossbar #(
+      .NUM_INPUTS  (PRED_XBAR_NUM_INPUTS),
+      .NUM_OUTPUTS (PRED_XBAR_NUM_OUTPUTS),
+      .DATA_WIDTH  (1)
+  ) u_pred_xbar_in (
+      .clk_i      (clk_i),
+      .rst_i      (rst_i),
+      .data_i     (pred_lo),           
+      .cfg_load_i (xbar_cfg_load),
+      .cfg_sel_i  (pred_xbar_cfg_sel),
+      .data_o     (pred_rd_xbar_lo)  // TODO: connect to CGRA PE pred inputs
+  );
+
+  // =========================================================================
+  // Output Crossbar: CGRA PE array outputs -> register file
+  // =========================================================================
+  cgra_crossbar #(
+      .NUM_INPUTS  (GPR_XBAR_NUM_OUTPUTS),
+      .NUM_OUTPUTS (GPR_XBAR_NUM_INPUTS),
+      .DATA_WIDTH  (DICE_REG_DATA_WIDTH)
+  ) u_gpr_xbar_out (
+      .clk_i      (clk_i),
+      .rst_i      (rst_i),
+      .data_i     (cgra_gpr_data_lo),
+      .cfg_load_i (xbar_cfg_load),
+      .cfg_sel_i  (gpr_xbar_cfg_sel),
+      .data_o     (gpr_wb_xbar_lo)
+  );
+
+  cgra_crossbar #(
+      .NUM_INPUTS  (PRED_XBAR_NUM_OUTPUTS),
+      .NUM_OUTPUTS (PRED_XBAR_NUM_INPUTS),
+      .DATA_WIDTH  (1)
+  ) u_pred_xbar_out (
+      .clk_i      (clk_i),
+      .rst_i      (rst_i),
+      .data_i     (cgra_pred_data_lo),
+      .cfg_load_i (xbar_cfg_load),
+      .cfg_sel_i  (pred_xbar_cfg_sel),
+      .data_o     (pred_wb_xbar_lo)
+  );
+
+  // =========================================================================
+  // CGRA: mini_dice
+  // West boundary (sb_*_0 W ports): data input PEs 0-3 / write-back output PEs 4-7
+  // East boundary (sb_*_8 E ports): data input PEs 4-7 / write-back output PEs 0-3
+  // All diagonal, top, and bottom boundary ports are tied off.
+  // =========================================================================
+  mini_dice u_mini_dice (
+      .clk_i   (clk_i),
+      .reset_i (rst_i),
+      .en_i    (1'b1),
+
+      // -----------------------------------------------------------------------
+      // Top-left corner (sb_0_0): West data in/out + top/diagonal tie-offs
+      // -----------------------------------------------------------------------
+      .sb_0_0_W_i      (gpr_rd_xbar_lo[0]),
+      .sb_0_0_W_o      (cgra_gpr_data_lo[4*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_0_0_pred_W_i (pred_rd_xbar_lo[0]),
+      .sb_0_0_pred_W_o (cgra_pred_data_lo[4]),
+      .sb_0_0_N_i      ('0), .sb_0_0_N_o      (),
+      .sb_0_0_pred_N_i ('0), .sb_0_0_pred_N_o (),
+      .sb_0_0_NE_i     ('0), .sb_0_0_NE_o     (),
+      .sb_0_0_pred_NE_i('0), .sb_0_0_pred_NE_o(),
+      .sb_0_0_NW_i     ('0), .sb_0_0_NW_o     (),
+      .sb_0_0_pred_NW_i('0), .sb_0_0_pred_NW_o(),
+      .sb_0_0_SW_i     ('0), .sb_0_0_SW_o     (),
+      .sb_0_0_pred_SW_i('0), .sb_0_0_pred_SW_o(),
+
+      // -----------------------------------------------------------------------
+      // Top boundary (row = 0, col = 2, 4, 6) — tie off
+      // -----------------------------------------------------------------------
+      .sb_0_2_N_i      ('0), .sb_0_2_N_o      (),
+      .sb_0_2_pred_N_i ('0), .sb_0_2_pred_N_o (),
+      .sb_0_2_NE_i     ('0), .sb_0_2_NE_o     (),
+      .sb_0_2_pred_NE_i('0), .sb_0_2_pred_NE_o(),
+      .sb_0_2_NW_i     ('0), .sb_0_2_NW_o     (),
+      .sb_0_2_pred_NW_i('0), .sb_0_2_pred_NW_o(),
+
+      .sb_0_4_N_i      ('0), .sb_0_4_N_o      (),
+      .sb_0_4_pred_N_i ('0), .sb_0_4_pred_N_o (),
+      .sb_0_4_NE_i     ('0), .sb_0_4_NE_o     (),
+      .sb_0_4_pred_NE_i('0), .sb_0_4_pred_NE_o(),
+      .sb_0_4_NW_i     ('0), .sb_0_4_NW_o     (),
+      .sb_0_4_pred_NW_i('0), .sb_0_4_pred_NW_o(),
+
+      .sb_0_6_N_i      ('0), .sb_0_6_N_o      (),
+      .sb_0_6_pred_N_i ('0), .sb_0_6_pred_N_o (),
+      .sb_0_6_NE_i     ('0), .sb_0_6_NE_o     (),
+      .sb_0_6_pred_NE_i('0), .sb_0_6_pred_NE_o(),
+      .sb_0_6_NW_i     ('0), .sb_0_6_NW_o     (),
+      .sb_0_6_pred_NW_i('0), .sb_0_6_pred_NW_o(),
+
+      // -----------------------------------------------------------------------
+      // Top-right corner (sb_0_8): East data in/out + top/diagonal tie-offs
+      // -----------------------------------------------------------------------
+      .sb_0_8_E_i      (gpr_rd_xbar_lo[4]),
+      .sb_0_8_E_o      (cgra_gpr_data_lo[0*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_0_8_pred_E_i (pred_rd_xbar_lo[4]),
+      .sb_0_8_pred_E_o (cgra_pred_data_lo[0]),
+      .sb_0_8_N_i      ('0), .sb_0_8_N_o      (),
+      .sb_0_8_pred_N_i ('0), .sb_0_8_pred_N_o (),
+      .sb_0_8_NE_i     ('0), .sb_0_8_NE_o     (),
+      .sb_0_8_pred_NE_i('0), .sb_0_8_pred_NE_o(),
+      .sb_0_8_NW_i     ('0), .sb_0_8_NW_o     (),
+      .sb_0_8_pred_NW_i('0), .sb_0_8_pred_NW_o(),
+      .sb_0_8_SE_i     ('0), .sb_0_8_SE_o     (),
+      .sb_0_8_pred_SE_i('0), .sb_0_8_pred_SE_o(),
+
+      // -----------------------------------------------------------------------
+      // West boundary (col = 0, row = 2, 4, 6): PEs 1-3 data in/out
+      // -----------------------------------------------------------------------
+      .sb_2_0_W_i      (gpr_rd_xbar_lo[1]),
+      .sb_2_0_W_o      (cgra_gpr_data_lo[5*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_2_0_pred_W_i (pred_rd_xbar_lo[1]),
+      .sb_2_0_pred_W_o (cgra_pred_data_lo[5]),
+      .sb_2_0_NW_i     ('0), .sb_2_0_NW_o     (),
+      .sb_2_0_pred_NW_i('0), .sb_2_0_pred_NW_o(),
+      .sb_2_0_SW_i     ('0), .sb_2_0_SW_o     (),
+      .sb_2_0_pred_SW_i('0), .sb_2_0_pred_SW_o(),
+
+      .sb_4_0_W_i      (gpr_rd_xbar_lo[2]),
+      .sb_4_0_W_o      (cgra_gpr_data_lo[6*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_4_0_pred_W_i (pred_rd_xbar_lo[2]),
+      .sb_4_0_pred_W_o (cgra_pred_data_lo[6]),
+      .sb_4_0_NW_i     ('0), .sb_4_0_NW_o     (),
+      .sb_4_0_pred_NW_i('0), .sb_4_0_pred_NW_o(),
+      .sb_4_0_SW_i     ('0), .sb_4_0_SW_o     (),
+      .sb_4_0_pred_SW_i('0), .sb_4_0_pred_SW_o(),
+
+      .sb_6_0_W_i      (gpr_rd_xbar_lo[3]),
+      .sb_6_0_W_o      (cgra_gpr_data_lo[7*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_6_0_pred_W_i (pred_rd_xbar_lo[3]),
+      .sb_6_0_pred_W_o (cgra_pred_data_lo[7]),
+      .sb_6_0_NW_i     ('0), .sb_6_0_NW_o     (),
+      .sb_6_0_pred_NW_i('0), .sb_6_0_pred_NW_o(),
+      .sb_6_0_SW_i     ('0), .sb_6_0_SW_o     (),
+      .sb_6_0_pred_SW_i('0), .sb_6_0_pred_SW_o(),
+
+      // -----------------------------------------------------------------------
+      // East boundary (col = 8, row = 2, 4, 6): PEs 5-7 data in/out
+      // -----------------------------------------------------------------------
+      .sb_2_8_E_i      (gpr_rd_xbar_lo[5]),
+      .sb_2_8_E_o      (cgra_gpr_data_lo[1*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_2_8_pred_E_i (pred_rd_xbar_lo[5]),
+      .sb_2_8_pred_E_o (cgra_pred_data_lo[1]),
+      .sb_2_8_NE_i     ('0), .sb_2_8_NE_o     (),
+      .sb_2_8_pred_NE_i('0), .sb_2_8_pred_NE_o(),
+      .sb_2_8_SE_i     ('0), .sb_2_8_SE_o     (),
+      .sb_2_8_pred_SE_i('0), .sb_2_8_pred_SE_o(),
+
+      .sb_4_8_E_i      (gpr_rd_xbar_lo[6]),
+      .sb_4_8_E_o      (cgra_gpr_data_lo[2*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_4_8_pred_E_i (pred_rd_xbar_lo[6]),
+      .sb_4_8_pred_E_o (cgra_pred_data_lo[2]),
+      .sb_4_8_NE_i     ('0), .sb_4_8_NE_o     (),
+      .sb_4_8_pred_NE_i('0), .sb_4_8_pred_NE_o(),
+      .sb_4_8_SE_i     ('0), .sb_4_8_SE_o     (),
+      .sb_4_8_pred_SE_i('0), .sb_4_8_pred_SE_o(),
+
+      .sb_6_8_E_i      (gpr_rd_xbar_lo[7]),
+      .sb_6_8_E_o      (cgra_gpr_data_lo[3*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .sb_6_8_pred_E_i (pred_rd_xbar_lo[7]),
+      .sb_6_8_pred_E_o (cgra_pred_data_lo[3]),
+      .sb_6_8_NE_i     ('0), .sb_6_8_NE_o     (),
+      .sb_6_8_pred_NE_i('0), .sb_6_8_pred_NE_o(),
+      .sb_6_8_SE_i     ('0), .sb_6_8_SE_o     (),
+      .sb_6_8_pred_SE_i('0), .sb_6_8_pred_SE_o(),
+
+      // -----------------------------------------------------------------------
+      // Bottom-left corner (sb_8_0) — tie off
+      // -----------------------------------------------------------------------
+      .sb_8_0_S_i      ('0), .sb_8_0_S_o      (),
+      .sb_8_0_pred_S_i ('0), .sb_8_0_pred_S_o (),
+      .sb_8_0_W_i      ('0), .sb_8_0_W_o      (),
+      .sb_8_0_pred_W_i ('0), .sb_8_0_pred_W_o (),
+      .sb_8_0_NW_i     ('0), .sb_8_0_NW_o     (),
+      .sb_8_0_pred_NW_i('0), .sb_8_0_pred_NW_o(),
+      .sb_8_0_SE_i     ('0), .sb_8_0_SE_o     (),
+      .sb_8_0_pred_SE_i('0), .sb_8_0_pred_SE_o(),
+      .sb_8_0_SW_i     ('0), .sb_8_0_SW_o     (),
+      .sb_8_0_pred_SW_i('0), .sb_8_0_pred_SW_o(),
+
+      // -----------------------------------------------------------------------
+      // Bottom boundary (row = 8, col = 2, 4, 6) — tie off
+      // -----------------------------------------------------------------------
+      .sb_8_2_S_i      ('0), .sb_8_2_S_o      (),
+      .sb_8_2_pred_S_i ('0), .sb_8_2_pred_S_o (),
+      .sb_8_2_SE_i     ('0), .sb_8_2_SE_o     (),
+      .sb_8_2_pred_SE_i('0), .sb_8_2_pred_SE_o(),
+      .sb_8_2_SW_i     ('0), .sb_8_2_SW_o     (),
+      .sb_8_2_pred_SW_i('0), .sb_8_2_pred_SW_o(),
+
+      .sb_8_4_S_i      ('0), .sb_8_4_S_o      (),
+      .sb_8_4_pred_S_i ('0), .sb_8_4_pred_S_o (),
+      .sb_8_4_SE_i     ('0), .sb_8_4_SE_o     (),
+      .sb_8_4_pred_SE_i('0), .sb_8_4_pred_SE_o(),
+      .sb_8_4_SW_i     ('0), .sb_8_4_SW_o     (),
+      .sb_8_4_pred_SW_i('0), .sb_8_4_pred_SW_o(),
+
+      .sb_8_6_S_i      ('0), .sb_8_6_S_o      (),
+      .sb_8_6_pred_S_i ('0), .sb_8_6_pred_S_o (),
+      .sb_8_6_SE_i     ('0), .sb_8_6_SE_o     (),
+      .sb_8_6_pred_SE_i('0), .sb_8_6_pred_SE_o(),
+      .sb_8_6_SW_i     ('0), .sb_8_6_SW_o     (),
+      .sb_8_6_pred_SW_i('0), .sb_8_6_pred_SW_o(),
+
+      // -----------------------------------------------------------------------
+      // Bottom-right corner (sb_8_8) — tie off
+      // -----------------------------------------------------------------------
+      .sb_8_8_S_i      ('0), .sb_8_8_S_o      (),
+      .sb_8_8_pred_S_i ('0), .sb_8_8_pred_S_o (),
+      .sb_8_8_E_i      ('0), .sb_8_8_E_o      (),
+      .sb_8_8_pred_E_i ('0), .sb_8_8_pred_E_o (),
+      .sb_8_8_NE_i     ('0), .sb_8_8_NE_o     (),
+      .sb_8_8_pred_NE_i('0), .sb_8_8_pred_NE_o(),
+      .sb_8_8_SE_i     ('0), .sb_8_8_SE_o     (),
+      .sb_8_8_pred_SE_i('0), .sb_8_8_pred_SE_o(),
+      .sb_8_8_SW_i     ('0), .sb_8_8_SW_o     (),
+      .sb_8_8_pred_SW_i('0), .sb_8_8_pred_SW_o(),
+
+      // -----------------------------------------------------------------------
+      // Programming chain — tie off until bitstream loader is implemented
+      // -----------------------------------------------------------------------
+      .prog_clk_i  ('0),
+      .prog_rst_i  ('0),
+      .prog_done_i ('0),
+      .prog_we_i   ('0),
+      .prog_din_i  ('0),
+      .prog_dout_o (),
+      .prog_we_o   ()
   );
 
   // =========================================================================
