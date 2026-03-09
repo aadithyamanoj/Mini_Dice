@@ -38,7 +38,7 @@ module cgra_crossbar #(
             sel_reg <= '0;
         end else if (cfg_load_i) begin
             for (int i = 0; i < NUM_OUTPUTS; i++) begin
-                sel_reg[i] <= cfg_sel_i[(i+1)*SEL_WIDTH-1 : i*SEL_WIDTH];
+                sel_reg[i] <= cfg_sel_i[i*SEL_WIDTH +: SEL_WIDTH];
             end
         end
     end

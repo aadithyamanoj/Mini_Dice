@@ -1,4 +1,8 @@
-module tb_dice_core_pkg();
+module tb_dice_core_pkg
+  import dice_pkg::*;
+  import dice_frontend_pkg::*;
+();
+  localparam int METADATA_ALIGN = $clog2(DICE_METADATA_WIDTH);
 
   // =========================================================================
   // Randomization Class - MAYBE MOVE THIS TO A SEPARATE FILE
@@ -36,13 +40,13 @@ module tb_dice_core_pkg();
     rand pgraph_meta_t metadata;
 
     constraint base_metadata {
-      metadata.bitstream_length == 512;
+      metadata.bitstream_length inside {[1:255]};
       metadata.num_stores inside {[0:3]};
       metadata.lat inside {[1:10]};
       metadata.unrolling_factor == 0;
       metadata.barrier == 0;
       metadata.parameter_load == 0;
-      metadata.bitstream_addr[0:$clog2(DICE_METADATA_WIDTH)-1] == '0; // MAY BE WRONG
+      metadata.bitstream_addr[METADATA_ALIGN-1:0] == '0; // MAY BE WRONG
     }
 
     constraint branch_metadata {

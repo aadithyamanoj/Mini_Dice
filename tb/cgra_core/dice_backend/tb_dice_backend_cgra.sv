@@ -1,49 +1,58 @@
 // =============================================================================
 // tb_dice_backend_cgra.sv
 //
-// Connectivity smoke-test for the regfile → input_xbar → CGRA → output_xbar
-// → regfile pipeline added to dice_backend.
+// Connectivity smoke-test for the full
+//   RF → input_xbar → CGRA → output_xbar → RF
+// pipeline in dice_backend.
 //
 // Test outline
 // ────────────
-//  1. Pre-load RF:  GPR0[TID=0]=0xAA, GPR1[TID=0]=0x55  (via mem_rsp LDST path)
-//  2. Configure crossbars (force sel_reg — see NOTE A below)
-//       input  xbar: PE0 ← RF bank0 (GPR0), PE1 ← RF bank1 (GPR1)
-//       output xbar: RF bank0 ← CGRA PE0,   RF bank1 ← CGRA PE1
-//  3. Dispatch FDR (TID=0, lat=LAT, read GPR0+GPR1, write-back GPR0)
-//  4. CHECK  input xbar: gpr_rd_xbar_lo[0]==0xAA, [1]==0x55
-//  5. Force CGRA outputs (force cgra_gpr_data_lo — see NOTE B below)
-//       PE0 = GPR0 + GPR1 = 0xFF   (simulated ADD)
-//       PE1 = GPR1 + 1   = 0x56   (simulated INC)
-//  6. CHECK  output xbar: gpr_wb_xbar_lo[0]==0xFF, [1]==0x56
-//  7. Force cgra_v_lo=1 for one cycle to trigger RF write-back
+//  1. Pre-load RF:  GPR0[TID=0]=0xAA, GPR1[TID=0]=0x55  (mem_rsp LDST path)
+//  2. Derive fake "bitstream" crossbar config (cfg_sel values), force into
+//     xbar sel_reg (see NOTE A).
+//  3. Generate metadata with MetadataGenerator (matches tb_dice_core_pkg.sv),
+//     override bitmaps, dispatch FDR for TID=0.
+//  4. CHECK  input xbar outputs gpr_rd_xbar_lo carry the correct RF values.
+//  5. Force CGRA PE output bus cgra_gpr_data_lo with known results (NOTE B).
+//  6. CHECK  output xbar outputs gpr_wb_xbar_lo route data to correct banks.
+//  7. cgra_v_lo is asserted automatically by CGRA_V_SHIFT (rf_rd_valid_lo
+//     shifted by lat cycles) — no manual force needed.
+//  8. Wait for RF write-back, then done.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// NOTE A – cfg_load / cfg_sel TODO
-//   xbar_cfg_load, gpr_xbar_cfg_sel, and pred_xbar_cfg_sel are all tied to '0
-//   inside dice_backend (marked TODO: connect to bitstream decoder).  We
-//   therefore force the internal sel_reg registers of each crossbar instance
-//   directly.  Once the bitstream decoder is wired up, these forces can be
-//   replaced with proper cfg_sel_i / cfg_load_i stimulus.
+// NOTE A – Fake bitstream crossbar configuration
+//   dice_backend has gpr_xbar_cfg_sel and xbar_cfg_load TODO-tied to '0 (the
+//   bitstream decoder path is not yet wired).  We model what the bitstream
+//   decoder would produce by computing cfg_sel locally and forcing the crossbar
+//   sel_reg registers directly.  Once the decoder is connected these forces
+//   become plain cfg_sel_i / cfg_load_i stimulus.
 //
-//   cfg_sel_i bitstream layout reminder (for when the decoder is ready):
-//     Input  xbar (9-in, 8-out, SEL_WIDTH=4): 8×4 = 32-bit flat vector
-//       bits[(i+1)*4-1 : i*4] = selector for PE port i
-//     Output xbar (8-in, 9-out, SEL_WIDTH=3): 9×3 = 27-bit flat vector
-//       bits[(i+1)*3-1 : i*3] = selector for RF bank i
+//   cfg_sel_i bit layout (per cgra_crossbar):
+//     bits [(i+1)*SEL_W-1 : i*SEL_W] = selector for output port i
+//
+//   Input GPR xbar  (NUM_INPUTS=16, NUM_OUTPUTS=8, SEL_W=4, cfg_sel=32b):
+//     PE0 ← bank 0 (GPR0, sel=0): cfg_sel[3:0]  = 4'h0
+//     PE1 ← bank 1 (GPR1, sel=1): cfg_sel[7:4]  = 4'h1
+//     PE2-7 ← bank 0 (unused):    cfg_sel[31:8] = 0
+//     ──► IN_XBAR_CFG_SEL = 32'h0000_0010
+//
+//   Output GPR xbar (NUM_INPUTS=8, NUM_OUTPUTS=16, SEL_W=3, full cfg=48b):
+//     bank0 ← PE0 (sel=0): cfg_sel[2:0] = 3'h0
+//     bank1 ← PE1 (sel=1): cfg_sel[5:3] = 3'h1
+//     bank2-15 ← PE0:      cfg_sel[47:6] = 0
+//     ──► OUT_XBAR_CFG_SEL_LO = 32'h0000_0008  (lower 32 of 48 bits carried
+//         by gpr_xbar_cfg_sel — upper 16 bits are a design TODO)
 //
 // NOTE B – CGRA not programmed
-//   mini_dice prog_* ports are tied to '0, so its outputs are uninitialized X.
-//   We force cgra_gpr_data_lo to inject known "computation" results.
+//   mini_dice prog_* ports are tied off so its PE outputs are X.
+//   We force cgra_gpr_data_lo to inject known results representing:
+//     PE0 = GPR0 + GPR1 = 0xAA + 0x55 = 0xFF  (simulated ADD)
+//     PE1 = GPR1 + 1   = 0x55 + 0x01 = 0x56  (simulated INC)
 //
-// NOTE C – Known dice_backend.sv bugs that must be fixed before simulating
-//   1. shift_reg instantiation uses .reset_i(reset_i) but dice_backend has no
-//      `reset_i` port — should be .reset_i(rst_i)
-//   2. Second shift_reg has typo "shif_reg" — should be "shift_reg"
-//   3. Both shift_reg instances are named TID_SHIFT — second must be renamed
-//      (e.g., WB_MAP_SHIFT)
-//   4. cgra_v_lo is declared but never driven by mini_dice — must be connected
-//      once the CGRA valid output port exists
+// NOTE C – cgra_v_lo timing
+//   CGRA_V_SHIFT in dice_backend shifts rf_rd_valid_lo by metadata.lat cycles.
+//   No manual force is needed; the TB just waits long enough for the shift to
+//   complete and the RF write-back to settle.
 // =============================================================================
 
 `timescale 1ns/1ps
@@ -59,50 +68,72 @@ module tb_dice_backend_cgra;
   // Parameters
   // ===========================================================================
 
-  localparam int ClkPeriod    = 10;
-  localparam int TimeoutCycles = 300;
+  localparam int METADATA_ALIGN = $clog2(DICE_METADATA_WIDTH); // bits to zero for alignment
 
-  // Mirror dice_backend localparams
+  localparam int ClkPeriod     = 10;
+  localparam int TimeoutCycles = 400;
+
+  // Mirror dice_backend crossbar localparams (post-update: full const bank)
   localparam int NUM_PE_PORTS  = 8;
-  localparam int GPR_N_IN      = DICE_NUM_BANKS + 1;  // 9  (8 GPR banks + 1 const)
-  localparam int GPR_N_OUT     = NUM_PE_PORTS;          // 8
+  localparam int GPR_N_IN      = DICE_NUM_REGS + DICE_NUM_CONST; // 16
+  localparam int GPR_N_OUT     = NUM_PE_PORTS;                    // 8
+  localparam int IN_SEL_W      = $clog2(GPR_N_IN);                // 4
+  localparam int OUT_SEL_W     = $clog2(GPR_N_OUT);               // 3
 
-  // Selector widths inside each crossbar instance
-  localparam int IN_SEL_W  = $clog2(GPR_N_IN);   // 4  — input  xbar, chooses RF bank
-  localparam int OUT_SEL_W = $clog2(GPR_N_OUT);  // 3  — output xbar, chooses CGRA PE
+  // ─── Fake bitstream crossbar config ────────────────────────────────────────
+  // These values represent what the bitstream decoder would write into the
+  // two GPR crossbars for this p-graph:
+  //   • Input  xbar: PE0 ← bank0 (GPR0),  PE1 ← bank1 (GPR1)
+  //   • Output xbar: bank0 ← PE0 result,  bank1 ← PE1 result
+  localparam logic [31:0] IN_XBAR_CFG_SEL  = 32'h0000_0010;
+  //   sel[1]=1 at bits[7:4]  → PE1 ← bank1
+  //   sel[0]=0 at bits[3:0]  → PE0 ← bank0
+
+  localparam logic [47:0] OUT_XBAR_CFG_SEL = 48'h0000_0000_0008;
+  //   sel[1]=1 at bits[5:3]  → bank1 ← PE1
+  //   sel[0]=0 at bits[2:0]  → bank0 ← PE0
+  //   Full 48-bit config for output xbar (16 outputs × SEL_W=3)
+  // ───────────────────────────────────────────────────────────────────────────
 
   // Test stimulus values
   localparam logic [7:0] GPR0_INIT    = 8'hAA;
   localparam logic [7:0] GPR1_INIT    = 8'h55;
-  localparam logic [7:0] CGRA_PE0_OUT = GPR0_INIT + GPR1_INIT; // 0xFF — simulated ADD
-  localparam logic [7:0] CGRA_PE1_OUT = GPR1_INIT + 8'h01;     // 0x56 — simulated INC
-
-  // CGRA pipeline latency for this test (must be < 128, the shift_reg MAX_PIPE_STAGE)
-  localparam int LAT = 4;
+  localparam logic [7:0] CGRA_PE0_OUT = GPR0_INIT + GPR1_INIT; // 0xFF — ADD
+  localparam logic [7:0] CGRA_PE1_OUT = GPR1_INIT + 8'h01;     // 0x56 — INC
 
   // ===========================================================================
-  // FDR Metadata Generator  (mirrors MetadataGenerator in tb_dice_core_pkg.sv)
-  //
-  // Generates a randomized fdr_meta_t with lat constrained to [1:10] and the
-  // register bitmaps fixed to read GPR0+GPR1 and write-back GPR0.
+  // Waveform dump (compile with +define+FSDB to enable)
   // ===========================================================================
-  class FdrMetaGen;
-    rand fdr_meta_t meta;
+  `ifdef FSDB
+    initial begin
+      $fsdbDumpfile("waveform.fsdb");
+      $fsdbDumpvars(0, tb_dice_backend_cgra, "+struct", "+mda");
+    end
+  `endif
 
-    constraint c_lat {
-      meta.lat inside {[1:10]};
+  // ===========================================================================
+  // MetadataGenerator — identical structure to tb_dice_core_pkg.sv.
+  // Generates pgraph_meta_t; caller extracts fdr_meta_t fields from it.
+  // ===========================================================================
+  class MetadataGenerator;
+    rand pgraph_meta_t metadata;
+
+    constraint base_metadata {
+      metadata.bitstream_length inside {[1:255]};
+      metadata.num_stores inside {[0:3]};
+      metadata.lat inside {[1:10]};
+      metadata.unrolling_factor == 0;
+      metadata.barrier == 0;
+      metadata.parameter_load == 0;
+      metadata.bitstream_addr[METADATA_ALIGN-1:0] == '0;
     }
 
-    constraint c_bitmaps {
-      meta.in_regs_bitmap[0]  == 1'b1;  // read  GPR0 (RF bank 0)
-      meta.in_regs_bitmap[1]  == 1'b1;  // read  GPR1 (RF bank 1)
-      meta.out_regs_bitmap[0] == 1'b1;  // write GPR0 (RF bank 0)
-    }
-
-    constraint c_misc {
-      meta.bitstream_length == 8'd64;
-      meta.unrolling_factor == 2'd0;
-      meta.parameter_load   == 1'b0;
+    constraint branch_metadata {
+      metadata.branch_meta.branch_ena == 0;
+      metadata.branch_meta.branch_uni dist {0:=50, 1:=50};
+      metadata.branch_meta.branch_pred_reg inside {[0:7]};
+      metadata.branch_meta.branch_jump_target_offset inside {[1:3]};
+      metadata.branch_meta.branch_reconv_offset inside {[1:3]};
     }
   endclass
 
@@ -112,37 +143,30 @@ module tb_dice_backend_cgra;
 
   logic clk, rst;
 
-  // FDR interface
   fdr_if fdr_bus ();
 
-  // TMCU outputs — unused in this test, just drain them
-  logic                                                                          tmcu_valid;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0]                                               tmcu_block_id;
-  logic [DICE_TID_WIDTH-1:0]                                                     tmcu_base_tid;
-  logic [DICE_TID_BITMAP_WIDTH-1:0]                                              tmcu_tid_bitmap;
-  logic                                                                          tmcu_write_enable;
-  logic [DICE_CACHE_LINE_SIZE*8-1:0]                                             tmcu_write_data;
-  logic [DICE_CACHE_LINE_SIZE-1:0]                                               tmcu_write_mask;
-  logic [DICE_ADDR_WIDTH-1:0]                                                    tmcu_address;
-  logic [1:0]                                                                    tmcu_size;
-  logic [DICE_MAX_REG_WIDTH-1:0]                                                 tmcu_ld_dest_reg;
+  // TMCU outputs — drain
+  logic                                                                           tmcu_valid;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0]                                                tmcu_block_id;
+  logic [DICE_TID_WIDTH-1:0]                                                      tmcu_base_tid;
+  logic [DICE_TID_BITMAP_WIDTH-1:0]                                               tmcu_tid_bitmap;
+  logic                                                                           tmcu_write_enable;
+  logic [DICE_CACHE_LINE_SIZE*8-1:0]                                              tmcu_write_data;
+  logic [DICE_CACHE_LINE_SIZE-1:0]                                                tmcu_write_mask;
+  logic [DICE_ADDR_WIDTH-1:0]                                                     tmcu_address;
+  logic [1:0]                                                                     tmcu_size;
+  logic [DICE_MAX_REG_WIDTH-1:0]                                                  tmcu_ld_dest_reg;
   logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] tmcu_address_map;
 
-  // mem_rsp_* — used to pre-load the RF via the LDST write path.
-  // cache_wr_cmd fields (DE_pkg types):
-  //   base_tid       : $clog2(DICE_NUM_MAX_THREADS_PER_CORE) bits = 4 bits
-  //   tid_bitmap     : TID_BITMAP_WIDTH bits                    = 8 bits
-  //   ld_dest_reg    : DICE_REG_ADDR_WIDTH bits                  = 5 bits
-  //   address_map    : NUMBER_OF_MAX_COALESCED_COMMANDS×BASE_ADDRESS_OFFSET = 8×5 bits
-  //   data           : CACHE_LINE_SIZE×8 bits                   = 256 bits
-  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]               mem_rsp_base_tid;
-  logic [TID_BITMAP_WIDTH-1:0]                                      mem_rsp_tid_bitmap;
-  logic [DICE_REG_ADDR_WIDTH-1:0]                                   mem_rsp_ld_dest_reg;
+  // mem_rsp — LDST pre-load path
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                    mem_rsp_base_tid;
+  logic [TID_BITMAP_WIDTH-1:0]                                          mem_rsp_tid_bitmap;
+  logic [DICE_REG_ADDR_WIDTH-1:0]                                       mem_rsp_ld_dest_reg;
   logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] mem_rsp_address_map;
-  logic [(CACHE_LINE_SIZE*8)-1:0]                                   mem_rsp_data;
-  logic                                                             mem_rsp_valid;
+  logic [(CACHE_LINE_SIZE*8)-1:0]                                       mem_rsp_data;
+  logic                                                                 mem_rsp_valid;
 
-  // BCT — accept all commits immediately
+  // BCT
   logic                         eblock_commit_valid;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id;
 
@@ -153,9 +177,7 @@ module tb_dice_backend_cgra;
   dice_backend u_dut (
     .clk_i                 (clk),
     .rst_i                 (rst),
-
     .fdr_if_i              (fdr_bus),
-
     .tmcu_valid_o          (tmcu_valid),
     .tmcu_block_id_o       (tmcu_block_id),
     .tmcu_base_tid_o       (tmcu_base_tid),
@@ -168,31 +190,24 @@ module tb_dice_backend_cgra;
     .tmcu_ld_dest_reg_o    (tmcu_ld_dest_reg),
     .tmcu_address_map_o    (tmcu_address_map),
     .tmcu_ready_i          (1'b1),
-
     .mem_rsp_base_tid_i    (mem_rsp_base_tid),
     .mem_rsp_tid_bitmap_i  (mem_rsp_tid_bitmap),
     .mem_rsp_ld_dest_reg_i (mem_rsp_ld_dest_reg),
     .mem_rsp_address_map_i (mem_rsp_address_map),
     .mem_rsp_data_i        (mem_rsp_data),
     .mem_rsp_valid_i       (mem_rsp_valid),
-
     .eblock_commit_valid_o (eblock_commit_valid),
     .eblock_commit_id_o    (eblock_commit_id),
     .eblock_commit_ready_i (1'b1),
-
     .hw_cta_pending_o      ()
   );
 
   // ===========================================================================
-  // Clock
+  // Clock & timeout
   // ===========================================================================
 
   initial clk = 1'b0;
   always #(ClkPeriod/2) clk = ~clk;
-
-  // ===========================================================================
-  // Timeout
-  // ===========================================================================
 
   int cyc;
   always_ff @(posedge clk or posedge rst) begin
@@ -200,7 +215,7 @@ module tb_dice_backend_cgra;
     else begin
       cyc <= cyc + 1;
       if (cyc >= TimeoutCycles) begin
-        $error("[TIMEOUT] simulation exceeded %0d cycles", TimeoutCycles);
+        $error("[TIMEOUT] exceeded %0d cycles", TimeoutCycles);
         $finish;
       end
     end
@@ -226,49 +241,80 @@ module tb_dice_backend_cgra;
     @(posedge clk);
   endtask
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ldst_write_gpr — write one byte into GPR[gpr_idx] for TID=0.
-  //
-  // Uses the mem_rsp_* (LDST) path that feeds dice_rf_ctrl.
-  // bank_select(tid=0, rs=gpr_idx) = (0 + gpr_idx) & 7 = gpr_idx, so a
-  // single command slot with address_map[0]=0 writes into the correct bank.
-  // ─────────────────────────────────────────────────────────────────────────
-  task automatic ldst_write_gpr(
-    input logic [DICE_REG_ADDR_WIDTH-1:0] gpr_idx,
-    input logic [7:0]                     value
+  // Staging registers for CGRA write forces (force RHS cannot use automatic vars)
+  logic [DICE_TID_WIDTH-1:0]                                         cgra_wr_tid_q;
+  logic [(DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH-1:0]   cgra_wr_data_q;   // 88b
+  logic [DICE_TOTAL_REGS-1:0]                                        cgra_wr_bitmap_q;
+
+  // Pre-load RF via the CGRA write port on dice_rf_ctrl.
+  // Mirrors write_cgra_only() from dice_rf_ctrl_tb.sv.
+  //   tid      – thread ID to write
+  //   data     – packed 88-bit bus: bits[i*8+:8] = GPR bank i data
+  //   wr_bitmap – DICE_TOTAL_REGS-wide mask; bit i = 1 writes GPR bank i
+  task automatic write_cgra_gpr(
+    input logic [DICE_TID_WIDTH-1:0]                                        tid,
+    input logic [(DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH-1:0]  data,
+    input logic [DICE_TOTAL_REGS-1:0]                                       wr_bitmap
   );
-    @(negedge clk);
-    mem_rsp_base_tid    = '0;
-    mem_rsp_ld_dest_reg = gpr_idx;
-    mem_rsp_tid_bitmap  = 8'h01;  // command slot 0 valid → TID = base(0) + map[0](0) = 0
-    mem_rsp_address_map = '0;
-    mem_rsp_data        = '0;
-    mem_rsp_data[7:0]   = value;  // slot 0 data
-    mem_rsp_valid       = 1'b1;
+    cgra_wr_tid_q    = tid;
+    cgra_wr_data_q   = data;
+    cgra_wr_bitmap_q = wr_bitmap;
+    force u_dut.u_dice_rf_ctrl.cgra_valid_i = 1'b1;
+    force u_dut.u_dice_rf_ctrl.cgra_tid_i   = cgra_wr_tid_q;
+    force u_dut.u_dice_rf_ctrl.cgra_data_i  = cgra_wr_data_q;
+    force u_dut.u_dice_rf_ctrl.wr_bitmap_i  = cgra_wr_bitmap_q;
     @(posedge clk);
-    @(negedge clk);
-    mem_rsp_valid = 1'b0;
     @(posedge clk);
+    release u_dut.u_dice_rf_ctrl.cgra_valid_i;
+    release u_dut.u_dice_rf_ctrl.cgra_tid_i;
+    release u_dut.u_dice_rf_ctrl.cgra_data_i;
+    release u_dut.u_dice_rf_ctrl.wr_bitmap_i;
   endtask
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // drive_fdr — present one FDR packet and hold it stable for `meta.lat`
-  // cycles so the TID_SHIFT shift-register captures the correct latency.
-  // ─────────────────────────────────────────────────────────────────────────
+  // Apply a fake bitstream crossbar config.
+  //
+  // We force the RTL cfg_sel signals (driven by assign='0 in dice_backend) to
+  // the desired values and pulse xbar_cfg_load for one cycle.  The crossbar's
+  // always_ff then naturally latches sel_reg = cfg_sel_i.  Forcing a net driven
+  // by a continuous assignment is reliable in VCS; forcing sel_reg directly
+  // (an always_ff variable) is not, because VCS may release the force when the
+  // always_ff block evaluates.
+  // force RHS cannot reference automatic (task-local) variables; copy inputs
+  // into module-level statics first.
+  logic [31:0] xbar_in_cfg_q;
+  logic [47:0] xbar_out_cfg_q;
+
+  task automatic apply_xbar_cfg(
+    input logic [31:0] in_cfg_sel,   // cfg_sel for input  xbar (8  outputs × SEL_W=4 → 32b)
+    input logic [47:0] out_cfg_sel   // cfg_sel for output xbar (16 outputs × SEL_W=3 → 48b)
+  );
+    xbar_in_cfg_q  = in_cfg_sel;
+    xbar_out_cfg_q = out_cfg_sel;
+    force u_dut.gpr_rd_xbar_cfg_sel = xbar_in_cfg_q;
+    force u_dut.gpr_wb_xbar_cfg_sel = xbar_out_cfg_q;
+    force u_dut.xbar_cfg_load       = 1'b1;
+    @(posedge clk);  // always_ff latches sel_reg in both crossbars
+    release u_dut.xbar_cfg_load;       // back to 0; no further latching
+    release u_dut.gpr_rd_xbar_cfg_sel; // sel_reg now holds values permanently
+    release u_dut.gpr_wb_xbar_cfg_sel;
+  endtask
+
+  task automatic release_xbar_cfg();
+    // Forces were released in apply_xbar_cfg after latching; nothing to do.
+  endtask
+
+  // Dispatch FDR for TID=0 using the fdr_meta_t derived from the caller's
+  // MetadataGenerator output.  Hold valid until ready is asserted (handshake).
   task automatic drive_fdr(input fdr_meta_t meta);
     fdr_t pkt;
     pkt                  = '0;
-    pkt.real_active_mask = {{(DICE_NUM_MAX_THREADS_PER_CORE-1){1'b0}}, 1'b1}; // TID=0 only
+    pkt.real_active_mask = {{(DICE_NUM_MAX_THREADS_PER_CORE-1){1'b0}}, 1'b1}; // TID=0
     pkt.metadata         = meta;
-
     @(negedge clk);
     fdr_bus.valid = 1'b1;
     fdr_bus.data  = pkt;
-    @(posedge clk);
-
-    // Keep metadata.lat stable while the shift-reg pipeline fills
-    repeat(int'(meta.lat)) @(posedge clk);
-
+    // Hold valid until the receiver asserts ready (valid+ready handshake)
+    do @(posedge clk); while (!fdr_bus.ready);
     @(negedge clk);
     fdr_bus.valid = 1'b0;
     fdr_bus.data  = '0;
@@ -286,10 +332,10 @@ module tb_dice_backend_cgra;
     input logic [7:0] exp
   );
     if (got === exp) begin
-      $display("  PASS  %-45s  got=0x%02h", label, got);
+      $display("  PASS  %-50s  got=0x%02h", label, got);
       pass_count++;
     end else begin
-      $error("  FAIL  %-45s  got=0x%02h  exp=0x%02h", label, got, exp);
+      $error("  FAIL  %-50s  got=0x%02h  exp=0x%02h", label, got, exp);
       fail_count++;
     end
   endtask
@@ -300,208 +346,209 @@ module tb_dice_backend_cgra;
 
   initial begin
 
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
     // Phase 0 — Reset
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
     reset_dut();
     $display("[TB] Reset complete");
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 1 — Pre-load register file
-    //   GPR0[TID=0] = 0xAA   →   RF bank 0, address 0
-    //   GPR1[TID=0] = 0x55   →   RF bank 1, address 0
-    // ─────────────────────────────────────────────────────────────────────
-    ldst_write_gpr(DICE_REG_ADDR_WIDTH'(0), GPR0_INIT);
-    ldst_write_gpr(DICE_REG_ADDR_WIDTH'(1), GPR1_INIT);
-    repeat(3) @(posedge clk);
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 1 — Pre-load register file via CGRA write port
+    //   GPR0[TID=0] = 0xAA  →  RF bank 0  (cgra_data_i[7:0])
+    //   GPR1[TID=0] = 0x55  →  RF bank 1  (cgra_data_i[15:8])
+    //   wr_bitmap[1:0] = 2'b11 enables writes to banks 0 and 1
+    // ─────────────────────────────────────────────────────────────────────────
+    begin
+      // Build 88-bit data bus: bank0 at [7:0], bank1 at [15:8], rest zero
+      logic [(DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH-1:0] init_data;
+      init_data          = '0;
+      init_data[0*8 +: 8] = GPR0_INIT;
+      init_data[1*8 +: 8] = GPR1_INIT;
+      write_cgra_gpr(DICE_TID_WIDTH'(0), init_data, DICE_TOTAL_REGS'(18'h0003));
+    end
+    repeat(2) @(posedge clk);
     $display("[TB] RF loaded:  GPR0[TID=0]=0x%02h  GPR1[TID=0]=0x%02h",
              GPR0_INIT, GPR1_INIT);
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 2 — Configure crossbars
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 2 — Apply fake bitstream crossbar configuration
     //
-    //  Input xbar  (9 RF banks → 8 PE ports, SEL_WIDTH=4):
-    //    sel_reg[0] = 4'd0 → PE port 0 reads RF bank 0 (GPR0 for TID=0)
-    //    sel_reg[1] = 4'd1 → PE port 1 reads RF bank 1 (GPR1 for TID=0)
-    //    sel_reg[2..7] = 4'd0 (tied to bank 0, unused PEs)
+    //   IN_XBAR_CFG_SEL  = 32'h0000_0010  →  PE0←bank0, PE1←bank1
+    //   OUT_XBAR_CFG_SEL = 32'h0000_0008  →  bank0←PE0, bank1←PE1
     //
-    //  Equivalent bitstream word (once decoder is wired):
-    //    gpr_xbar_cfg_sel = {4'd0, 4'd0, 4'd0, 4'd0, 4'd0, 4'd0, 4'd1, 4'd0}
-    //                     = 32'h0000_0010
+    //   Decoding IN_XBAR_CFG_SEL (SEL_W=4):
+    //     bits[3:0]  = 4'h0  → sel_reg[0] = 0  → PE0 gets data_i[0] = GPR0
+    //     bits[7:4]  = 4'h1  → sel_reg[1] = 1  → PE1 gets data_i[1] = GPR1
+    //     bits[31:8] = 0     → sel_reg[2..7] = 0
     //
-    //  Output xbar (8 PE ports → 9 RF banks, SEL_WIDTH=3):
-    //    sel_reg[0] = 3'd0 → RF bank 0 gets CGRA PE output 0
-    //    sel_reg[1] = 3'd1 → RF bank 1 gets CGRA PE output 1
-    //    sel_reg[2..8] = 3'd0 (tied to PE0, unused banks)
+    //   Decoding OUT_XBAR_CFG_SEL (SEL_W=3):
+    //     bits[2:0]  = 3'h0  → sel_reg[0] = 0  → bank0 gets cgra_data[0] = PE0
+    //     bits[5:3]  = 3'h1  → sel_reg[1] = 1  → bank1 gets cgra_data[1] = PE1
+    //     bits[31:6] = 0     → sel_reg[2..10] = 0
+    // ─────────────────────────────────────────────────────────────────────────
+    apply_xbar_cfg(IN_XBAR_CFG_SEL, OUT_XBAR_CFG_SEL);
+    $display("[TB] Xbar config applied:");
+    $display("[TB]   Input  cfg_sel = 32'h%08h  (PE0←bank0, PE1←bank1)",
+             IN_XBAR_CFG_SEL);
+    $display("[TB]   Output cfg_sel = 48'h%012h  (bank0←PE0, bank1←PE1)",
+             OUT_XBAR_CFG_SEL);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 3 — Inject simulated CGRA computation result
     //
-    //  Equivalent bitstream word (lower 27 bits of gpr_xbar_cfg_sel once decoder wired):
-    //    {3'd0, 3'd0, 3'd0, 3'd0, 3'd0, 3'd0, 3'd0, 3'd1, 3'd0} = 27'h000_0008
-    // ─────────────────────────────────────────────────────────────────────
+    //   Force cgra_gpr_data_lo before dispatch so it is stable when the
+    //   write-back valid arrives.  cgra_gpr_data_lo layout (from mini_dice
+    //   port connections in dice_backend):
+    //     bits[ 7: 0] = PE out 0  (sb_0_8 East)
+    //     bits[15: 8] = PE out 1  (sb_2_8 East)
+    //     bits[23:16] = PE out 2  (sb_4_8 East)
+    //     bits[31:24] = PE out 3  (sb_6_8 East)
+    //     bits[39:32] = PE out 4  (sb_0_0 West)
+    //     bits[47:40] = PE out 5  (sb_2_0 West)
+    //     bits[55:48] = PE out 6  (sb_4_0 West)
+    //     bits[63:56] = PE out 7  (sb_6_0 West)
+    //
+    //   PE0 = ADD(GPR0, GPR1) = 0xAA + 0x55 = 0xFF
+    //   PE1 = INC(GPR1)       = 0x55 + 0x01 = 0x56
+    // ─────────────────────────────────────────────────────────────────────────
+    force u_dut.cgra_gpr_data_lo = {
+      8'h00,        // PE7 — unused
+      8'h00,        // PE6 — unused
+      8'h00,        // PE5 — unused
+      8'h00,        // PE4 — unused
+      8'h00,        // PE3 — unused
+      8'h00,        // PE2 — unused
+      CGRA_PE1_OUT, // PE1 = 0x56  (INC)
+      CGRA_PE0_OUT  // PE0 = 0xFF  (ADD)
+    };
+    $display("[TB] CGRA outputs forced:  PE0=0x%02h (ADD)  PE1=0x%02h (INC)",
+             CGRA_PE0_OUT, CGRA_PE1_OUT);
 
-    // Input xbar sel_reg
-    force u_dut.u_gpr_xbar_in.sel_reg[0] = IN_SEL_W'(0); // PE0 ← bank0 (GPR0)
-    force u_dut.u_gpr_xbar_in.sel_reg[1] = IN_SEL_W'(1); // PE1 ← bank1 (GPR1)
-    force u_dut.u_gpr_xbar_in.sel_reg[2] = IN_SEL_W'(0);
-    force u_dut.u_gpr_xbar_in.sel_reg[3] = IN_SEL_W'(0);
-    force u_dut.u_gpr_xbar_in.sel_reg[4] = IN_SEL_W'(0);
-    force u_dut.u_gpr_xbar_in.sel_reg[5] = IN_SEL_W'(0);
-    force u_dut.u_gpr_xbar_in.sel_reg[6] = IN_SEL_W'(0);
-    force u_dut.u_gpr_xbar_in.sel_reg[7] = IN_SEL_W'(0);
-
-    // Output xbar sel_reg
-    force u_dut.u_gpr_xbar_out.sel_reg[0] = OUT_SEL_W'(0); // bank0 ← PE0
-    force u_dut.u_gpr_xbar_out.sel_reg[1] = OUT_SEL_W'(1); // bank1 ← PE1
-    force u_dut.u_gpr_xbar_out.sel_reg[2] = OUT_SEL_W'(0);
-    force u_dut.u_gpr_xbar_out.sel_reg[3] = OUT_SEL_W'(0);
-    force u_dut.u_gpr_xbar_out.sel_reg[4] = OUT_SEL_W'(0);
-    force u_dut.u_gpr_xbar_out.sel_reg[5] = OUT_SEL_W'(0);
-    force u_dut.u_gpr_xbar_out.sel_reg[6] = OUT_SEL_W'(0);
-    force u_dut.u_gpr_xbar_out.sel_reg[7] = OUT_SEL_W'(0);
-    force u_dut.u_gpr_xbar_out.sel_reg[8] = OUT_SEL_W'(0);
-
-    $display("[TB] Xbar config: in[PE0]←bank0  in[PE1]←bank1 | out[bank0]←PE0  out[bank1]←PE1");
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 3 — Dispatch FDR (TID=0)
-    //   FdrMetaGen: mirrors MetadataGenerator from tb_dice_core_pkg.sv but
-    //   targets fdr_meta_t; lat is randomized in [1:10] then pinned to LAT.
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 4 — Generate metadata and dispatch FDR
+    //
+    //   MetadataGenerator matches tb_dice_core_pkg.sv exactly.
+    //   We override in/out_regs_bitmap after randomization to pin which
+    //   registers participate in this test.
+    //
+    //   in_regs_bitmap[0]  = 1  →  read GPR0
+    //   in_regs_bitmap[1]  = 1  →  read GPR1
+    //   out_regs_bitmap[0] = 1  →  write-back GPR0
+    // ─────────────────────────────────────────────────────────────────────────
     begin
-      FdrMetaGen  gen = new();
-      fdr_meta_t  meta;
+      MetadataGenerator gen = new();
+      fdr_meta_t        meta;
 
-      if (!gen.randomize() with { meta.lat == LAT; })
-        $fatal(1, "[TB] FdrMetaGen randomize() failed");
+      if (!gen.randomize())
+        $fatal(1, "[TB] MetadataGenerator randomize() failed");
 
-      meta = gen.meta;
+      // Extract fdr_meta_t fields from pgraph_meta_t
+      meta                  = '0;
+      meta.bitstream_length = gen.metadata.bitstream_length;
+      meta.lat              = gen.metadata.lat;
+      meta.unrolling_factor = gen.metadata.unrolling_factor;
+      meta.parameter_load   = gen.metadata.parameter_load;
+      meta.ld_dest_regs     = gen.metadata.ld_dest_regs;
+      meta.num_stores       = gen.metadata.num_stores;
 
-      // Pin timing-critical fields explicitly
-      meta.lat             = 8'(LAT);
-      meta.in_regs_bitmap  = REG_NUM'(18'h0_0003); // GPR0 (bit0) + GPR1 (bit1)
-      meta.out_regs_bitmap = REG_NUM'(18'h0_0001); // write-back GPR0 (bit0)
+      // Pin register bitmaps for this test
+      meta.in_regs_bitmap              = '0;
+      meta.in_regs_bitmap[0]           = 1'b1; // GPR0
+      meta.in_regs_bitmap[1]           = 1'b1; // GPR1
+      meta.out_regs_bitmap             = '0;
+      meta.out_regs_bitmap[0]          = 1'b1; // write-back GPR0
+
+      $display("[TB] FDR metadata:  lat=%0d  in_bmp=0x%05h  out_bmp=0x%05h",
+               meta.lat, meta.in_regs_bitmap, meta.out_regs_bitmap);
 
       drive_fdr(meta);
-      $display("[TB] FDR dispatched  lat=%0d  in_bmp=0x%05h  out_bmp=0x%05h",
-               meta.lat, meta.in_regs_bitmap, meta.out_regs_bitmap);
+      $display("[TB] FDR dispatched for TID=0");
+
+      // ───────────────────────────────────────────────────────────────────────
+      // Phase 5 — Check input crossbar (RF → CGRA side)
+      //
+      //   After the dispatcher triggers an RF read for TID=0:
+      //     rd_data_lo[7:0]  = RF bank0[TID=0] = 0xAA
+      //     rd_data_lo[15:8] = RF bank1[TID=0] = 0x55
+      //
+      //   Input xbar with sel_reg = IN_XBAR_CFG_SEL:
+      //     gpr_rd_xbar_lo[0] = data_i[ sel=0 ] = bank0 data = 0xAA
+      //     gpr_rd_xbar_lo[1] = data_i[ sel=1 ] = bank1 data = 0x55
+      //
+      //   Wait long enough for dispatcher + RF read pipeline.
+      // ───────────────────────────────────────────────────────────────────────
+      repeat(12) @(posedge clk);
+
+      // Debug: isolate which layer produces wrong values
+      $display("[TB] DBG sel_reg      = 32'h%08h  (expect 32'h00000010)",
+               u_dut.u_gpr_xbar_in.sel_reg);
+      $display("[TB] DBG rd_data_lo[0]= 0x%02h  (expect 0xaa)",
+               u_dut.rd_data_lo[7:0]);
+      $display("[TB] DBG rd_data_lo[1]= 0x%02h  (expect 0x55)",
+               u_dut.rd_data_lo[15:8]);
+      $display("[TB] DBG xbar data_i[0]=0x%02h  data_i[1]=0x%02h",
+               u_dut.u_gpr_xbar_in.data_i[0], u_dut.u_gpr_xbar_in.data_i[1]);
+
+      $display("[TB] ─── Phase 5: input crossbar (RF → CGRA) ───");
+      check8("gpr_rd_xbar_lo[PE0] == GPR0_INIT (0xAA)",
+             u_dut.gpr_rd_xbar_lo[0], GPR0_INIT);
+      check8("gpr_rd_xbar_lo[PE1] == GPR1_INIT (0x55)",
+             u_dut.gpr_rd_xbar_lo[1], GPR1_INIT);
+
+      // ───────────────────────────────────────────────────────────────────────
+      // Phase 6 — Check output crossbar (CGRA → RF side)
+      //
+      //   cgra_gpr_data_lo is forced; output xbar routes immediately:
+      //     gpr_wb_xbar_lo[0] = cgra_data_lo[ sel=0 ] = PE0 = 0xFF
+      //     gpr_wb_xbar_lo[1] = cgra_data_lo[ sel=1 ] = PE1 = 0x56
+      // ───────────────────────────────────────────────────────────────────────
+      $display("[TB] ─── Phase 6: output crossbar (CGRA → RF) ───");
+      check8("gpr_wb_xbar_lo[bank0] == CGRA_PE0 (0xFF)",
+             u_dut.gpr_wb_xbar_lo[0], CGRA_PE0_OUT);
+      check8("gpr_wb_xbar_lo[bank1] == CGRA_PE1 (0x56)",
+             u_dut.gpr_wb_xbar_lo[1], CGRA_PE1_OUT);
+
+      // ───────────────────────────────────────────────────────────────────────
+      // Phase 7 — Wait for CGRA_V_SHIFT to assert cgra_v_lo
+      //
+      //   dice_backend CGRA_V_SHIFT shifts rf_rd_valid_lo by metadata.lat
+      //   cycles.  We already waited ~12 cycles; allow up to lat more cycles
+      //   plus some margin for dispatcher + RF-read overhead.
+      // ───────────────────────────────────────────────────────────────────────
+      $display("[TB] Waiting for cgra_v_lo (lat=%0d cycles from RF read valid)...",
+               meta.lat);
+
+      fork
+        begin : wait_v
+          @(posedge u_dut.cgra_v_lo);
+          $display("[TB] cgra_v_lo asserted at cycle %0d  tid_lo=0x%0h",
+                   cyc, u_dut.cgra_tid_lo);
+          disable timeout_v;
+        end
+        begin : timeout_v
+          repeat(int'(meta.lat) + 30) @(posedge clk);
+          $error("[TB] cgra_v_lo never asserted within expected window");
+          disable wait_v;
+        end
+      join
+
+      // Allow RF write-back to complete
+      repeat(5) @(posedge clk);
     end
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 4 — Check input crossbar outputs (RF → CGRA side)
-    //
-    //   After the dispatcher triggers an RF read for TID=0:
-    //     rd_data_lo[7:0]  = RF bank0[TID=0] = GPR0 = 0xAA
-    //     rd_data_lo[15:8] = RF bank1[TID=0] = GPR1 = 0x55
-    //
-    //   Input xbar (combinational through sel_reg):
-    //     gpr_rd_xbar_lo[0] = data_i[ sel_reg[0]=0 ] = rd_data_lo[7:0]  = 0xAA
-    //     gpr_rd_xbar_lo[1] = data_i[ sel_reg[1]=1 ] = rd_data_lo[15:8] = 0x55
-    //
-    //   Wait 10 cycles to cover dispatcher + RF-read latency.
-    // ─────────────────────────────────────────────────────────────────────
-    repeat(10) @(posedge clk);
-
-    $display("[TB] ─── Phase 4: input crossbar (RF → CGRA) ───");
-    check8("gpr_rd_xbar_lo[PE0] == GPR0_INIT (0xAA)",
-           u_dut.gpr_rd_xbar_lo[0], GPR0_INIT);
-    check8("gpr_rd_xbar_lo[PE1] == GPR1_INIT (0x55)",
-           u_dut.gpr_rd_xbar_lo[1], GPR1_INIT);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 5 — Inject simulated CGRA PE output data
-    //
-    //   cgra_gpr_data_lo layout (from mini_dice port connections):
-    //     bits[ 7: 0] = PE output 0  (sb_0_8 East)  — fed from gpr_rd_xbar_lo[4]
-    //     bits[15: 8] = PE output 1  (sb_2_8 East)  — fed from gpr_rd_xbar_lo[5]
-    //     bits[23:16] = PE output 2  (sb_4_8 East)  — fed from gpr_rd_xbar_lo[6]
-    //     bits[31:24] = PE output 3  (sb_6_8 East)  — fed from gpr_rd_xbar_lo[7]
-    //     bits[39:32] = PE output 4  (sb_0_0 West)  — fed from gpr_rd_xbar_lo[0]
-    //     bits[47:40] = PE output 5  (sb_2_0 West)  — fed from gpr_rd_xbar_lo[1]
-    //     bits[55:48] = PE output 6  (sb_4_0 West)  — fed from gpr_rd_xbar_lo[2]
-    //     bits[63:56] = PE output 7  (sb_6_0 West)  — fed from gpr_rd_xbar_lo[3]
-    //
-    //   We model a trivial 1-cycle ADD (PE0) and INC (PE1):
-    //     PE0 = GPR0 + GPR1 = 0xAA + 0x55 = 0xFF
-    //     PE1 = GPR1 + 1   = 0x55 + 0x01 = 0x56
-    // ─────────────────────────────────────────────────────────────────────
-    force u_dut.cgra_gpr_data_lo = {
-      8'h00,        // PE7 (unused)
-      8'h00,        // PE6 (unused)
-      8'h00,        // PE5 (unused)
-      8'h00,        // PE4 (unused)
-      8'h00,        // PE3 (unused)
-      8'h00,        // PE2 (unused)
-      CGRA_PE1_OUT, // PE1 = 0x56
-      CGRA_PE0_OUT  // PE0 = 0xFF
-    };
-
-    @(posedge clk);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 6 — Check output crossbar routing (CGRA → RF side)
-    //
-    //   Output xbar (combinational through sel_reg):
-    //     gpr_wb_xbar_lo[0] = cgra_gpr_data_lo[sel_reg[0]=0 * 8 +: 8] = PE0 = 0xFF
-    //     gpr_wb_xbar_lo[1] = cgra_gpr_data_lo[sel_reg[1]=1 * 8 +: 8] = PE1 = 0x56
-    // ─────────────────────────────────────────────────────────────────────
-    $display("[TB] ─── Phase 6: output crossbar (CGRA → RF) ───");
-    check8("gpr_wb_xbar_lo[bank0] == CGRA_PE0 (0xFF)",
-           u_dut.gpr_wb_xbar_lo[0], CGRA_PE0_OUT);
-    check8("gpr_wb_xbar_lo[bank1] == CGRA_PE1 (0x56)",
-           u_dut.gpr_wb_xbar_lo[1], CGRA_PE1_OUT);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 7 — Trigger RF write-back
-    //
-    //   cgra_tid_lo emerges from TID_SHIFT after `lat` cycles post-dispatch.
-    //   We already spent 10 (phase 4) + 1 (phase 5) cycles, and LAT=4, so
-    //   add a few more to be safe, then pulse cgra_v_lo for one clock edge.
-    //
-    //   cgra_v_lo is undriven in dice_backend (NOTE C above); force it here.
-    // ─────────────────────────────────────────────────────────────────────
-    repeat(LAT + 2) @(posedge clk);
-
-    $display("[TB] ─── Phase 7: RF write-back  (cgra_tid_lo=0x%0h) ───",
-             u_dut.cgra_tid_lo);
-
-    force u_dut.cgra_v_lo = 1'b1;
-    @(posedge clk);
-    force u_dut.cgra_v_lo = 1'b0;
-
-    repeat(3) @(posedge clk);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 8 — Release all forces
-    // ─────────────────────────────────────────────────────────────────────
-    release u_dut.u_gpr_xbar_in.sel_reg[0];
-    release u_dut.u_gpr_xbar_in.sel_reg[1];
-    release u_dut.u_gpr_xbar_in.sel_reg[2];
-    release u_dut.u_gpr_xbar_in.sel_reg[3];
-    release u_dut.u_gpr_xbar_in.sel_reg[4];
-    release u_dut.u_gpr_xbar_in.sel_reg[5];
-    release u_dut.u_gpr_xbar_in.sel_reg[6];
-    release u_dut.u_gpr_xbar_in.sel_reg[7];
-
-    release u_dut.u_gpr_xbar_out.sel_reg[0];
-    release u_dut.u_gpr_xbar_out.sel_reg[1];
-    release u_dut.u_gpr_xbar_out.sel_reg[2];
-    release u_dut.u_gpr_xbar_out.sel_reg[3];
-    release u_dut.u_gpr_xbar_out.sel_reg[4];
-    release u_dut.u_gpr_xbar_out.sel_reg[5];
-    release u_dut.u_gpr_xbar_out.sel_reg[6];
-    release u_dut.u_gpr_xbar_out.sel_reg[7];
-    release u_dut.u_gpr_xbar_out.sel_reg[8];
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 8 — Release forces
+    // ─────────────────────────────────────────────────────────────────────────
+    release_xbar_cfg();
     release u_dut.cgra_gpr_data_lo;
-    release u_dut.cgra_v_lo;
 
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
     // Phase 9 — Summary
-    // ─────────────────────────────────────────────────────────────────────
-    repeat(5) @(posedge clk);
-    $display("[TB] ══════════════════════════════════════════════════");
+    // ─────────────────────────────────────────────────────────────────────────
+    repeat(3) @(posedge clk);
+    $display("[TB] ══════════════════════════════════════════════════════════");
     $display("[TB]  SUMMARY:  %0d PASS   %0d FAIL", pass_count, fail_count);
-    $display("[TB] ══════════════════════════════════════════════════");
-
+    $display("[TB] ══════════════════════════════════════════════════════════");
     if (fail_count == 0)
       $display("[TB]  ALL TESTS PASSED");
     else
@@ -510,14 +557,6 @@ module tb_dice_backend_cgra;
     $finish;
   end
 
-  // ===========================================================================
-  // Waveform dump (compile with +define+FSDB to enable)
-  // ===========================================================================
-`ifdef FSDB
-  initial begin
-    $fsdbDumpfile("tb_dice_backend_cgra.fsdb");
-    $fsdbDumpvars(0, tb_dice_backend_cgra, "+struct", "+mda");
-  end
-`endif
+
 
 endmodule

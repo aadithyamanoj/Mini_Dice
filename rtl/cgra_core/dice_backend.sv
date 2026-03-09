@@ -45,7 +45,7 @@ module dice_backend
   logic dispatch_fifo_empty;
   logic [NUM_LANES*DICE_TID_WIDTH-1:0] rd_tid;
   logic [NUM_LANES-1:0] rd_tid_valid;
-  logic [`DICE_GPR_NUM-1:0] gpr_bitmap;
+  logic [DICE_TOTAL_REGS-1:0] full_reg_bitmap_lo;
 
   // Register File Control
   logic rf_rd_valid_lo;
@@ -72,13 +72,22 @@ module dice_backend
   // Crossbar configuration — sourced from the CGRA bitstream.
   // TODO: drive from bitstream decoder once that path is implemented.
   //       cfg_sel_i layout: bits [(i+1)*SEL_WIDTH-1 : i*SEL_WIDTH] = selector for output i.
-  logic [GPR_XBAR_NUM_OUTPUTS*($clog2(GPR_XBAR_NUM_INPUTS))-1:0]    gpr_xbar_cfg_sel;
-  logic [PRED_XBAR_NUM_OUTPUTS*($clog2(PRED_XBAR_NUM_INPUTS))-1:0]  pred_xbar_cfg_sel;
-  logic                                                   xbar_cfg_load;
+  //
+  // Input  crossbar: NUM_INPUTS=GPR_XBAR_NUM_INPUTS(16), NUM_OUTPUTS=GPR_XBAR_NUM_OUTPUTS(8)
+  //                  SEL_W = clog2(16) = 4  →  cfg_sel width = 8*4 = 32 bits
+  // Output crossbar: NUM_INPUTS=GPR_XBAR_NUM_OUTPUTS(8),  NUM_OUTPUTS=GPR_XBAR_NUM_INPUTS(16)
+  //                  SEL_W = clog2(8)  = 3  →  cfg_sel width = 16*3 = 48 bits
+  logic [GPR_XBAR_NUM_OUTPUTS*($clog2(GPR_XBAR_NUM_INPUTS))-1:0]   gpr_rd_xbar_cfg_sel;
+  logic [GPR_XBAR_NUM_INPUTS*($clog2(GPR_XBAR_NUM_OUTPUTS))-1:0]   gpr_wb_xbar_cfg_sel;
+  logic [PRED_XBAR_NUM_OUTPUTS*($clog2(PRED_XBAR_NUM_INPUTS))-1:0] pred_rd_xbar_cfg_sel;
+  logic [PRED_XBAR_NUM_INPUTS*($clog2(PRED_XBAR_NUM_OUTPUTS))-1:0] pred_wb_xbar_cfg_sel;
+  logic                                                              xbar_cfg_load;
 
-  assign gpr_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
-  assign pred_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
-  assign xbar_cfg_load     = '0; // TODO: pulse when new p-graph bitstream config is ready
+  assign gpr_rd_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
+  assign pred_rd_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
+  assign gpr_wb_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
+  assign pred_wb_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
+  assign xbar_cfg_load        = '0; // TODO: pulse when new p-graph bitstream config is ready
 
 
   // LDST write interface — pack module inputs into cache_wr_cmd
@@ -93,14 +102,14 @@ module dice_backend
   logic [DICE_TOTAL_REGS-1:0] wb_map_li; // shifted form metadata, goes to rf
 
 
-  // CGRA write-back wires (undriven for now)
-  logic                                          cgra_v_lo;
+  // CGRA write-back wires
+  logic                                          cgra_v_lo; // asserted lat cycles after RF read valid
   logic [NUM_PE_PORTS*DICE_REG_DATA_WIDTH-1:0] cgra_gpr_data_lo;
   logic [NUM_PE_PORTS-1:0]                     cgra_pred_data_lo;
   logic [DICE_TID_WIDTH-1:0]                     cgra_tid_lo;
 
   // Register file writeback from CGRA (after crossbar)
-  logic [((DICE_GPR_NUM+1)+DICE_PRED_NUM)-1:0]  cgra_data_lo; // combined GPR and predicate data
+  logic [((DICE_NUM_REGS+DICE_NUM_CONST)+DICE_NUM_PRED)-1:0]  cgra_data_lo; // combined GPR and predicate data
   assign cgra_data_lo = {gpr_wb_xbar_lo, pred_wb_xbar_lo};
 
   // TMCU input-side wires (from CGRA)
@@ -155,7 +164,7 @@ module dice_backend
       .dispatch_fifo_empty(dispatch_fifo_empty),
       .dispatch_tid_o(rd_tid),
       .dispatch_valid_o(rd_tid_valid),
-      .gpr_bitmap_o(gpr_bitmap),
+      .full_reg_bitmap_o(full_reg_bitmap_lo),
       .dispatcher_busy(dispatch_busy),
       .dispatcher_done(dispatcher_done)
   );
@@ -173,10 +182,10 @@ module dice_backend
       .rd_tid_ready_o(rf_rd_ready_lo),
       .rd_en_i(rd_tid_valid),
       .rd_tid_i(rd_tid),
-      .rd_bitmap_i(gpr_bitmap),
+      .rd_bitmap_i(full_reg_bitmap_lo),
       .rd_data_o(rd_data_lo),
       .rf_rd_valid_o(rf_rd_valid_lo),
-      .tid_o        (cgra_tid_li)
+      .tid_o        (cgra_tid_li),
 
       // Predicate output
       .pred_o(pred_lo),
@@ -209,17 +218,31 @@ module dice_backend
     
     shift_reg
         #(.WIDTH          (DICE_TOTAL_REGS)
-         ,.MAX_PIPE_STAGE (128+1) // 
+         ,.MAX_PIPE_STAGE (128+1) //
         )
         WB_MAP_SHIFT
         (.clk_i(clk_i)
-        ,.reset_i(rst_i)   
-        
-        ,.latency (fdr_if_i.data.metadata.lat+1) // 
+        ,.reset_i(rst_i)
+
+        ,.latency (fdr_if_i.data.metadata.lat+1) //
 
         ,.in_data (fdr_if_i.data.metadata.out_regs_bitmap) //straight from metadata
         ,.out_data (wb_map_li) //
         );
+
+  // CGRA valid: asserted `lat` cycles after the RF read produces valid data.
+  // Replaces a direct ready signal from mini_dice (which has no such output).
+  shift_reg
+      #(.WIDTH          (1)
+       ,.MAX_PIPE_STAGE (128)
+      )
+      CGRA_V_SHIFT
+      (.clk_i   (clk_i)
+      ,.reset_i (rst_i)
+      ,.latency (fdr_if_i.data.metadata.lat)
+      ,.in_data (rf_rd_valid_lo)   // pulse when RF read data is presented to CGRA
+      ,.out_data(cgra_v_lo)        // pulse to RF ctrl to trigger write-back
+      );
 
   // =========================================================================
   // Temporal Coalescing Unit (TMCU)
@@ -268,8 +291,8 @@ module dice_backend
       .rst_i      (rst_i),
       .data_i     (rd_data_lo),       
       .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (gpr_xbar_cfg_sel),
-      .data_o     (gpr_rd_xbar_lo)   // TODO: connect to CGRA PE data inputs
+      .cfg_sel_i  (gpr_rd_xbar_cfg_sel),
+      .data_o     (gpr_rd_xbar_lo)
   );
 
   cgra_crossbar #(
@@ -281,8 +304,8 @@ module dice_backend
       .rst_i      (rst_i),
       .data_i     (pred_lo),           
       .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (pred_xbar_cfg_sel),
-      .data_o     (pred_rd_xbar_lo)  // TODO: connect to CGRA PE pred inputs
+      .cfg_sel_i  (pred_rd_xbar_cfg_sel),
+      .data_o     (pred_rd_xbar_lo)
   );
 
   // =========================================================================
@@ -297,7 +320,7 @@ module dice_backend
       .rst_i      (rst_i),
       .data_i     (cgra_gpr_data_lo),
       .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (gpr_xbar_cfg_sel),
+      .cfg_sel_i  (gpr_wb_xbar_cfg_sel),
       .data_o     (gpr_wb_xbar_lo)
   );
 
@@ -310,7 +333,7 @@ module dice_backend
       .rst_i      (rst_i),
       .data_i     (cgra_pred_data_lo),
       .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (pred_xbar_cfg_sel),
+      .cfg_sel_i  (pred_wb_xbar_cfg_sel),
       .data_o     (pred_wb_xbar_lo)
   );
 
