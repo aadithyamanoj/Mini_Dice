@@ -33,6 +33,10 @@ module axi_lite_dtcm_wrap #(
     logic [6:0]  saved_byte_offset;
     logic [2:0]  saved_wr_row;
     logic [6:0]  saved_wr_offset;
+    wire [31:0] ar_addr_flat;
+    wire [31:0] aw_addr_flat;
+    assign ar_addr_flat = axi_i.ar_addr;
+    assign aw_addr_flat = axi_i.aw_addr;
     logic [31:0] saved_wr_data;
     logic [3:0]  saved_wr_strb;
     logic [6:0]  byte_offset;
@@ -49,12 +53,12 @@ module axi_lite_dtcm_wrap #(
         end else begin
             state_q <= state_d;
             if (state_q == IDLE && state_d == READ_WAIT) begin
-                saved_row_idx     <= axi_i.ar_addr[9:7];
-                saved_byte_offset <= axi_i.ar_addr[6:0];
+                saved_row_idx <= ar_addr_flat[9:7];
+                saved_byte_offset <= ar_addr_flat[6:0];
             end
             if (state_q == IDLE && state_d == WRITE_DO) begin
-                saved_wr_row    <= axi_i.aw_addr[9:7];
-                saved_wr_offset <= axi_i.aw_addr[6:0];
+                saved_wr_row    <= aw_addr_flat[9:7];
+                saved_wr_offset <= aw_addr_flat[6:0];
                 saved_wr_data   <= axi_i.w_data;
                 saved_wr_strb   <= axi_i.w_strb;
             end

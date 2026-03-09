@@ -18,8 +18,8 @@
 
 /// An AXI4 interface.
 interface AXI_BUS #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0,
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32,
   parameter int unsigned AXI_ID_WIDTH   = 0,
   parameter int unsigned AXI_USER_WIDTH = 0
 );
@@ -111,8 +111,8 @@ endinterface
 
 /// A clocked AXI4 interface for use in design verification.
 interface AXI_BUS_DV #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0,
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32,
   parameter int unsigned AXI_ID_WIDTH   = 0,
   parameter int unsigned AXI_USER_WIDTH = 0
 )(
@@ -268,8 +268,8 @@ endinterface
 /// An asynchronous AXI4 interface.
 interface AXI_BUS_ASYNC
 #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0,
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32,
   parameter int unsigned AXI_ID_WIDTH   = 0,
   parameter int unsigned AXI_USER_WIDTH = 0,
   parameter int unsigned BUFFER_WIDTH   = 0
@@ -357,8 +357,8 @@ endinterface
 
 /// An asynchronous AXI4 interface for Gray CDCs.
 interface AXI_BUS_ASYNC_GRAY #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0,
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32,
   parameter int unsigned AXI_ID_WIDTH = 0,
   parameter int unsigned AXI_USER_WIDTH = 0,
   parameter int unsigned LOG_DEPTH = 0
@@ -408,8 +408,8 @@ endinterface
 
 /// An AXI4-Lite interface.
 interface AXI_LITE #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32
 );
 
   localparam int unsigned AXI_STRB_WIDTH = AXI_DATA_WIDTH / 8;
@@ -472,8 +472,8 @@ endinterface
 
 /// A clocked AXI4-Lite interface for use in design verification.
 interface AXI_LITE_DV #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32
 )(
   input logic clk_i
 );
@@ -538,8 +538,8 @@ endinterface
 
 /// An asynchronous AXI4-Lite interface for Gray CDCs.
 interface AXI_LITE_ASYNC_GRAY #(
-  parameter int unsigned AXI_ADDR_WIDTH = 0,
-  parameter int unsigned AXI_DATA_WIDTH = 0,
+  parameter int unsigned AXI_ADDR_WIDTH = 32,
+  parameter int unsigned AXI_DATA_WIDTH = 32,
   parameter int unsigned LOG_DEPTH = 0
 );
 
