@@ -13,59 +13,37 @@ module cta_status_table
     input block_retire_status_t brt_info_i,
 
     // From cta controller
-    input logic                            clear_entry_valid_i,
-    input logic [DICE_HW_CTA_ID_WIDTH-1:0] clear_entry_hw_id_i,
+    input logic clear_entry_valid_i,
 
-    // Exposed status for each CTA
-    output dice_cta_status_t [DICE_NUM_MAX_CTA_PER_CORE-1:0] cta_status_o
+    // Exposed status for the single CTA
+    output dice_cta_status_t cta_status_o
 );
 
-  dice_cta_status_t [DICE_NUM_MAX_CTA_PER_CORE-1:0] cta_status_q;
-  dice_cta_status_t [DICE_NUM_MAX_CTA_PER_CORE-1:0] cta_status_d;
-
-  logic [DICE_HW_CTA_ID_WIDTH-1:0] bp_cta_id;  // what cta is being predicted
+  dice_cta_status_t cta_status_q, cta_status_d;
 
   always_comb begin
-    bp_cta_id = '0;
-
-    //copy over the old status
-    for (int i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin
-      cta_status_d[i] = cta_status_q[i];
-    end
-
-    //update the status from the BRT
-    for (int i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin
-      cta_status_d[i].has_pending_eblock = brt_info_i.hw_cta_pending[i];
-    end
-
-    //update the status from the branch predictor
+    cta_status_d = cta_status_q;
+    cta_status_d.has_pending_eblock = brt_info_i.has_pending_eblock;
     if (branch_predict_info_we_i) begin
-      bp_cta_id = branch_predict_info_i.hw_cta_id;
       if (branch_predict_info_i.valid_edits_bitmap[2])
-        cta_status_d[bp_cta_id].unresolved_control_divergence = branch_predict_info_i.unresolved_control_divergence;
+        cta_status_d.unresolved_control_divergence = branch_predict_info_i.unresolved_control_divergence;
       if (branch_predict_info_i.valid_edits_bitmap[1])
-        cta_status_d[bp_cta_id].predict_pc = branch_predict_info_i.predict_pc;
+        cta_status_d.predict_pc = branch_predict_info_i.predict_pc;
       if (branch_predict_info_i.valid_edits_bitmap[0])
-        cta_status_d[bp_cta_id].is_return = branch_predict_info_i.is_return;
+        cta_status_d.is_return = branch_predict_info_i.is_return;
     end
-
-    //clear the status from the cta controller
     if (clear_entry_valid_i) begin
-      cta_status_d[clear_entry_hw_id_i].unresolved_control_divergence = 1'b0;
-      cta_status_d[clear_entry_hw_id_i].is_return = 1'b0;
-      cta_status_d[clear_entry_hw_id_i].predict_pc = '0;
+      cta_status_d.unresolved_control_divergence = 1'b0;
+      cta_status_d.is_return = 1'b0;
+      cta_status_d.predict_pc = '0;
     end
   end
 
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
-      for (int i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin
-        cta_status_q[i] <= '0;
-      end
+      cta_status_q <= '0;
     end else begin
-      for (int i = 0; i < DICE_NUM_MAX_CTA_PER_CORE; i++) begin
-        cta_status_q[i] <= cta_status_d[i];
-      end
+      cta_status_q <= cta_status_d;
     end
   end
 

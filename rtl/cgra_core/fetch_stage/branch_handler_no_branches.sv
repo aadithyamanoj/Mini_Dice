@@ -29,8 +29,6 @@ module branch_handler_no_branches
 
 
     // CS -> FDR Stage buffer
-    input cta_size_e cta_size_i,
-    input logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id_i,
     input thread_mask_t cs_active_mask_i,
     input logic [DICE_ADDR_WIDTH-1:0] pc_i,
 
@@ -59,8 +57,6 @@ module branch_handler_no_branches
 
  // STACK UPDATE -> VALUES HARDCODED AND SVA WILL CHECK
  always_comb begin
-    simt_stack_update_o.hw_cta_id = hw_cta_id_i;
-    simt_stack_update_o.hw_cta_size = cta_size_i;
     simt_stack_update_o.update_with_divergence = 1'b0;
     simt_stack_update_o.update_next_pc = pc_i + DICE_METADATA_WIDTH;
     simt_stack_update_o.predicate_regs_value = '0;
@@ -106,12 +102,7 @@ assign branch_predict_info_o.valid_edits_bitmap = {2'b00, (update_state_q == UPD
 assign branch_predict_info_o.is_return = branch_meta_i.is_return;
 assign branch_predict_info_o.predict_pc = '0;
 assign branch_predict_info_o.unresolved_control_divergence = 1'b0;
-assign branch_predict_info_o.hw_cta_id = hw_cta_id_i;
-
-
-
 assign update_valid_o = (update_state_q == UPDATE_STACK);
-
 assign update_stack_fire = update_valid_o && update_ready_i;
 
 

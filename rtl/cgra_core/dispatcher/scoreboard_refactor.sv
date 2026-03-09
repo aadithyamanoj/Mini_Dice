@@ -1,5 +1,3 @@
-`include "dice_define.vh"
-
 module scoreboard_tid_entry
     import dice_pkg::*, 
            dice_frontend_pkg::*;

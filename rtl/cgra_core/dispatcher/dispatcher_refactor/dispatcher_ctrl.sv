@@ -1,6 +1,7 @@
 module dispatcher_control
-    import dice_pkg::*, 
-           dice_frontend_pkg::*;
+    import dice_pkg::*,
+           dice_frontend_pkg::*,
+           DE_pkg::*;  // CHUNK_ADDR_WIDTH from DE_pkg
 (
     output logic latch_inputs,
     output logic update_count,
@@ -17,7 +18,7 @@ module dispatcher_control
     input logic thread_chunk_done,
     input logic last_chunk_done,
     input logic dispatch_fifo_empty,
-    input logic [1:0] chunk_counter, max_chunks,
+    input logic [CHUNK_ADDR_WIDTH-1:0] chunk_counter, max_chunks,
     input logic clk, rst
 );
 
@@ -66,7 +67,7 @@ module dispatcher_control
 
     // Status outputs 
     assign dispatcher_busy = (ps == DISPATCHING);
-    assign dispatcher_done = (ps == DONE);
+    assign dispatcher_done = (ps == DISPATCHING) && (ns == DONE);
 
     // Synchronous reset
     always_ff @(posedge clk) begin
