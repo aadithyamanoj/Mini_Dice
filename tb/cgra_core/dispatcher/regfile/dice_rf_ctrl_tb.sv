@@ -50,10 +50,10 @@ import dice_pkg::*;
     //-------------------------------------------------------------------------
     // Write Interface Signals (CGRA)
     //-------------------------------------------------------------------------
-    logic [TID_WIDTH-1:0]               cgra_tid_i;
-    logic [(TOTAL_REGS*DATA_WIDTH)-1:0] cgra_data_i;
-    logic [TOTAL_REGS-1:0]              wr_bitmap_i;
-    logic                               cgra_valid_i;
+    logic [TID_WIDTH-1:0]                                     cgra_tid_i;
+    logic [((NUM_PORTS+NUM_PRED+1)*DATA_WIDTH)-1:0]           cgra_data_i;
+    logic [TOTAL_REGS-1:0]                                    wr_bitmap_i;
+    logic                                                     cgra_valid_i;
 
     //-------------------------------------------------------------------------
     // Write Interface Signals (LDST)
@@ -62,8 +62,8 @@ import dice_pkg::*;
     logic                             ldst_valid_i;
     logic                             ldst_ready_o;
 
-    // Predicate output — per-TID, all preds
-    logic [NUM_PRED*NUM_TID-1:0] pred_o;
+    // Predicate output — selected TID only, NUM_PRED bits
+    logic [NUM_PRED-1:0] pred_o;
 
     //-------------------------------------------------------------------------
     // Clock Generation
@@ -137,7 +137,6 @@ import dice_pkg::*;
     endtask
 
     // Reset DUT task
-    // Asserts reset for a specified number of cycles, then deasserts
     task reset_dut(input int num_cycles = 5);
         begin
             // Initialize all inputs to known state
@@ -170,7 +169,6 @@ import dice_pkg::*;
     endtask
 
     // Task to write all registers to zero
-    // Iterates through all TIDs and writes zeros to all banks
     task clear_all_registers();
         begin
             $display("[%0t] Clearing all registers...", $time);
@@ -184,7 +182,6 @@ import dice_pkg::*;
             end
 
             // Wait one more cycle to let the last write propagate
-            // through the single-entry buffer before deasserting valid
             @(posedge clk_i);
 
             cgra_valid_i = 1'b0;
@@ -226,6 +223,15 @@ import dice_pkg::*;
                                $time, tid, bank, rd_data_o[bank*DATA_WIDTH +: DATA_WIDTH]);
                     end
                 end
+
+                // Check pred registers for this TID (pred_o is muxed by rd_tid_i)
+                for (int p = 0; p < NUM_PRED; p++) begin
+                    if (pred_o[p] !== 1'b0) begin
+                        $error("[%0t] Pred reg not zero! TID=%0d, Pred=%0d, Val=%0b",
+                               $time, tid, p, pred_o[p]);
+                        error_count++;
+                    end
+                end
             end
 
             // Check const registers (shared, only need to check once)
@@ -239,19 +245,6 @@ import dice_pkg::*;
                            $time, c, rd_data_o[(NUM_PORTS+c)*DATA_WIDTH +: DATA_WIDTH]);
                 end
             end
-
-            // Check pred registers — per-TID
-            for (int tid = 0; tid < NUM_TID; tid++) begin
-                for (int p = 0; p < NUM_PRED; p++) begin
-                    if (pred_o[tid*NUM_PRED + p] !== 1'b0) begin
-                        $error("[%0t] Pred reg not zero! TID=%0d, Pred=%0d, Val=%0b",
-                               $time, tid, p, pred_o[tid*NUM_PRED + p]);
-                        error_count++;
-                    end
-                end
-            end
-            if (pred_o === '0)
-                $display("[%0t] All pred regs are zero", $time);
 
             rd_tid_valid_i = 1'b0;
             rd_en_i        = 1'b0;
@@ -328,15 +321,22 @@ import dice_pkg::*;
         return cmd;
     endfunction
 
-    // Task write cgra only
+    // Task: CGRA write to GPR banks with random data
+    // cgra_data_i layout in the DUT:
+    //   [0 : NUM_PORTS*DW-1]                    = GPR data (one per bank)
+    //   [NUM_PORTS*DW : (NUM_PORTS+1)*DW-1]     = const data (shared for all masked const regs)
+    //   bit (NUM_PORTS+1+j)*DW                  = pred data for pred j
     task write_cgra_only(input logic [TID_WIDTH-1:0] tid);
         begin
             cgra_valid_i = 1'b1;
             cgra_tid_i   = tid;
-            wr_bitmap_i = '1; // all regs enabled
-            for (int i = 0; i < TOTAL_REGS; i++) begin
+            wr_bitmap_i = '0;
+
+            // Write GPR banks only
+            for (int i = 0; i < NUM_PORTS; i++) begin
+                wr_bitmap_i[i] = 1'b1;
                 cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH] = $urandom;
-                $display("Writing to reg %0d: data=%0h", i, cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH]);
+                $display("Writing GPR bank %0d: data=%0h", i, cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH]);
             end
             $display("CGRA write: tid=%0d, mask=%0b", cgra_tid_i, wr_bitmap_i);
             @(posedge clk_i);
@@ -345,6 +345,55 @@ import dice_pkg::*;
         end
     endtask
 
+    // Task: CGRA write to a specific const register
+    // const data comes from cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH]
+    task write_cgra_const(
+          input logic [TID_WIDTH-1:0] tid
+        , input int const_idx
+        , input logic [DATA_WIDTH-1:0] data_val
+    );
+        begin
+            cgra_valid_i = 1'b1;
+            cgra_tid_i   = tid;
+            cgra_data_i  = '0;
+            wr_bitmap_i  = '0;
+            // Set the const mask bit in bitmap
+            wr_bitmap_i[NUM_PORTS + const_idx] = 1'b1;
+            // Const data is at the shared const slot
+            cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH] = data_val;
+            @(posedge clk_i);
+            @(posedge clk_i);
+            cgra_valid_i = 1'b0;
+            wr_bitmap_i  = '0;
+            @(posedge clk_i);
+            $display("[%0t] CGRA const write: const_idx=%0d, data=0x%0h", $time, const_idx, data_val);
+        end
+    endtask
+
+    // Task: CGRA write to a specific pred register
+    // pred data for pred j comes from cgra_data_i bit (NUM_PORTS+1+j)*DATA_WIDTH
+    task write_cgra_pred(
+          input logic [TID_WIDTH-1:0] tid
+        , input int pred_idx
+        , input logic pred_val
+    );
+        begin
+            cgra_valid_i = 1'b1;
+            cgra_tid_i   = tid;
+            cgra_data_i  = '0;
+            wr_bitmap_i  = '0;
+            // Set the pred mask bit in bitmap
+            wr_bitmap_i[NUM_PORTS + NUM_CONST + pred_idx] = 1'b1;
+            // Pred data bit location
+            cgra_data_i[(NUM_PORTS + 1 + pred_idx)*DATA_WIDTH] = pred_val;
+            @(posedge clk_i);
+            @(posedge clk_i);
+            cgra_valid_i = 1'b0;
+            wr_bitmap_i  = '0;
+            @(posedge clk_i);
+            $display("[%0t] CGRA pred write: pred_idx=%0d, tid=%0d, val=%0b", $time, pred_idx, tid, pred_val);
+        end
+    endtask
 
     task read_cgra_only(input logic [TID_WIDTH-1:0] tid);
         begin
@@ -362,8 +411,9 @@ import dice_pkg::*;
             for (int i = 0; i < NUM_CONST; i++) begin
                 $display("Read const %0d: %0h", i, rd_data_o[(NUM_PORTS+i)*DATA_WIDTH +: DATA_WIDTH]);
             end
+            // pred_o is muxed by rd_tid_i, so it shows preds for the selected TID
             for (int p = 0; p < NUM_PRED; p++) begin
-                $display("Pred[%0d] for TID %0d: %0b", p, tid, pred_o[tid*NUM_PRED + p]);
+                $display("Pred[%0d] for TID %0d: %0b", p, tid, pred_o[p]);
             end
             rd_tid_valid_i = 1'b0;
         end
@@ -428,8 +478,8 @@ import dice_pkg::*;
         // Apply reset
         reset_dut(20);
 
-        // ---- Test 1: CGRA write/read ----
-        $display("\n=== Test 1: CGRA write/read ===");
+        // ---- Test 1: CGRA GPR write/read ----
+        $display("\n=== Test 1: CGRA GPR write/read ===");
         write_cgra_only(0);
         @(posedge clk_i);
         read_cgra_only(0);
@@ -439,7 +489,7 @@ import dice_pkg::*;
         // ---- Test 2: LDST const write ----
         $display("\n=== Test 2: LDST const register write ===");
         write_ldst_const(0, 8'hAB);
-        // Verify const reg 0 updated
+        // Verify const reg 0 updated (const regs are combinational on rd_data_o)
         for (int c = 0; c < NUM_CONST; c++) begin
             $display("[%0t] Const[%0d] = 0x%0h", $time, c,
                      rd_data_o[(NUM_PORTS+c)*DATA_WIDTH +: DATA_WIDTH]);
@@ -456,56 +506,141 @@ import dice_pkg::*;
             else $error("LDST const[3] write failed: expected 0xCD, got 0x%0h",
                         rd_data_o[(NUM_PORTS+3)*DATA_WIDTH +: DATA_WIDTH]);
 
-        // ---- Test 3: LDST pred write (per-TID) ----
-        $display("\n=== Test 3: LDST pred register write (per-TID) ===");
+        // ---- Test 3: CGRA const write ----
+        $display("\n=== Test 3: CGRA const register write ===");
+        write_cgra_const(0, 1, 8'hEF);
+        $display("[%0t] Const[1] = 0x%0h", $time,
+                 rd_data_o[(NUM_PORTS+1)*DATA_WIDTH +: DATA_WIDTH]);
+        assert (rd_data_o[(NUM_PORTS+1)*DATA_WIDTH +: DATA_WIDTH] === 8'hEF)
+            else $error("CGRA const[1] write failed: expected 0xEF, got 0x%0h",
+                        rd_data_o[(NUM_PORTS+1)*DATA_WIDTH +: DATA_WIDTH]);
+        // Verify const[0] still holds 0xAB from Test 2
+        assert (rd_data_o[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH] === 8'hAB)
+            else $error("Const[0] corrupted: expected 0xAB, got 0x%0h",
+                        rd_data_o[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH]);
+
+        // ---- Test 4: LDST pred write (per-TID) ----
+        $display("\n=== Test 4: LDST pred register write (per-TID) ===");
         // Write pred[0] = 1 for TID 0
         write_ldst_pred(0, 0, 1'b1);
-        $display("[%0t] pred_o = %0b", $time, pred_o);
-        assert (pred_o[0*NUM_PRED + 0] === 1'b1)
-            else $error("LDST pred[0] TID=0 write failed: expected 1, got %0b",
-                        pred_o[0*NUM_PRED + 0]);
+        // Select TID 0 to read pred
+        rd_tid_i = '0;
+        @(posedge clk_i);
+        $display("[%0t] pred_o (TID 0) = %0b", $time, pred_o);
+        assert (pred_o[0] === 1'b1)
+            else $error("LDST pred[0] TID=0 write failed: expected 1, got %0b", pred_o[0]);
 
         // Write pred[1] = 1 for TID 5
         write_ldst_pred(1, 5, 1'b1);
-        $display("[%0t] pred_o = %0b", $time, pred_o);
-        assert (pred_o[5*NUM_PRED + 1] === 1'b1)
-            else $error("LDST pred[1] TID=5 write failed: expected 1, got %0b",
-                        pred_o[5*NUM_PRED + 1]);
+        // Select TID 5 to read pred
+        rd_tid_i = TID_WIDTH'(5);
+        @(posedge clk_i);
+        $display("[%0t] pred_o (TID 5) = %0b", $time, pred_o);
+        assert (pred_o[1] === 1'b1)
+            else $error("LDST pred[1] TID=5 write failed: expected 1, got %0b", pred_o[1]);
 
         // Verify TID 0 pred[0] is still set
-        assert (pred_o[0*NUM_PRED + 0] === 1'b1)
+        rd_tid_i = '0;
+        @(posedge clk_i);
+        assert (pred_o[0] === 1'b1)
             else $error("LDST pred[0] TID=0 was corrupted");
 
         // Verify other TIDs pred[0] are still 0
         for (int t = 1; t < NUM_TID; t++) begin
-            assert (pred_o[t*NUM_PRED + 0] === 1'b0)
-                else $error("LDST pred[0] TID=%0d should be 0, got %0b",
-                            t, pred_o[t*NUM_PRED + 0]);
+            rd_tid_i = TID_WIDTH'(t);
+            @(posedge clk_i);
+            if (t != 5) begin // TID 5 has pred[1] set, but pred[0] should still be 0
+                assert (pred_o[0] === 1'b0)
+                    else $error("LDST pred[0] TID=%0d should be 0, got %0b", t, pred_o[0]);
+            end
         end
 
         // Write pred[0] = 0 for TID 0 (clear it)
         write_ldst_pred(0, 0, 1'b0);
-        assert (pred_o[0*NUM_PRED + 0] === 1'b0)
+        rd_tid_i = '0;
+        @(posedge clk_i);
+        assert (pred_o[0] === 1'b0)
             else $error("LDST pred[0] TID=0 clear failed");
 
-        // ---- Test 4: CGRA pred write ----
-        $display("\n=== Test 4: CGRA pred write ===");
-        cgra_valid_i = 1'b1;
-        cgra_tid_i   = TID_WIDTH'(3);
-        cgra_data_i  = '0;
-        wr_bitmap_i  = '0;
-        // Set pred[0] bit in bitmap and data
-        wr_bitmap_i[NUM_PORTS + NUM_CONST + 0] = 1'b1;
-        cgra_data_i[(NUM_PORTS + NUM_CONST + 0)*DATA_WIDTH] = 1'b1;
+        // ---- Test 5: CGRA pred write ----
+        $display("\n=== Test 5: CGRA pred write ===");
+        write_cgra_pred(TID_WIDTH'(3), 0, 1'b1);
+        // Select TID 3 to verify
+        rd_tid_i = TID_WIDTH'(3);
         @(posedge clk_i);
-        @(negedge clk_i);
-        cgra_valid_i = 1'b0;
-        wr_bitmap_i  = '0;
-        @(posedge clk_i);
-        $display("[%0t] After CGRA pred write: pred_o[TID=3, pred=0] = %0b",
-                 $time, pred_o[3*NUM_PRED + 0]);
-        assert (pred_o[3*NUM_PRED + 0] === 1'b1)
+        $display("[%0t] After CGRA pred write: pred_o[0] for TID 3 = %0b", $time, pred_o[0]);
+        assert (pred_o[0] === 1'b1)
             else $error("CGRA pred write TID=3 pred[0] failed");
+
+        // Verify other TID not affected
+        rd_tid_i = TID_WIDTH'(0);
+        @(posedge clk_i);
+        assert (pred_o[0] === 1'b0)
+            else $error("CGRA pred write leaked to TID 0");
+
+        // ---- Test 6: CGRA write all reg types simultaneously ----
+        $display("\n=== Test 6: CGRA simultaneous GPR + const + pred write ===");
+        begin
+            logic [DATA_WIDTH-1:0] gpr_expected [NUM_PORTS];
+            logic [DATA_WIDTH-1:0] const_expected;
+            logic pred_expected;
+
+            cgra_valid_i = 1'b1;
+            cgra_tid_i   = TID_WIDTH'(7);
+            cgra_data_i  = '0;
+            wr_bitmap_i  = '0;
+
+            // Write all GPR banks
+            for (int i = 0; i < NUM_PORTS; i++) begin
+                wr_bitmap_i[i] = 1'b1;
+                gpr_expected[i] = $urandom;
+                cgra_data_i[i*DATA_WIDTH +: DATA_WIDTH] = gpr_expected[i];
+            end
+            // Write const[2]
+            wr_bitmap_i[NUM_PORTS + 2] = 1'b1;
+            const_expected = $urandom;
+            cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH] = const_expected;
+            // Write pred[1]
+            wr_bitmap_i[NUM_PORTS + NUM_CONST + 1] = 1'b1;
+            pred_expected = 1'b1;
+            cgra_data_i[(NUM_PORTS + 1 + 1)*DATA_WIDTH] = pred_expected;
+
+            @(posedge clk_i);
+            @(posedge clk_i);
+            cgra_valid_i = 1'b0;
+            wr_bitmap_i  = '0;
+
+            // Read back GPRs
+            rd_tid_valid_i = 1'b1;
+            rd_tid_i = TID_WIDTH'(7);
+            rd_bitmap_i = TOTAL_REGS'('1);
+            rd_en_i = 1'b1;
+            @(posedge clk_i);
+            @(posedge clk_i);
+
+            for (int i = 0; i < NUM_PORTS; i++) begin
+                $display("[%0t] GPR[%0d] TID 7: expected=0x%0h, got=0x%0h",
+                         $time, i, gpr_expected[i], rd_data_o[i*DATA_WIDTH +: DATA_WIDTH]);
+                assert (rd_data_o[i*DATA_WIDTH +: DATA_WIDTH] === gpr_expected[i])
+                    else $error("GPR[%0d] TID 7 mismatch", i);
+            end
+
+            // Check const[2]
+            $display("[%0t] Const[2]: expected=0x%0h, got=0x%0h",
+                     $time, const_expected, rd_data_o[(NUM_PORTS+2)*DATA_WIDTH +: DATA_WIDTH]);
+            assert (rd_data_o[(NUM_PORTS+2)*DATA_WIDTH +: DATA_WIDTH] === const_expected)
+                else $error("Const[2] mismatch");
+
+            // Check pred[1] for TID 7
+            $display("[%0t] Pred[1] TID 7: expected=%0b, got=%0b",
+                     $time, pred_expected, pred_o[1]);
+            assert (pred_o[1] === pred_expected)
+                else $error("Pred[1] TID 7 mismatch");
+
+            rd_tid_valid_i = 1'b0;
+            rd_en_i = 1'b0;
+            rd_bitmap_i = '0;
+        end
 
         // End simulation
         #100;
