@@ -3,7 +3,7 @@ import dice_pkg::*;
 #(
     parameter R_W = 14
 ) (
-    input  logic                                    clk,
+    input  logic                                    clk_i,
     input  logic                                    rst,
     
     // Entry insert interface
@@ -49,7 +49,7 @@ import dice_pkg::*;
     logic commit_found;
 
     // Entry insert logic
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clk_i) begin
         if (rst) begin
             // Initialize all entries as invalid
             for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
@@ -120,7 +120,7 @@ import dice_pkg::*;
     end
 
     // Round-robin priority logic for commit selection
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clk_i) begin
         if (rst) begin
             rr_ptr <= '0;
         end else if (pop_valid && pop_ready) begin
@@ -165,7 +165,7 @@ import dice_pkg::*;
     // Assertions for verification
     `ifndef SYNTHESIS
     // Check that e_block_id matches the table index
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clk_i) begin
         if (!rst && insert_valid) begin
             assert(insert_e_block_id < 2**DICE_EBLOCK_ID_WIDTH) 
                 else $error("Invalid e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d", 
