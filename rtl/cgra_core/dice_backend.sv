@@ -10,19 +10,29 @@ module dice_backend
     // FDR interface (from frontend)
     fdr_if.slave fdr_if_i,
 
-    // TMCU -> External Memory Interface
-    output logic                                                                        tmcu_valid_o,
-    output logic [DICE_EBLOCK_ID_WIDTH-1:0]                                             tmcu_block_id_o,
-    output logic [DICE_TID_WIDTH-1:0]                                                   tmcu_base_tid_o,
-    output logic [DICE_TID_BITMAP_WIDTH-1:0]                                            tmcu_tid_bitmap_o,
-    output logic                                                                        tmcu_write_enable_o,
-    output logic [DICE_CACHE_LINE_SIZE*8-1:0]                                           tmcu_write_data_o,
-    output logic [DICE_CACHE_LINE_SIZE-1:0]                                             tmcu_write_mask_o,
-    output logic [DICE_ADDR_WIDTH-1:0]                                                  tmcu_address_o,
-    output logic [1:0]                                                                  tmcu_size_o,
-    output logic [DICE_MAX_REG_WIDTH-1:0]                                               tmcu_ld_dest_reg_o,
-    output logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] tmcu_address_map_o,
-    input  logic                                                                        tmcu_ready_i,
+    // North boundary outputs (row = 0, columns 0 / 2 / 4 / 6 / 8)
+    output logic [DICE_REG_DATA_WIDTH-1:0] north_0_data_o,
+    output logic                           north_0_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] north_2_data_o,
+    output logic                           north_2_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] north_4_data_o,
+    output logic                           north_4_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] north_6_data_o,
+    output logic                           north_6_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] north_8_data_o,
+    output logic                           north_8_pred_o,
+
+    // South boundary outputs (row = 8, columns 0 / 2 / 4 / 6 / 8)
+    output logic [DICE_REG_DATA_WIDTH-1:0] south_0_data_o,
+    output logic                           south_0_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] south_2_data_o,
+    output logic                           south_2_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] south_4_data_o,
+    output logic                           south_4_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] south_6_data_o,
+    output logic                           south_6_pred_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] south_8_data_o,
+    output logic                           south_8_pred_o,
 
     // Memory Response Input (cache_wr_cmd fields)
     input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                            mem_rsp_base_tid_i,
@@ -111,18 +121,6 @@ module dice_backend
   // Register file writeback from CGRA (after crossbar)
   logic [((DICE_NUM_REGS+DICE_NUM_CONST)+DICE_NUM_PRED)-1:0]  cgra_data_lo; // combined GPR and predicate data
   assign cgra_data_lo = {gpr_wb_xbar_lo, pred_wb_xbar_lo};
-
-  // TMCU input-side wires (from CGRA)
-  logic                              tmcu_incmd_valid; 
-  logic [DICE_EBLOCK_ID_WIDTH-1:0]   tmcu_incmd_block_id;
-  logic [DICE_TID_WIDTH-1:0]         tmcu_incmd_tid;
-  logic                              tmcu_incmd_write_enable;
-  logic [DICE_DATA_WIDTH-1:0]        tmcu_incmd_write_data;
-  logic [DICE_DATA_WIDTH/8-1:0]      tmcu_incmd_write_mask;
-  logic [DICE_ADDR_WIDTH-1:0]        tmcu_incmd_address;
-  logic [1:0]                        tmcu_incmd_size;
-  logic [DICE_MAX_REG_WIDTH-1:0]     tmcu_incmd_ld_dest_reg;
-  logic                              tmcu_incmd_ready;
 
   // Block Commit Table
   logic                                    bct_insert_valid;
@@ -245,41 +243,6 @@ module dice_backend
       );
 
   // =========================================================================
-  // Temporal Coalescing Unit (TMCU)
-  // =========================================================================
-
-  temporal_coalescing_unit u_temporal_coalescing_unit (
-      .clk(clk_i),
-      .rst(rst_i),
-
-      // Input memory commands (from CGRA)
-      .incmd_valid       (tmcu_incmd_valid),
-      .incmd_block_id    (tmcu_incmd_block_id),
-      .incmd_tid         (tmcu_incmd_tid),
-      .incmd_write_enable(tmcu_incmd_write_enable),
-      .incmd_write_data  (tmcu_incmd_write_data),
-      .incmd_write_mask  (tmcu_incmd_write_mask),
-      .incmd_address     (tmcu_incmd_address),
-      .incmd_size        (tmcu_incmd_size),
-      .incmd_ld_dest_reg (tmcu_incmd_ld_dest_reg),
-      .incmd_ready       (tmcu_incmd_ready),
-
-      // Output memory commands (to external memory)
-      .outcmd_valid       (tmcu_valid_o),
-      .outcmd_block_id    (tmcu_block_id_o),
-      .outcmd_base_tid    (tmcu_base_tid_o),
-      .outcmd_tid_bitmap  (tmcu_tid_bitmap_o),
-      .outcmd_write_enable(tmcu_write_enable_o),
-      .outcmd_write_data  (tmcu_write_data_o),
-      .outcmd_write_mask  (tmcu_write_mask_o),
-      .outcmd_address     (tmcu_address_o),
-      .outcmd_size        (tmcu_size_o),
-      .outcmd_ld_dest_reg (tmcu_ld_dest_reg_o),
-      .outcmd_address_map (tmcu_address_map_o),
-      .outcmd_ready       (tmcu_ready_i)
-  );
-
-  // =========================================================================
   // Input Crossbar: register file -> CGRA PE array inputs
   // =========================================================================
   cgra_crossbar #(
@@ -355,8 +318,8 @@ module dice_backend
       .sb_0_0_W_o      (cgra_gpr_data_lo[4*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
       .sb_0_0_pred_W_i (pred_rd_xbar_lo[0]),
       .sb_0_0_pred_W_o (cgra_pred_data_lo[4]),
-      .sb_0_0_N_i      ('0), .sb_0_0_N_o      (),
-      .sb_0_0_pred_N_i ('0), .sb_0_0_pred_N_o (),
+      .sb_0_0_N_i      ('0), .sb_0_0_N_o      (north_0_data_o),
+      .sb_0_0_pred_N_i ('0), .sb_0_0_pred_N_o (north_0_pred_o),
       .sb_0_0_NE_i     ('0), .sb_0_0_NE_o     (),
       .sb_0_0_pred_NE_i('0), .sb_0_0_pred_NE_o(),
       .sb_0_0_NW_i     ('0), .sb_0_0_NW_o     (),
@@ -367,22 +330,22 @@ module dice_backend
       // -----------------------------------------------------------------------
       // Top boundary (row = 0, col = 2, 4, 6) — tie off
       // -----------------------------------------------------------------------
-      .sb_0_2_N_i      ('0), .sb_0_2_N_o      (),
-      .sb_0_2_pred_N_i ('0), .sb_0_2_pred_N_o (),
+      .sb_0_2_N_i      ('0), .sb_0_2_N_o      (north_2_data_o),
+      .sb_0_2_pred_N_i ('0), .sb_0_2_pred_N_o (north_2_pred_o),
       .sb_0_2_NE_i     ('0), .sb_0_2_NE_o     (),
       .sb_0_2_pred_NE_i('0), .sb_0_2_pred_NE_o(),
       .sb_0_2_NW_i     ('0), .sb_0_2_NW_o     (),
       .sb_0_2_pred_NW_i('0), .sb_0_2_pred_NW_o(),
 
-      .sb_0_4_N_i      ('0), .sb_0_4_N_o      (),
-      .sb_0_4_pred_N_i ('0), .sb_0_4_pred_N_o (),
+      .sb_0_4_N_i      ('0), .sb_0_4_N_o      (north_4_data_o),
+      .sb_0_4_pred_N_i ('0), .sb_0_4_pred_N_o (north_4_pred_o),
       .sb_0_4_NE_i     ('0), .sb_0_4_NE_o     (),
       .sb_0_4_pred_NE_i('0), .sb_0_4_pred_NE_o(),
       .sb_0_4_NW_i     ('0), .sb_0_4_NW_o     (),
       .sb_0_4_pred_NW_i('0), .sb_0_4_pred_NW_o(),
 
-      .sb_0_6_N_i      ('0), .sb_0_6_N_o      (),
-      .sb_0_6_pred_N_i ('0), .sb_0_6_pred_N_o (),
+      .sb_0_6_N_i      ('0), .sb_0_6_N_o      (north_6_data_o),
+      .sb_0_6_pred_N_i ('0), .sb_0_6_pred_N_o (north_6_pred_o),
       .sb_0_6_NE_i     ('0), .sb_0_6_NE_o     (),
       .sb_0_6_pred_NE_i('0), .sb_0_6_pred_NE_o(),
       .sb_0_6_NW_i     ('0), .sb_0_6_NW_o     (),
@@ -395,8 +358,8 @@ module dice_backend
       .sb_0_8_E_o      (cgra_gpr_data_lo[0*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
       .sb_0_8_pred_E_i (pred_rd_xbar_lo[4]),
       .sb_0_8_pred_E_o (cgra_pred_data_lo[0]),
-      .sb_0_8_N_i      ('0), .sb_0_8_N_o      (),
-      .sb_0_8_pred_N_i ('0), .sb_0_8_pred_N_o (),
+      .sb_0_8_N_i      ('0), .sb_0_8_N_o      (north_8_data_o),
+      .sb_0_8_pred_N_i ('0), .sb_0_8_pred_N_o (north_8_pred_o),
       .sb_0_8_NE_i     ('0), .sb_0_8_NE_o     (),
       .sb_0_8_pred_NE_i('0), .sb_0_8_pred_NE_o(),
       .sb_0_8_NW_i     ('0), .sb_0_8_NW_o     (),
@@ -467,8 +430,8 @@ module dice_backend
       // -----------------------------------------------------------------------
       // Bottom-left corner (sb_8_0) — tie off
       // -----------------------------------------------------------------------
-      .sb_8_0_S_i      ('0), .sb_8_0_S_o      (),
-      .sb_8_0_pred_S_i ('0), .sb_8_0_pred_S_o (),
+      .sb_8_0_S_i      ('0), .sb_8_0_S_o      (south_0_data_o),
+      .sb_8_0_pred_S_i ('0), .sb_8_0_pred_S_o (south_0_pred_o),
       .sb_8_0_W_i      ('0), .sb_8_0_W_o      (),
       .sb_8_0_pred_W_i ('0), .sb_8_0_pred_W_o (),
       .sb_8_0_NW_i     ('0), .sb_8_0_NW_o     (),
@@ -481,22 +444,22 @@ module dice_backend
       // -----------------------------------------------------------------------
       // Bottom boundary (row = 8, col = 2, 4, 6) — tie off
       // -----------------------------------------------------------------------
-      .sb_8_2_S_i      ('0), .sb_8_2_S_o      (),
-      .sb_8_2_pred_S_i ('0), .sb_8_2_pred_S_o (),
+      .sb_8_2_S_i      ('0), .sb_8_2_S_o      (south_2_data_o),
+      .sb_8_2_pred_S_i ('0), .sb_8_2_pred_S_o (south_2_pred_o),
       .sb_8_2_SE_i     ('0), .sb_8_2_SE_o     (),
       .sb_8_2_pred_SE_i('0), .sb_8_2_pred_SE_o(),
       .sb_8_2_SW_i     ('0), .sb_8_2_SW_o     (),
       .sb_8_2_pred_SW_i('0), .sb_8_2_pred_SW_o(),
 
-      .sb_8_4_S_i      ('0), .sb_8_4_S_o      (),
-      .sb_8_4_pred_S_i ('0), .sb_8_4_pred_S_o (),
+      .sb_8_4_S_i      ('0), .sb_8_4_S_o      (south_4_data_o),
+      .sb_8_4_pred_S_i ('0), .sb_8_4_pred_S_o (south_4_pred_o),
       .sb_8_4_SE_i     ('0), .sb_8_4_SE_o     (),
       .sb_8_4_pred_SE_i('0), .sb_8_4_pred_SE_o(),
       .sb_8_4_SW_i     ('0), .sb_8_4_SW_o     (),
       .sb_8_4_pred_SW_i('0), .sb_8_4_pred_SW_o(),
 
-      .sb_8_6_S_i      ('0), .sb_8_6_S_o      (),
-      .sb_8_6_pred_S_i ('0), .sb_8_6_pred_S_o (),
+      .sb_8_6_S_i      ('0), .sb_8_6_S_o      (south_6_data_o),
+      .sb_8_6_pred_S_i ('0), .sb_8_6_pred_S_o (south_6_pred_o),
       .sb_8_6_SE_i     ('0), .sb_8_6_SE_o     (),
       .sb_8_6_pred_SE_i('0), .sb_8_6_pred_SE_o(),
       .sb_8_6_SW_i     ('0), .sb_8_6_SW_o     (),
@@ -505,8 +468,8 @@ module dice_backend
       // -----------------------------------------------------------------------
       // Bottom-right corner (sb_8_8) — tie off
       // -----------------------------------------------------------------------
-      .sb_8_8_S_i      ('0), .sb_8_8_S_o      (),
-      .sb_8_8_pred_S_i ('0), .sb_8_8_pred_S_o (),
+      .sb_8_8_S_i      ('0), .sb_8_8_S_o      (south_8_data_o),
+      .sb_8_8_pred_S_i ('0), .sb_8_8_pred_S_o (south_8_pred_o),
       .sb_8_8_E_i      ('0), .sb_8_8_E_o      (),
       .sb_8_8_pred_E_i ('0), .sb_8_8_pred_E_o (),
       .sb_8_8_NE_i     ('0), .sb_8_8_NE_o     (),

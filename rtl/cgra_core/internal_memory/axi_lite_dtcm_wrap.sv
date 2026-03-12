@@ -52,7 +52,7 @@ module axi_lite_dtcm_wrap #(
             saved_wr_strb     <= '0;
         end else begin
             state_q <= state_d;
-            if (state_q == IDLE && state_d == READ_WAIT) begin
+            if (state_q == IDLE && state_d == READ_RESP) begin
                 saved_row_idx <= ar_addr_flat[9:7];
                 saved_byte_offset <= ar_addr_flat[6:0];
             end
@@ -80,7 +80,10 @@ module axi_lite_dtcm_wrap #(
         axi_i.ar_ready = 1'b0;
         axi_i.r_valid  = 1'b0;
         axi_i.r_resp   = axi_pkg::RESP_OKAY;
-        axi_i.r_data   = '0;
+        
+        // FIX: Unconditionally assign r_data so it never drops to 0 instantly.
+        // This satisfies the SDF hold-time requirements of the synthesized crossbar.
+        axi_i.r_data   = sram_rdata >> (saved_byte_offset * 8); 
 
         state_d = state_q;
 
@@ -95,7 +98,7 @@ module axi_lite_dtcm_wrap #(
                     sram_addr      = axi_i.ar_addr[9:7];
                     sram_en        = 1'b1;
                     axi_i.ar_ready = 1'b1;
-                    state_d        = READ_WAIT;
+                    state_d        = READ_RESP;
                 end
             end
 
