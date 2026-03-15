@@ -39,32 +39,32 @@ module io_rx_tx_adapter
   // --------------------------------------------------------------------------
 
   io_rx_adapter #(
-    .flit_width_p     (flit_width_p),
-    .link_word_width_p(link_word_width_p),
-    .rx_fifo_els_p    (rx_fifo_els_p)
+    .flit_width_p      (flit_width_p),
+    .link_word_width_p (link_word_width_p),
+    .rx_fifo_els_p     (rx_fifo_els_p)
   ) rx_path_i (
-    .clk_i         (clk_i),
-    .reset_i       (reset_i),
-    .link_rx_v_i   (link_rx_v_i),
-    .link_rx_data_i(link_rx_data_i),
+    .clk_i          (clk_i),
+    .reset_i        (reset_i),
+    .link_rx_v_i    (link_rx_v_i),
+    .link_rx_data_i (link_rx_data_i),
     .link_rx_ready_o(link_rx_ready_o),
-    .phy_rx_v_o    (phy_rx_v_o),
-    .phy_rx_data_o (phy_rx_data_o),
-    .phy_rx_ready_i(phy_rx_ready_i)
+    .phy_rx_v_o     (phy_rx_v_o),
+    .phy_rx_data_o  (phy_rx_data_o),
+    .phy_rx_ready_i (phy_rx_ready_i)
   );
 
   io_tx_adapter #(
-    .flit_width_p     (flit_width_p),
-    .link_word_width_p(link_word_width_p),
-    .tx_fifo_els_p    (tx_fifo_els_p)
+    .flit_width_p      (flit_width_p),
+    .link_word_width_p (link_word_width_p),
+    .tx_fifo_els_p     (tx_fifo_els_p)
   ) tx_path_i (
-    .clk_i         (clk_i),
-    .reset_i       (reset_i),
-    .phy_tx_v_i    (phy_tx_v_i),
-    .phy_tx_data_i (phy_tx_data_i),
-    .phy_tx_ready_o(phy_tx_ready_o),
-    .link_tx_v_o   (link_tx_v_o),
-    .link_tx_data_o(link_tx_data_o),
+    .clk_i          (clk_i),
+    .reset_i        (reset_i),
+    .phy_tx_v_i     (phy_tx_v_i),
+    .phy_tx_data_i  (phy_tx_data_i),
+    .phy_tx_ready_o (phy_tx_ready_o),
+    .link_tx_v_o    (link_tx_v_o),
+    .link_tx_data_o (link_tx_data_o),
     .link_tx_ready_i(link_tx_ready_i)
   );
 
