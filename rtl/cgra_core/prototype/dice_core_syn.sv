@@ -85,13 +85,9 @@ module dice_core_syn
     input  logic                                                                        tmcu_ready_i,
 
     // =====================================================================
-    // Memory Response Input (cache_wr_cmd fields)
+    // Memory Response Input
     // =====================================================================
-    input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                            mem_rsp_base_tid_i,
-    input  logic [TID_BITMAP_WIDTH-1:0]                                                 mem_rsp_tid_bitmap_i,
-    input  logic [DICE_REG_ADDR_WIDTH-1:0]                                              mem_rsp_ld_dest_reg_i,
-    input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]        mem_rsp_address_map_i,
-    input  logic [(CACHE_LINE_SIZE*8)-1:0]                                              mem_rsp_data_i,
+    input  logic [$bits(cache_wr_cmd)-1:0]                                              mem_rsp_i,
     input  logic                                                                        mem_rsp_valid_i,
 
     // =====================================================================
@@ -242,11 +238,7 @@ module dice_core_syn
       .tmcu_ready_i       (tmcu_ready_i),
 
       // Memory Response
-      .mem_rsp_base_tid_i   (mem_rsp_base_tid_i),
-      .mem_rsp_tid_bitmap_i (mem_rsp_tid_bitmap_i),
-      .mem_rsp_ld_dest_reg_i(mem_rsp_ld_dest_reg_i),
-      .mem_rsp_address_map_i(mem_rsp_address_map_i),
-      .mem_rsp_data_i       (mem_rsp_data_i),
+      .mem_rsp_i            (mem_rsp_i),
       .mem_rsp_valid_i      (mem_rsp_valid_i),
 
       // Block commit table outputs

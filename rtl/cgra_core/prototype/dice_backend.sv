@@ -36,7 +36,23 @@ module dice_backend
     output logic                                    eblock_commit_valid_o,
     output logic [DICE_EBLOCK_ID_WIDTH-1:0]         eblock_commit_id_o,
     input  logic                                    eblock_commit_ready_i,
-    output logic [2**DICE_HW_CTA_ID_WIDTH-1:0]     hw_cta_pending_o
+    output logic [2**DICE_HW_CTA_ID_WIDTH-1:0]     hw_cta_pending_o,
+
+    // CGRA Configuration Memory
+    input  logic [DICE_MEM_DATA_WIDTH-1:0]                                                         cgra_cm0_data_i,
+    input  logic [((DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1) / DICE_MEM_DATA_WIDTH)-1:0]     cgra_cm0_chunk_en_i,
+    input  logic [DICE_MEM_DATA_WIDTH-1:0]                                                         cgra_cm1_data_i,
+    input  logic [((DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1) / DICE_MEM_DATA_WIDTH)-1:0]     cgra_cm1_chunk_en_i,
+
+    // CGRA Scan chain / bitstream interface
+    input  logic        en_i; 
+    input  logic        cgra_v_i,
+    input  logic        cgra_bank_i,
+    output logic        cgra_ready_o,
+    output logic        cgra_busy_o,
+    output logic [1:0]  cgra_bank_valid_o,
+    output logic        cgra_prog_dout_o,
+    output logic        cgra_prog_we_o
 );
 
   // Dispatcher
@@ -54,75 +70,39 @@ module dice_backend
   logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_lo;
   logic [DICE_NUM_PRED-1:0] pred_lo;
 
-  // Crossbar parameters
-  localparam int NUM_PE_PORTS          = 8;                  // number of data inputs and ourputs to CGRA PE array
-  localparam int GPR_XBAR_NUM_INPUTS   = DICE_NUM_REGS + DICE_NUM_CONST; // GPRs + const regs
-  localparam int GPR_XBAR_NUM_OUTPUTS  = NUM_PE_PORTS;       // PE data input count
-
-  localparam int PRED_XBAR_NUM_INPUTS  = DICE_NUM_PRED;     // predicate regs = 2
-  localparam int PRED_XBAR_NUM_OUTPUTS = NUM_PE_PORTS;      // PE pred input count
-
-  // Crossbar -> feed into CGRA PE array inputs
-  logic [GPR_XBAR_NUM_OUTPUTS-1:0][DICE_REG_DATA_WIDTH-1:0] gpr_rd_xbar_lo;
-  logic [PRED_XBAR_NUM_OUTPUTS-1:0][0:0]                    pred_rd_xbar_lo;
-  // CGRA PE array outputs -> write-back crossbar -> register file
-  logic [GPR_XBAR_NUM_INPUTS-1:0][DICE_REG_DATA_WIDTH-1:0] gpr_wb_xbar_lo;   
-  logic [PRED_XBAR_NUM_INPUTS-1:0][0:0]                    pred_wb_xbar_lo;  
-
-  // Crossbar configuration — sourced from the CGRA bitstream.
-  // TODO: drive from bitstream decoder once that path is implemented.
-  //       cfg_sel_i layout: bits [(i+1)*SEL_WIDTH-1 : i*SEL_WIDTH] = selector for output i.
-  //
-  // Input  crossbar: NUM_INPUTS=GPR_XBAR_NUM_INPUTS(16), NUM_OUTPUTS=GPR_XBAR_NUM_OUTPUTS(8)
-  //                  SEL_W = clog2(16) = 4  →  cfg_sel width = 8*4 = 32 bits
-  // Output crossbar: NUM_INPUTS=GPR_XBAR_NUM_OUTPUTS(8),  NUM_OUTPUTS=GPR_XBAR_NUM_INPUTS(16)
-  //                  SEL_W = clog2(8)  = 3  →  cfg_sel width = 16*3 = 48 bits
-  logic [GPR_XBAR_NUM_OUTPUTS*($clog2(GPR_XBAR_NUM_INPUTS))-1:0]   gpr_rd_xbar_cfg_sel;
-  logic [GPR_XBAR_NUM_INPUTS*($clog2(GPR_XBAR_NUM_OUTPUTS))-1:0]   gpr_wb_xbar_cfg_sel;
-  logic [PRED_XBAR_NUM_OUTPUTS*($clog2(PRED_XBAR_NUM_INPUTS))-1:0] pred_rd_xbar_cfg_sel;
-  logic [PRED_XBAR_NUM_INPUTS*($clog2(PRED_XBAR_NUM_OUTPUTS))-1:0] pred_wb_xbar_cfg_sel;
-  logic                                                              xbar_cfg_load;
-
-  assign gpr_rd_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
-  assign pred_rd_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
-  assign gpr_wb_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
-  assign pred_wb_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
-  assign xbar_cfg_load        = '0; // TODO: pulse when new p-graph bitstream config is ready
-
-
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                    ldst_cmd;
   logic [$bits(cache_wr_cmd)-1:0] ldst_wr_lo;
   logic                           ldst_valid_lo;
   logic                           ldst_ready_lo;
 
-
   logic [DICE_TID_WIDTH-1:0] cgra_tid_li; // out of rf, in to shift reg and cgra
 
   logic [DICE_TOTAL_REGS-1:0] wb_map_li; // shifted form metadata, goes to rf
 
-
   // CGRA write-back wires
-  logic                                          cgra_v_lo; // asserted lat cycles after RF read valid
-  logic [NUM_PE_PORTS*DICE_REG_DATA_WIDTH-1:0] cgra_gpr_data_lo;
-  logic [NUM_PE_PORTS-1:0]                     cgra_pred_data_lo;
-  logic [DICE_TID_WIDTH-1:0]                     cgra_tid_lo;
+  logic cgra_v_lo; // asserted lat cycles after RF read valid
+  logic [DICE_TID_WIDTH-1:0] cgra_tid_lo;
+  // One-hot TID bitmap for scoreboard writeback release
+  logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] cgra_wb_tid_bitmap;
+  assign cgra_wb_tid_bitmap = cgra_v_lo ? (DICE_NUM_MAX_THREADS_PER_CORE'(1'b1) << cgra_tid_lo) : '0;
 
-  // Register file writeback from CGRA (after crossbar)
-  logic [((DICE_NUM_REGS+DICE_NUM_CONST)+DICE_NUM_PRED)-1:0]  cgra_data_lo; // combined GPR and predicate data
-  assign cgra_data_lo = {gpr_wb_xbar_lo, pred_wb_xbar_lo};
+  // CGRA output arrays (mirrors dice_cgra_rf pattern)
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_ext_data_lo [0:(DICE_NUM_BANKS+DICE_NUM_CONST)-1];
+  logic                           cgra_ext_pred_lo [0:DICE_NUM_PRED-1];
 
-  // TMCU input-side wires (from CGRA)
-  logic                              tmcu_incmd_valid; 
-  logic [DICE_EBLOCK_ID_WIDTH-1:0]   tmcu_incmd_block_id;
-  logic [DICE_TID_WIDTH-1:0]         tmcu_incmd_tid;
-  logic                              tmcu_incmd_write_enable;
-  logic [DICE_DATA_WIDTH-1:0]        tmcu_incmd_write_data;
-  logic [DICE_DATA_WIDTH/8-1:0]      tmcu_incmd_write_mask;
-  logic [DICE_ADDR_WIDTH-1:0]        tmcu_incmd_address;
-  logic [1:0]                        tmcu_incmd_size;
-  logic [DICE_MAX_REG_WIDTH-1:0]     tmcu_incmd_ld_dest_reg;
-  logic                              tmcu_incmd_ready;
+  // Packed writeback bus for dice_rf_ctrl (layout matches dice_cgra_rf)
+  logic [(DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH-1:0] cgra_data_li;
+
+  always_comb begin
+    cgra_data_li = '0;
+    for (int j = 0; j < DICE_NUM_BANKS; j++) begin
+      cgra_data_li[j*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cgra_ext_data_lo[j];
+    end
+    cgra_data_li[DICE_NUM_BANKS*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]       = cgra_ext_data_lo[DICE_NUM_BANKS];
+    cgra_data_li[(DICE_NUM_BANKS+1)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]   = {{(DICE_REG_DATA_WIDTH-1){1'b0}}, cgra_ext_pred_lo[0]};
+    cgra_data_li[(DICE_NUM_BANKS+2)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]   = {{(DICE_REG_DATA_WIDTH-1){1'b0}}, cgra_ext_pred_lo[1]};
+  end
 
   // Block Commit Table
   logic                                    bct_insert_valid;
@@ -158,9 +138,9 @@ module dice_backend
       .input_register_bitmap(fdr_if_i.data.metadata.in_regs_bitmap),
       .active_mask(fdr_if_i.data.real_active_mask),
       .fetch_done(fdr_if_i.valid),
-      .wb_valid(),              // comes from cgra
-      .wb_tid_bitmap(),         // comes from cgra
-      .dispatch_fifo_pop('1),   // cgra ready
+      .wb_valid(cgra_v_lo),                    // CGRA writeback pulse (lat-shifted RF read valid)
+      .wb_tid_bitmap(cgra_wb_tid_bitmap),      // one-hot TID that just completed
+      .dispatch_fifo_pop(rf_rd_ready_lo),      // advance FIFO when RF ctrl can accept next TID
       .dispatch_fifo_empty(dispatch_fifo_empty),
       .dispatch_tid_o(rd_tid),
       .dispatch_valid_o(rd_tid_valid),
@@ -192,7 +172,7 @@ module dice_backend
 
       // Write Interface — CGRA
       .cgra_tid_i(cgra_tid_lo),
-      .cgra_data_i(cgra_data_lo),
+      .cgra_data_i(cgra_data_li),
       .wr_bitmap_i(wb_map_li),
       .cgra_valid_i(cgra_v_lo),
 
@@ -244,39 +224,80 @@ module dice_backend
       ,.out_data(cgra_v_lo)        // pulse to RF ctrl to trigger write-back
       );
 
+  
   // =========================================================================
-  // Temporal Coalescing Unit (TMCU)
+  // CGRA Instantiation
   // =========================================================================
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo; // TODO: Connect to MSHR
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo;
 
-  temporal_coalescing_unit u_temporal_coalescing_unit (
-      .clk(clk_i),
-      .rst(rst_i),
+  dice_cgra_subs u_dice_cgra_subs (
+      .clk_i   (clk_i),
+      .reset_i (rst_i),
+      .en_i    (1'b1),   // TODO: connect to top-level enable when available
 
-      // Input memory commands (from CGRA)
-      .incmd_valid       (tmcu_incmd_valid),
-      .incmd_block_id    (tmcu_incmd_block_id),
-      .incmd_tid         (tmcu_incmd_tid),
-      .incmd_write_enable(tmcu_incmd_write_enable),
-      .incmd_write_data  (tmcu_incmd_write_data),
-      .incmd_write_mask  (tmcu_incmd_write_mask),
-      .incmd_address     (tmcu_incmd_address),
-      .incmd_size        (tmcu_incmd_size),
-      .incmd_ld_dest_reg (tmcu_incmd_ld_dest_reg),
-      .incmd_ready       (tmcu_incmd_ready),
+      // Configuration memory — driven from external IOs
+      .cm0_data_i      (cgra_cm0_data_i),
+      .cm0_chunk_en_i  (cgra_cm0_chunk_en_i),
+      .cm1_data_i      (cgra_cm1_data_i),
+      .cm1_chunk_en_i  (cgra_cm1_chunk_en_i),
 
-      // Output memory commands (to external memory)
-      .outcmd_valid       (tmcu_valid_o),
-      .outcmd_block_id    (tmcu_block_id_o),
-      .outcmd_base_tid    (tmcu_base_tid_o),
-      .outcmd_tid_bitmap  (tmcu_tid_bitmap_o),
-      .outcmd_write_enable(tmcu_write_enable_o),
-      .outcmd_write_data  (tmcu_write_data_o),
-      .outcmd_write_mask  (tmcu_write_mask_o),
-      .outcmd_address     (tmcu_address_o),
-      .outcmd_size        (tmcu_size_o),
-      .outcmd_ld_dest_reg (tmcu_ld_dest_reg_o),
-      .outcmd_address_map (tmcu_address_map_o),
-      .outcmd_ready       (tmcu_ready_i)
+      // Scan-chain / bitstream interface — driven from external IOs
+      .v_i          (cgra_v_i),
+      .bank_i       (cgra_bank_i),
+      .ready_o      (cgra_ready_o),
+      .busy_o       (cgra_busy_o),
+      .bank_valid_o (cgra_bank_valid_o),
+      .prog_dout_o  (cgra_prog_dout_o),
+      .prog_we_o    (cgra_prog_we_o),
+
+      // Register file reads → CGRA data inputs (unpacked from rd_data_lo)
+      .ext_data_i_0  (rd_data_lo[ 0*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_1  (rd_data_lo[ 1*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_2  (rd_data_lo[ 2*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_3  (rd_data_lo[ 3*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_4  (rd_data_lo[ 4*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_5  (rd_data_lo[ 5*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_6  (rd_data_lo[ 6*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_7  (rd_data_lo[ 7*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_8  (rd_data_lo[ 8*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_9  (rd_data_lo[ 9*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_10 (rd_data_lo[10*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_11 (rd_data_lo[11*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_12 (rd_data_lo[12*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_13 (rd_data_lo[13*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_14 (rd_data_lo[14*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+      .ext_data_i_15 (rd_data_lo[15*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
+
+      // CGRA data outputs → register file writeback
+      .ext_data_o_0  (cgra_ext_data_lo[0]),
+      .ext_data_o_1  (cgra_ext_data_lo[1]),
+      .ext_data_o_2  (cgra_ext_data_lo[2]),
+      .ext_data_o_3  (cgra_ext_data_lo[3]),
+      .ext_data_o_4  (cgra_ext_data_lo[4]),
+      .ext_data_o_5  (cgra_ext_data_lo[5]),
+      .ext_data_o_6  (cgra_ext_data_lo[6]),
+      .ext_data_o_7  (cgra_ext_data_lo[7]),
+      .ext_data_o_8  (cgra_ext_data_lo[8]),
+      .ext_data_o_9  (cgra_ext_data_lo[9]),
+      .ext_data_o_10 (cgra_ext_data_lo[10]),
+      .ext_data_o_11 (cgra_ext_data_lo[11]),
+      .ext_data_o_12 (cgra_ext_data_lo[12]),
+      .ext_data_o_13 (cgra_ext_data_lo[13]),
+      .ext_data_o_14 (cgra_ext_data_lo[14]),
+      .ext_data_o_15 (cgra_ext_data_lo[15]),
+
+      // Predicate register reads → CGRA predicate inputs
+      .ext_pred_i_0 (pred_lo[0]),
+      .ext_pred_i_1 (pred_lo[1]),
+
+      // CGRA predicate outputs → predicate register writeback
+      .ext_pred_o_0 (cgra_ext_pred_lo[0]),
+      .ext_pred_o_1 (cgra_ext_pred_lo[1]),
+
+      // Memory outputs — internal, to be connected when mem interface is added
+      .mem_data_o (cgra_mem_data_lo),
+      .mem_addr_o (cgra_mem_addr_lo)
   );
 
   // =========================================================================
