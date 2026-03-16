@@ -1,38 +1,7 @@
 `timescale 1ns/1ps
 
-import "DPI-C" context function void dice_vector_mul_golden_init(
-    input int unsigned seed
-);
-import "DPI-C" context function void dice_vector_mul_golden_directed_case(
-    output int unsigned a0,
-    output int unsigned a1,
-    output int unsigned a2,
-    output int unsigned a3,
-    output int unsigned b0,
-    output int unsigned b1,
-    output int unsigned b2,
-    output int unsigned b3,
-    output int unsigned y0,
-    output int unsigned y1,
-    output int unsigned y2,
-    output int unsigned y3
-);
-import "DPI-C" context function void dice_vector_mul_golden_random_case(
-    output int unsigned a0,
-    output int unsigned a1,
-    output int unsigned a2,
-    output int unsigned a3,
-    output int unsigned b0,
-    output int unsigned b1,
-    output int unsigned b2,
-    output int unsigned b3,
-    output int unsigned y0,
-    output int unsigned y1,
-    output int unsigned y2,
-    output int unsigned y3
-);
-
 module tb_dice_top_vector_mul;
+  import cgra_test_pkg::*;
 
   localparam int CLK_PERIOD_NS          = 10000;
   localparam int PROG_CLK_PERIOD_NS     = 12;
@@ -150,110 +119,6 @@ module tb_dice_top_vector_mul;
     end
   end
 
-  task automatic drive_boundary_to_zero();
-    int i;
-    begin
-      for (i = 0; i < 16; i++) begin
-        ext_data_i[i] = '0;
-      end
-      for (i = 0; i < 2; i++) begin
-        ext_pred_i[i] = 1'b0;
-      end
-    end
-  endtask
-
-  task automatic apply_mul_array_inputs(
-      input logic [7:0] a_values [0:3],
-      input logic [7:0] b_values [0:3]
-  );
-    int i;
-    begin
-      drive_boundary_to_zero();
-      for (i = 0; i < 4; i++) begin
-        ext_data_i[i]   = a_values[i];
-        ext_data_i[i+4] = b_values[i];
-      end
-    end
-  endtask
-
-  task automatic load_directed_case(
-      output logic [7:0] a_values [0:3],
-      output logic [7:0] b_values [0:3],
-      output logic [7:0] expected_values [0:3]
-  );
-    int unsigned a0;
-    int unsigned a1;
-    int unsigned a2;
-    int unsigned a3;
-    int unsigned b0;
-    int unsigned b1;
-    int unsigned b2;
-    int unsigned b3;
-    int unsigned y0;
-    int unsigned y1;
-    int unsigned y2;
-    int unsigned y3;
-    begin
-      dice_vector_mul_golden_directed_case(
-          a0, a1, a2, a3,
-          b0, b1, b2, b3,
-          y0, y1, y2, y3
-      );
-
-      a_values[0] = a0[7:0];
-      a_values[1] = a1[7:0];
-      a_values[2] = a2[7:0];
-      a_values[3] = a3[7:0];
-      b_values[0] = b0[7:0];
-      b_values[1] = b1[7:0];
-      b_values[2] = b2[7:0];
-      b_values[3] = b3[7:0];
-      expected_values[0] = y0[7:0];
-      expected_values[1] = y1[7:0];
-      expected_values[2] = y2[7:0];
-      expected_values[3] = y3[7:0];
-    end
-  endtask
-
-  task automatic load_random_case(
-      output logic [7:0] a_values [0:3],
-      output logic [7:0] b_values [0:3],
-      output logic [7:0] expected_values [0:3]
-  );
-    int unsigned a0;
-    int unsigned a1;
-    int unsigned a2;
-    int unsigned a3;
-    int unsigned b0;
-    int unsigned b1;
-    int unsigned b2;
-    int unsigned b3;
-    int unsigned y0;
-    int unsigned y1;
-    int unsigned y2;
-    int unsigned y3;
-    begin
-      dice_vector_mul_golden_random_case(
-          a0, a1, a2, a3,
-          b0, b1, b2, b3,
-          y0, y1, y2, y3
-      );
-
-      a_values[0] = a0[7:0];
-      a_values[1] = a1[7:0];
-      a_values[2] = a2[7:0];
-      a_values[3] = a3[7:0];
-      b_values[0] = b0[7:0];
-      b_values[1] = b1[7:0];
-      b_values[2] = b2[7:0];
-      b_values[3] = b3[7:0];
-      expected_values[0] = y0[7:0];
-      expected_values[1] = y1[7:0];
-      expected_values[2] = y2[7:0];
-      expected_values[3] = y3[7:0];
-    end
-  endtask
-
   task automatic shift_prog_bit(input logic bit_value);
     begin
       prog_din_i = bit_value;
@@ -269,7 +134,7 @@ module tb_dice_top_vector_mul;
       prog_we_i   = 1'b0;
       prog_done_i = 1'b0;
       prog_din_i  = 1'b0;
-      drive_boundary_to_zero();
+      drive_boundary_to_zero(ext_data_i, ext_pred_i);
 
       repeat (RESET_CYCLES) @(posedge clk_i);
       repeat (RESET_CYCLES) @(posedge prog_clk_i);
@@ -338,29 +203,6 @@ module tb_dice_top_vector_mul;
     end
   endtask
 
-  task automatic check_mul_outputs(
-      input string test_name,
-      input logic [7:0] a_values [0:3],
-      input logic [7:0] b_values [0:3],
-      input logic [7:0] expected_values [0:3]
-  );
-    int i;
-    begin
-      for (i = 0; i < 4; i++) begin
-        if (^ext_data_o[i] === 1'bX) begin
-          $fatal(1, "%s: ext_data_o_%0d contains X/Z (%b)",
-                 test_name, i, ext_data_o[i]);
-        end
-        if (ext_data_o[i] !== expected_values[i]) begin
-          $fatal(1,
-                 "%s: ext_data_o_%0d expected %0d (A=%0d, B=%0d), got %0d",
-                 test_name, i, expected_values[i], a_values[i], b_values[i],
-                 ext_data_o[i]);
-        end
-      end
-    end
-  endtask
-
   task automatic test_mul_array_directed_functionality();
     logic [7:0] a_values [0:3];
     logic [7:0] b_values [0:3];
@@ -369,9 +211,9 @@ module tb_dice_top_vector_mul;
       $display("[TB] Running directed vector-multiply test");
       load_directed_case(a_values, b_values, expected_values);
 
-      apply_mul_array_inputs(a_values, b_values);
+      apply_mul_array_inputs(ext_data_i, ext_pred_i, a_values, b_values);
       repeat (FUNCTIONAL_SETTLE) @(posedge clk_i);
-      check_mul_outputs("directed", a_values, b_values, expected_values);
+      check_mul_outputs("directed", ext_data_o, a_values, b_values, expected_values);
 
       $display("[TB] Directed test passed");
     end
@@ -388,10 +230,10 @@ module tb_dice_top_vector_mul;
 
       for (case_idx = 0; case_idx < NUM_RANDOM_CASES; case_idx++) begin
         load_random_case(a_values, b_values, expected_values);
-        apply_mul_array_inputs(a_values, b_values);
+        apply_mul_array_inputs(ext_data_i, ext_pred_i, a_values, b_values);
         repeat (FUNCTIONAL_SETTLE) @(posedge clk_i);
         check_mul_outputs($sformatf("randomized case %0d", case_idx),
-                          a_values, b_values, expected_values);
+                          ext_data_o, a_values, b_values, expected_values);
       end
 
       $display("[TB] Randomized test passed (%0d cases)", NUM_RANDOM_CASES);
@@ -402,7 +244,7 @@ module tb_dice_top_vector_mul;
     reset_dut();
     load_bin_bitstream();
 
-    drive_boundary_to_zero();
+    drive_boundary_to_zero(ext_data_i, ext_pred_i);
     en_i = 1'b1;
     repeat (FUNCTIONAL_SETTLE) @(posedge clk_i);
 
