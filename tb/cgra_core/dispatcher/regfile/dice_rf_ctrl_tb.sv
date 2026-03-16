@@ -313,11 +313,9 @@ import dice_pkg::*;
     );
         cache_wr_cmd cmd;
         cmd = '0;
-        cmd.outcmd_ld_dest_reg = dest_reg;
-        cmd.outcmd_base_tid    = base_tid;
-        cmd.outcmd_tid_bitmap  = {{(TID_BITMAP_WIDTH-1){1'b0}}, 1'b1}; // single coalesced
-        cmd.outcmd_address_map[0] = '0; // offset 0 from base_tid
-        cmd.core_rsp_data[DATA_WIDTH-1:0] = data_val;
+        cmd.tid = base_tid;
+        cmd.wr_bitmap[dest_reg] = 1'b1;
+        cmd.data = data_val;
         return cmd;
     endfunction
 

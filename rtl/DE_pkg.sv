@@ -28,12 +28,9 @@ parameter int DICE_TOTAL_REGS = DICE_NUM_REGS + DICE_NUM_CONST + DICE_NUM_PRED;
 parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_TOTAL_REGS);
 parameter int LDST_BUF_DEPTH = 8;
 typedef struct packed {
-    logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0]  outcmd_base_tid;
-    logic [TID_BITMAP_WIDTH-1:0]                        outcmd_tid_bitmap;
-    logic [DICE_REG_ADDR_WIDTH-1:0]                     outcmd_ld_dest_reg;
-    logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0]
-          [BASE_ADDRESS_OFFSET-1:0]                     outcmd_address_map;
-    logic [(CACHE_LINE_SIZE*8)-1:0]                     core_rsp_data;
+    logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
+    logic [DICE_REG_DATA_WIDTH-1:0] data;
+    logic [DICE_TOTAL_REGS-1:0] wr_bitmap;
 } cache_wr_cmd;
 
 typedef struct packed {
@@ -67,7 +64,7 @@ function automatic reg_wr_cmd [DICE_NUM_BANKS-1:0] unpack_ldsr_wr
     for (int i = 0; i < DICE_NUM_BANKS; i++) begin
         wr_cmd[i].data = cmd.data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
         wr_cmd[i].mask = cmd.mask[i];
-        wr_cmd[i].tid = cmd.tid[i];
+        wr_cmd[i].tid = cmd.tid[i*$clog2(`DICE_NUM_MAX_THREADS_PER_CORE) +: $clog2(`DICE_NUM_MAX_THREADS_PER_CORE)];
     end
     return wr_cmd;
 endfunction
@@ -78,17 +75,11 @@ function automatic ldst_wr_cmd assemble_ldst_wr
     input cache_wr_cmd cmd
 );
     ldst_wr_cmd wr_data;
-    for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
-        if (cmd.outcmd_tid_bitmap[i]) begin
-            wr_data.data[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] 
-                = cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
-            wr_data.mask[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = 1'b1;
-            wr_data.tid[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = cmd.outcmd_base_tid + cmd.outcmd_address_map[i];
-        end else begin
-            wr_data.data[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = '0;
-            wr_data.mask[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = 1'b0;
-            wr_data.tid[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = '0;
-        end
+    wr_data = '0;
+    for (int i = 0; i < DICE_NUM_BANKS; i++) begin
+        wr_data.data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cmd.data;
+        wr_data.mask[i] = cmd.wr_bitmap[i];
+        wr_data.tid[i*$clog2(`DICE_NUM_MAX_THREADS_PER_CORE) +: $clog2(`DICE_NUM_MAX_THREADS_PER_CORE)] = cmd.tid;
     end
     return wr_data;
 endfunction
@@ -98,35 +89,16 @@ function automatic special_regs_cmd assemble_special_wr
     input cache_wr_cmd cmd
 );
     special_regs_cmd wr_data;
-    int idx;
-    logic found;
-
     wr_data = '0;
 
-    if (cmd.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS)
-        && cmd.outcmd_ld_dest_reg < DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS + DICE_NUM_CONST)) begin
-        // Constant register write
-        idx = int'(cmd.outcmd_ld_dest_reg) - DICE_NUM_BANKS;
-        found = 0;
-        for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
-            if (cmd.outcmd_tid_bitmap[i] && !found) begin
-                wr_data.const_data[idx*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] =
-                    cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
-                wr_data.const_mask[idx] = 1'b1;
-                found = 1;
-            end
-        end
-    end else if (cmd.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS + DICE_NUM_CONST)) begin
-        // Predicate register write
-        idx = int'(cmd.outcmd_ld_dest_reg) - DICE_NUM_BANKS - DICE_NUM_CONST;
-        found = 0;
-        for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
-            if (cmd.outcmd_tid_bitmap[i] && !found) begin
-                wr_data.pred_data[idx] = cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH];
-                wr_data.pred_mask[idx] = 1'b1;
-                found = 1;
-            end
-        end
+    for (int i = 0; i < DICE_NUM_CONST; i++) begin
+        wr_data.const_mask[i] = cmd.wr_bitmap[DICE_NUM_BANKS + i];
+        wr_data.const_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cmd.data;
+    end
+
+    for (int i = 0; i < DICE_NUM_PRED; i++) begin
+        wr_data.pred_mask[i] = cmd.wr_bitmap[DICE_NUM_BANKS + DICE_NUM_CONST + i];
+        wr_data.pred_data[i] = cmd.data[0];
     end
 
     return wr_data;

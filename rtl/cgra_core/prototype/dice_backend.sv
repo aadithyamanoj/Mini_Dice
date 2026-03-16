@@ -24,12 +24,8 @@ module dice_backend
     output logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] tmcu_address_map_o,
     input  logic                                                                        tmcu_ready_i,
 
-    // Memory Response Input (cache_wr_cmd fields)
-    input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                            mem_rsp_base_tid_i,
-    input  logic [TID_BITMAP_WIDTH-1:0]                                                 mem_rsp_tid_bitmap_i,
-    input  logic [DICE_REG_ADDR_WIDTH-1:0]                                              mem_rsp_ld_dest_reg_i,
-    input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]        mem_rsp_address_map_i,
-    input  logic [(CACHE_LINE_SIZE*8)-1:0]                                              mem_rsp_data_i,
+    // Memory Response Input
+    input  logic [$bits(cache_wr_cmd)-1:0]                                              mem_rsp_i,
     input  logic                                                                        mem_rsp_valid_i,
 
     // Block commit table outputs
@@ -91,6 +87,7 @@ module dice_backend
   logic [DICE_TID_WIDTH-1:0] cgra_tid_li; // out of rf, in to shift reg and cgra
 
   logic [DICE_TOTAL_REGS-1:0] wb_map_li; // shifted form metadata, goes to rf
+  logic [DICE_TOTAL_REGS-1:0] wb_map_rf_li; // registered RF bitmap, before CGRA latency shift
 
 
   // CGRA write-back wires (undriven for now)
@@ -129,12 +126,7 @@ module dice_backend
 
   assign fdr_if_i.ready = ~dispatch_busy;
 
-  assign ldst_cmd.outcmd_base_tid    = mem_rsp_base_tid_i;
-  assign ldst_cmd.outcmd_tid_bitmap  = mem_rsp_tid_bitmap_i;
-  assign ldst_cmd.outcmd_ld_dest_reg = mem_rsp_ld_dest_reg_i;
-  assign ldst_cmd.outcmd_address_map = mem_rsp_address_map_i;
-  assign ldst_cmd.core_rsp_data      = mem_rsp_data_i;
-
+  assign ldst_cmd      = mem_rsp_i;
   assign ldst_wr_lo    = ldst_cmd;
   assign ldst_valid_lo = mem_rsp_valid_i;
 
@@ -174,9 +166,11 @@ module dice_backend
       .rd_en_i(rd_tid_valid),
       .rd_tid_i(rd_tid),
       .rd_bitmap_i(gpr_bitmap),
+      .wr_bitmap_i(fdr_if_i.data.metadata.out_regs_bitmap),
       .rd_data_o(rd_data_lo),
       .rf_rd_valid_o(rf_rd_valid_lo),
-      .tid_o        (cgra_tid_li)
+      .tid_o        (cgra_tid_li),
+      .wr_bitmap_o  (wb_map_rf_li),
 
       // Predicate output
       .pred_o(pred_lo),
@@ -184,7 +178,7 @@ module dice_backend
       // Write Interface — CGRA
       .cgra_tid_i(cgra_tid_lo),
       .cgra_data_i(cgra_data_lo),
-      .wr_bitmap_i(wb_map_li),
+      .cgra_wr_bitmap_i(wb_map_li),
       .cgra_valid_i(cgra_v_lo),
 
       // Write Interface — LDST
@@ -217,7 +211,7 @@ module dice_backend
         
         ,.latency (fdr_if_i.data.metadata.lat+1) // 
 
-        ,.in_data (fdr_if_i.data.metadata.out_regs_bitmap) //straight from metadata
+        ,.in_data (wb_map_rf_li) // registered in RF control, then delayed to CGRA WB point
         ,.out_data (wb_map_li) //
         );
 
