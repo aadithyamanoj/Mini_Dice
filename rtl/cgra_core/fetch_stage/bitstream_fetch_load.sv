@@ -1,11 +1,9 @@
-`include "VX_define.vh"
-
 module bitstream_fetch_load
   import dice_pkg::*;
   import dice_frontend_pkg::*;
 #(
     parameter int TAG_WIDTH = DICE_ADDR_WIDTH,
-    parameter int CHUNK_SIZE = VX_gpu_pkg::VX_MEM_DATA_WIDTH,
+    parameter int CHUNK_SIZE = DICE_MEM_DATA_WIDTH,
     parameter int NUM_CHUNKS = (DICE_BITSTREAM_SIZE + CHUNK_SIZE - 1) / CHUNK_SIZE
 ) (
     input logic clk_i,

@@ -81,7 +81,7 @@ CFLAGS_O0+=$(STDLIB)
 LD_PARTIAL_LOADER=ld
 # Partial linking
 LD_PARTIAL=$(LD_PARTIAL_LOADER) -r -o
-LIBS=-lvirsim -lerrorinf -lsnpsmalloc -lvfs 
+LIBS=-lnuma -lvirsim -lerrorinf -lsnpsmalloc -lvfs 
 
 
 ### ====== ###

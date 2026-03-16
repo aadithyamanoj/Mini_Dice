@@ -1,0 +1,9 @@
+Command exited with non-zero status 255
+{"vcs1":{"timestamp_begin":1772148131.951488912, "rt":0.21, "ut":0.09, "st":0.08}}
+{"SNPS_VCS_INTERNAL_ROOT_START_TIME": 1772148131.622320706}
+{"VCS_COMP_START_TIME": 1772148131.622320706}
+{"VCS_COMP_END_TIME": 1772148132.231523968}
+{"elabcom":{"timestamp_begin":1772148132.127282288,"rt":0.05, "ut":0.01, "st":0.03}}
+{"VCS_USER_OPTIONS": "-full64 -sverilog -f filelist.f -top dice_rf_ctrl_tb -debug_access+pp+all -kdb -lca +vpi +define+FSDB -o simv"}
+{"kdb": {"elabcom_name":"<Kdbresolver>", "log_dir":"simv.daidir/kdbresolverLog"}}
+{"vcs1": {"peak_mem": 430640}}
