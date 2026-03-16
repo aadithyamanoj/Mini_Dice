@@ -1,0 +1,4 @@
+[submodule "dora"]
+	path = dora
+	url = git@github.com:pncel/dora.git
+	branch = dora-8-bit-datapath
