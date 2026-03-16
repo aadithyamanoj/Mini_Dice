@@ -34,7 +34,7 @@ import "DPI-C" context function void dice_vector_mul_golden_random_case(
 
 module tb_dice_top_vector_mul;
 
-  localparam int CLK_PERIOD_NS          = 10;
+  localparam int CLK_PERIOD_NS          = 10000;
   localparam int PROG_CLK_PERIOD_NS     = 12;
   localparam int RESET_CYCLES           = 10;
   localparam int POST_RESET_CYCLES      = 10;
