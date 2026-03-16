@@ -1,4 +1,4 @@
-// alu_8bit_Operation(op_type=<OpType.ADD: 1>, num_operands=2, operand_types=(ArchIntegerType(name='int8', bit_width=8, signed=True), ArchIntegerType(name='int8', bit_width=8, signed=True), ArchIntegerType(name='int8', bit_width=8, signed=True)))_Operation(op_type=<OpType.SUB: 2>, num_operands=2, operand_types=(ArchIntegerType(name='int8', bit_width=8, signed=True), ArchIntegerType(name='int8', bit_width=8, signed=True), ArchIntegerType(name='int8', bit_width=8, signed=True))).sv
+// alu_8bit_Operation(op_type='add', num_operands=2, operand_types=('int8', 'int8', 'int8'))_Operation(op_type='sub', num_operands=2, operand_types=('int8', 'int8', 'int8')).sv
 module alu_add (
     input  logic [7:0] A,
     input  logic [7:0] B,

@@ -29,9 +29,15 @@ module alu_mul (
     logic [W:0] b_ext; // extra LSB 0 for Booth encoding
 
     integer i;
+    logic [2:0] trip;
+    integer idx_hi, idx_mid, idx_lo;
     always_comb begin
         // default outputs
         product_full = '0;
+        trip = '0;
+        idx_hi = 0;
+        idx_mid = 0;
+        idx_lo = 0;
         for (i = 0; i < PP; i = i + 1) begin
             pp[i] = '0;
         end
@@ -45,10 +51,9 @@ module alu_mul (
             for (i = 0; i < PP; i = i + 1) begin
                 // examine bits: y_{2i+1}, y_{2i}, y_{2i-1}
                 // where y_{-1}=0 is stored at b_ext[0] and y_k=B[k] at b_ext[k+1]
-                logic [2:0] trip;
-                int idx_hi = 2*i + 2;
-                int idx_mid = 2*i + 1;
-                int idx_lo = 2*i;
+                idx_hi = 2*i + 2;
+                idx_mid = 2*i + 1;
+                idx_lo = 2*i;
                 // safely extract bits (if out-of-range, treat as 0)
                 trip[2] = (idx_hi <= W) ? b_ext[idx_hi] : 1'b0;
                 trip[1] = (idx_mid <= W) ? b_ext[idx_mid] : 1'b0;
