@@ -16,25 +16,25 @@ module flit_axil_bridge
    ,parameter int axil_data_width_p     = 16
 
    // Width of downstream AXI-Lite read/write data.
-   ,parameter int rd_req_fifo_els_p     = 8
+   ,parameter int rd_req_fifo_els_p     = 16
 
    // Depth of the parsed read-request FIFO.
-   ,parameter int wr_req_fifo_els_p     = 8
+   ,parameter int wr_req_fifo_els_p     = 16
 
    // Depth of the parsed write-request FIFO.
-   ,parameter int rd_out_fifo_els_p     = 8
+   ,parameter int rd_out_fifo_els_p     = 16
 
    // Depth of the outstanding read FIFO.
-   ,parameter int rd_data_fifo_els_p    = 8
+   ,parameter int rd_data_fifo_els_p    = 16
 
    // Depth of the read-data FIFO that buffers returned RDATA words.
-   ,parameter int wr_out_fifo_els_p     = 8
+   ,parameter int wr_out_fifo_els_p     = 16
 
    // Depth of the outstanding write FIFO.
-   ,parameter int tx_resp_fifo_els_p    = 8
+   ,parameter int tx_resp_fifo_els_p    = 16
    
    // Depth of the TX response descriptor FIFO.
-   ,parameter int wr_starvation_limit_p = 8
+   ,parameter int wr_starvation_limit_p = 16
    // Maximum number of times a read completion may win over a waiting write
    // completion before write is force-granted once.
    )
