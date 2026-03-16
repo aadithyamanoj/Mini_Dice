@@ -74,27 +74,43 @@ module cgra_mem_system_16bit #(
         slave_ifs [NUM_SLAVES-1:0] ();
 
     // -------------------------------------------------------------------------
-    // Address routing rules
-    //   Slave 0: CSRs       0x0000_0000 – 0x0000_0100
-    //   Slave 1: FPGA mem   0x0001_0000 – 0x0002_0000
+    // 16-bit address routing rule type.
+    // axi_pkg only provides xbar_rule_32_t and xbar_rule_64_t; addr_decode_dync
+    // asserts that the rule's start_addr width matches the AXI address width, so
+    // we must define a matching 16-bit variant.
     // -------------------------------------------------------------------------
-    axi_pkg::xbar_rule_32_t [1:0] routing_rules;
+    typedef struct packed {
+        int unsigned    idx;
+        logic [15:0]    start_addr;
+        logic [15:0]    end_addr;
+    } xbar_rule_16_t;
+
+    // -------------------------------------------------------------------------
+    // Address routing rules  (16-bit address space)
+    //   Slave 0: CSRs       0x0000 – 0x00FF   (128 × 16-bit regs)
+    //   Slave 1: FPGA mem   0x0800 – 0x0FFF   (1024 × 16-bit words = 2 KB)
+    //
+    // MEM base 0x0800 is chosen so that SRAM word-address bits [10:1] of the
+    // byte address index correctly from 0 (bit 11 carries the base offset and
+    // is above the WORD_ADDR_W+BYTE_OFFSET-1 = 10 extraction window).
+    // -------------------------------------------------------------------------
+    xbar_rule_16_t [1:0] routing_rules;
     always_comb begin
         routing_rules[0].idx        = 32'd0;
-        routing_rules[0].start_addr = 32'h0000_0000;
-        routing_rules[0].end_addr   = 32'h0000_0100;  // 256 bytes = 128 x 16-bit regs
+        routing_rules[0].start_addr = 16'h0000;
+        routing_rules[0].end_addr   = 16'h0100;  // 256 bytes = 128 x 16-bit regs
 
         routing_rules[1].idx        = 32'd1;
-        routing_rules[1].start_addr = 32'h0001_0000;
-        routing_rules[1].end_addr   = 32'h0002_0000;  // 64 KB FPGA SRAM window
+        routing_rules[1].start_addr = 16'h0800;  // FPGA SRAM base
+        routing_rules[1].end_addr   = 16'h1000;  // 2 KB FPGA SRAM window
     end
 
     // -------------------------------------------------------------------------
     // Crossbar
     // -------------------------------------------------------------------------
     axi_lite_xbar_intf #(
-        .Cfg    ( XBAR_CFG                ),
-        .rule_t ( axi_pkg::xbar_rule_32_t )
+        .Cfg    ( XBAR_CFG       ),
+        .rule_t ( xbar_rule_16_t )
     ) i_xbar (
         .clk_i                 ( clk_i        ),
         .rst_ni                ( ~rst_i       ),

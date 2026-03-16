@@ -39,7 +39,7 @@ module flit_axil_bridge
    // completion before write is force-granted once.
    )
   (input  logic                           clk_i
-   ,input logic                           reset_i
+   ,input logic                           rst_i
 
    // Flit RX from adapter (adapter phy_rx_* -> bridge)
    ,input  logic                          phy_rx_v_i
@@ -365,7 +365,7 @@ module flit_axil_bridge
     .ready_THEN_valid_p (0)
   ) rd_req_fifo_i (
     .clk_i  (clk_i),
-    .reset_i(reset_i),
+    .reset_i(rst_i),
     .v_i    (rd_req_fifo_push_v),
     .data_i (rd_req_fifo_push_data),
     .ready_o(rd_req_fifo_push_ready),
@@ -382,7 +382,7 @@ module flit_axil_bridge
     .ready_THEN_valid_p (0)
   ) wr_req_fifo_i (
     .clk_i  (clk_i),
-    .reset_i(reset_i),
+    .reset_i(rst_i),
     .v_i    (wr_req_fifo_push_v),
     .data_i (wr_req_fifo_push_data),
     .ready_o(wr_req_fifo_push_ready),
@@ -399,7 +399,7 @@ module flit_axil_bridge
     .ready_THEN_valid_p (0)
   ) rd_out_fifo_i (
     .clk_i  (clk_i),
-    .reset_i(reset_i),
+    .reset_i(rst_i),
     .v_i    (rd_out_fifo_push_v),
     .data_i (rd_out_fifo_push_data),
     .ready_o(rd_out_fifo_push_ready),
@@ -416,7 +416,7 @@ module flit_axil_bridge
     .ready_THEN_valid_p (0)
   ) wr_out_fifo_i (
     .clk_i  (clk_i),
-    .reset_i(reset_i),
+    .reset_i(rst_i),
     .v_i    (wr_out_fifo_push_v),
     .data_i (wr_out_fifo_push_data),
     .ready_o(wr_out_fifo_push_ready),
@@ -433,7 +433,7 @@ module flit_axil_bridge
     .ready_THEN_valid_p (0)
   ) rd_data_fifo_i (
     .clk_i  (clk_i),
-    .reset_i(reset_i),
+    .reset_i(rst_i),
     .v_i    (rd_data_fifo_push_v),
     .data_i (rd_data_fifo_push_data),
     .ready_o(rd_data_fifo_push_ready),
@@ -450,7 +450,7 @@ module flit_axil_bridge
     .ready_THEN_valid_p (0)
   ) tx_resp_fifo_i (
     .clk_i  (clk_i),
-    .reset_i(reset_i),
+    .reset_i(rst_i),
     .v_i    (tx_resp_fifo_push_v),
     .data_i (tx_resp_fifo_push_data),
     .ready_o(tx_resp_fifo_push_ready),
@@ -980,7 +980,7 @@ module flit_axil_bridge
 
   // Sequential state/register update.
   always_ff @(posedge clk_i) begin
-    if (reset_i) begin
+    if (rst_i) begin
       rx_state_r               <= RX_IDLE;
       axi_state_r              <= AXI_IDLE;
       tx_state_r               <= TX_IDLE;
