@@ -19,6 +19,9 @@ module dice_cgra_rf
     output logic [1:0] bank_valid_o,
     output logic prog_dout_o,
     output logic prog_we_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0]                         mem_data_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0]                         mem_addr_o,
+    output logic                                                   mem_valid_o,
     input  logic [7:0]                                             latency_i,
 
     input  logic                                                 rd_tid_valid_i,
@@ -46,8 +49,6 @@ module dice_cgra_rf
 
   logic [7:0] cgra_ext_data_o [0:15];
   logic       cgra_ext_pred_o [0:1];
-  logic [7:0] cgra_mem_data_li;
-  logic [7:0] cgra_mem_addr_li;
   logic [((NUM_BANKS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_li;
   logic [TOTAL_REGS-1:0]                           cgra_wr_bitmap_li;
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_li;
@@ -118,8 +119,8 @@ module dice_cgra_rf
       .ext_pred_i_1(pred_lo[1]),
       .ext_pred_o_0(cgra_ext_pred_o[0]),
       .ext_pred_o_1(cgra_ext_pred_o[1]),
-      .mem_data_o(cgra_mem_data_li),
-      .mem_addr_o(cgra_mem_addr_li)
+      .mem_data_o(mem_data_o),
+      .mem_addr_o(mem_addr_o)
   );
 
   shift_reg
@@ -180,5 +181,6 @@ module dice_cgra_rf
       .ldst_valid_i(ldst_valid_i),
       .ldst_ready_o(ldst_ready_o)
   );
+  assign mem_valid_o = cgra_valid_lo;
 
 endmodule

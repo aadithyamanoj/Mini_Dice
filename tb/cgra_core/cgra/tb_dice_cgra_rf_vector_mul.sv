@@ -35,7 +35,7 @@ module tb_dice_cgra_rf_vector_mul;
                                      / DICE_MEM_DATA_WIDTH;
   localparam int WORDS_PER_CHUNK   = DICE_MEM_DATA_WIDTH / 32;
   localparam int RF_WRITE_SETTLE   = 3;
-  localparam int CGRA_LATENCY      = 15;
+  localparam int CGRA_LATENCY      = 10;
   localparam int WRITEBACK_SETTLE  = 3;
 
   localparam string DEFAULT_BITSTREAM_FILE =
