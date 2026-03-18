@@ -9,6 +9,7 @@ import DE_pkg::*;
 )(
     input  logic              clk,
     // Read port
+    input  logic [NUM_BANK-1:0]    rd_en,
     input  logic [NUM_BANK*ADDR_WIDTH-1:0] rd_addr,
     output logic [NUM_BANK*WIDTH-1:0] rd_data,
     // Write port
@@ -37,7 +38,7 @@ import DE_pkg::*;
                 .w_v_i   (wr_en[i]),
                 .w_addr_i(wr_addr[(i+1)*ADDR_WIDTH-1:i*ADDR_WIDTH]),
                 .w_data_i(wr_data[(i+1)*WIDTH-1:i*WIDTH]),
-                .r_v_i   (1'b1),
+                .r_v_i   (rd_en[i]),
                 .r_addr_i(rd_addr[(i+1)*ADDR_WIDTH-1:i*ADDR_WIDTH]),
                 .r_data_o(rd_data[(i+1)*WIDTH-1:i*WIDTH])
             );

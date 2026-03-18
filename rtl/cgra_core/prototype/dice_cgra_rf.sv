@@ -46,6 +46,8 @@ module dice_cgra_rf
 
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_rd_data_lo;
   logic [NUM_PRED-1:0]                         pred_lo;
+  logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_launch_data_lo;
+  logic [NUM_PRED-1:0]                         pred_launch_lo;
 
   logic [7:0] cgra_ext_data_o [0:15];
   logic       cgra_ext_pred_o [0:1];
@@ -55,6 +57,16 @@ module dice_cgra_rf
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_lo;
   logic [TOTAL_REGS-1:0]                            wr_bitmap_reg_li;
   logic                                             cgra_valid_lo;
+
+  always_ff @(posedge clk_i) begin
+    if (reset_i) begin
+      rf_launch_data_lo <= '0;
+      pred_launch_lo <= '0;
+    end else if (rf_rd_valid_o) begin
+      rf_launch_data_lo <= rf_rd_data_lo;
+      pred_launch_lo <= pred_lo;
+    end
+  end
 
   always_comb begin
     cgra_data_li = '0;
@@ -83,22 +95,22 @@ module dice_cgra_rf
       .bank_valid_o(bank_valid_o),
       .prog_dout_o(prog_dout_o),
       .prog_we_o(prog_we_o),
-      .ext_data_i_0(rf_rd_data_lo[0*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_1(rf_rd_data_lo[1*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_2(rf_rd_data_lo[2*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_3(rf_rd_data_lo[3*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_4(rf_rd_data_lo[4*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_5(rf_rd_data_lo[5*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_6(rf_rd_data_lo[6*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_7(rf_rd_data_lo[7*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_8(rf_rd_data_lo[8*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_9(rf_rd_data_lo[9*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_10(rf_rd_data_lo[10*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_11(rf_rd_data_lo[11*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_12(rf_rd_data_lo[12*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_13(rf_rd_data_lo[13*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_14(rf_rd_data_lo[14*DATA_WIDTH +: DATA_WIDTH]),
-      .ext_data_i_15(rf_rd_data_lo[15*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_0(rf_launch_data_lo[0*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_1(rf_launch_data_lo[1*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_2(rf_launch_data_lo[2*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_3(rf_launch_data_lo[3*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_4(rf_launch_data_lo[4*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_5(rf_launch_data_lo[5*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_6(rf_launch_data_lo[6*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_7(rf_launch_data_lo[7*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_8(rf_launch_data_lo[8*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_9(rf_launch_data_lo[9*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_10(rf_launch_data_lo[10*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_11(rf_launch_data_lo[11*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_12(rf_launch_data_lo[12*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_13(rf_launch_data_lo[13*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_14(rf_launch_data_lo[14*DATA_WIDTH +: DATA_WIDTH]),
+      .ext_data_i_15(rf_launch_data_lo[15*DATA_WIDTH +: DATA_WIDTH]),
       .ext_data_o_0(cgra_ext_data_o[0]),
       .ext_data_o_1(cgra_ext_data_o[1]),
       .ext_data_o_2(cgra_ext_data_o[2]),
@@ -115,14 +127,15 @@ module dice_cgra_rf
       .ext_data_o_13(cgra_ext_data_o[13]),
       .ext_data_o_14(cgra_ext_data_o[14]),
       .ext_data_o_15(cgra_ext_data_o[15]),
-      .ext_pred_i_0(pred_lo[0]),
-      .ext_pred_i_1(pred_lo[1]),
+      .ext_pred_i_0(pred_launch_lo[0]),
+      .ext_pred_i_1(pred_launch_lo[1]),
       .ext_pred_o_0(cgra_ext_pred_o[0]),
       .ext_pred_o_1(cgra_ext_pred_o[1]),
       .mem_data_o(mem_data_o),
       .mem_addr_o(mem_addr_o)
   );
 
+  wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i + 1;
   shift_reg
       #(.WIDTH          (DICE_TID_WIDTH)
        ,.MAX_PIPE_STAGE (128)
@@ -130,7 +143,7 @@ module dice_cgra_rf
       TID_SHIFT
       (.clk_i(clk_i)
       ,.reset_i(reset_i)
-      ,.latency(latency_i[SHIFT_LAT_W-1:0])
+      ,.latency(cgra_lat)
       ,.in_data(cgra_tid_li)
       ,.out_data(cgra_tid_lo)
       );
@@ -142,7 +155,7 @@ module dice_cgra_rf
       WB_MAP_SHIFT
       (.clk_i(clk_i)
       ,.reset_i(reset_i)
-      ,.latency(latency_i[SHIFT_LAT_W-1:0])
+      ,.latency(cgra_lat)
       ,.in_data(wr_bitmap_reg_li)
       ,.out_data(cgra_wr_bitmap_li)
       );
@@ -154,7 +167,7 @@ module dice_cgra_rf
       VALID_SHIFT
       (.clk_i(clk_i)
       ,.reset_i(reset_i)
-      ,.latency(latency_i[SHIFT_LAT_W-1:0])
+      ,.latency(cgra_lat)
       ,.in_data(rf_rd_valid_o)
       ,.out_data(cgra_valid_lo)
       );

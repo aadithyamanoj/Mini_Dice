@@ -274,6 +274,7 @@ import dice_pkg::*;
      registers (
           .clk (clk_i)
 
+        , .rd_en (rf_rd_en)
         , .rd_addr (rf_rd_addr)
         , .rd_data (rd_data_o[NUM_PORTS*DATA_WIDTH-1:0])
 

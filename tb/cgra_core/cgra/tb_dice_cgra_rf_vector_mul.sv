@@ -35,8 +35,12 @@ module tb_dice_cgra_rf_vector_mul;
                                      / DICE_MEM_DATA_WIDTH;
   localparam int WORDS_PER_CHUNK   = DICE_MEM_DATA_WIDTH / 32;
   localparam int RF_WRITE_SETTLE   = 3;
-  localparam int CGRA_LATENCY      = 10;
+  localparam int CGRA_LATENCY      = 7;
   localparam int WRITEBACK_SETTLE  = 3;
+  localparam int NUM_TEST_THREADS  = DICE_NUM_MAX_THREADS_PER_CORE;
+  localparam int NUM_SRC_BANKS     = 8;
+  localparam int NUM_DST_BANKS     = 4;
+  localparam bit ENABLE_WB_TRACE   = 1'b0;
 
   localparam string DEFAULT_BITSTREAM_FILE =
       "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
@@ -121,6 +125,19 @@ module tb_dice_cgra_rf_vector_mul;
     end
   end
 
+  always_ff @(posedge clk_i) begin
+    if (!reset_i && ENABLE_WB_TRACE && dut.cgra_valid_lo) begin
+      $display("[WB] cyc=%0d wb_tid=%0d wr_bitmap=%b d0=%0d d1=%0d d2=%0d d3=%0d",
+               cycle_count,
+               dut.cgra_tid_lo,
+               dut.cgra_wr_bitmap_li[NUM_DST_BANKS-1:0],
+               dut.cgra_ext_data_o[0],
+               dut.cgra_ext_data_o[1],
+               dut.cgra_ext_data_o[2],
+               dut.cgra_ext_data_o[3]);
+    end
+  end
+
   task automatic clear_stream_inputs();
     begin
       cm0_data_i     = '0;
@@ -141,6 +158,30 @@ module tb_dice_cgra_rf_vector_mul;
       wr_bitmap_i    = '0;
       ldst_wr_i      = '0;
       ldst_valid_i   = 1'b0;
+    end
+  endtask
+
+  task automatic dump_params();
+    begin
+      $display("[TB] Parameters:");
+      $display("[TB]   DICE_NUM_MAX_THREADS_PER_CORE = %0d", DICE_NUM_MAX_THREADS_PER_CORE);
+      $display("[TB]   DICE_TID_WIDTH                = %0d", DICE_TID_WIDTH);
+      $display("[TB]   DICE_NUM_BANKS                = %0d", DICE_NUM_BANKS);
+      $display("[TB]   DICE_NUM_CONST                = %0d", DICE_NUM_CONST);
+      $display("[TB]   DICE_NUM_PRED                 = %0d", DICE_NUM_PRED);
+      $display("[TB]   DICE_TOTAL_REGS               = %0d", DICE_TOTAL_REGS);
+      $display("[TB]   DICE_REG_DATA_WIDTH           = %0d", DICE_REG_DATA_WIDTH);
+      $display("[TB]   DICE_MEM_DATA_WIDTH           = %0d", DICE_MEM_DATA_WIDTH);
+      $display("[TB]   DICE_BITSTREAM_SIZE           = %0d", DICE_BITSTREAM_SIZE);
+      $display("[TB]   CHUNK_COUNT                   = %0d", CHUNK_COUNT);
+      $display("[TB]   WORDS_PER_CHUNK               = %0d", WORDS_PER_CHUNK);
+      $display("[TB]   RF_WRITE_SETTLE               = %0d", RF_WRITE_SETTLE);
+      $display("[TB]   CGRA_LATENCY                  = %0d", CGRA_LATENCY);
+      $display("[TB]   WRITEBACK_SETTLE              = %0d", WRITEBACK_SETTLE);
+      $display("[TB]   NUM_TEST_THREADS              = %0d", NUM_TEST_THREADS);
+      $display("[TB]   NUM_SRC_BANKS                 = %0d", NUM_SRC_BANKS);
+      $display("[TB]   NUM_DST_BANKS                 = %0d", NUM_DST_BANKS);
+      $display("[TB]   DEFAULT_BITSTREAM_FILE        = %s", DEFAULT_BITSTREAM_FILE);
     end
   endtask
 
@@ -266,8 +307,6 @@ module tb_dice_cgra_rf_vector_mul;
       @(negedge clk_i);
       rd_tid_valid_i = 1'b0;
       rd_en_i        = 1'b0;
-      rd_bitmap_i    = '0;
-      wr_bitmap_i    = '0;
     end
   endtask
 
@@ -276,19 +315,115 @@ module tb_dice_cgra_rf_vector_mul;
       input logic [7:0] expected[],
       input int count
   );
+    logic [DICE_NUM_BANKS*DICE_REG_DATA_WIDTH-1:0] sampled_rd_data;
     begin
       @(posedge clk_i iff (rf_rd_valid_o === 1'b1));
-      #1;
+      sampled_rd_data = dut.rf_rd_data_lo;
       for (int i = 0; i < count; i++) begin
-        if (dut.rf_rd_data_lo[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] !== expected[i]) begin
+        if (sampled_rd_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] !== expected[i]) begin
           $fatal(1, "%s: RF read bank %0d expected %0d got %0d",
                  test_name, i, expected[i],
-                 dut.rf_rd_data_lo[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]);
+                 sampled_rd_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]);
         end
         $display("%s: RF read bank %0d matched expected %0d",
                  test_name, i,
-                 dut.rf_rd_data_lo[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]);
+                 sampled_rd_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]);
       end
+    end
+  endtask
+
+  task automatic build_thread_case(
+      input logic [DICE_TID_WIDTH-1:0] tid,
+      output logic [7:0] rf_values [0:NUM_SRC_BANKS-1],
+      output logic [7:0] expected_values [0:NUM_DST_BANKS-1]
+  );
+    begin
+      for (int i = 0; i < NUM_DST_BANKS; i++) begin
+        rf_values[i] = tid + i + 1;
+        rf_values[i + NUM_DST_BANKS] = i + 2;
+        expected_values[i] = rf_values[i] * rf_values[i + NUM_DST_BANKS];
+      end
+    end
+  endtask
+
+  task automatic preload_thread_registers(
+      input logic [DICE_TID_WIDTH-1:0] tid,
+      input logic [7:0] rf_values [0:NUM_SRC_BANKS-1]
+  );
+    begin
+      for (int bank = 0; bank < NUM_SRC_BANKS; bank++) begin
+        send_ldst_write(tid, bank, rf_values[bank]);
+      end
+    end
+  endtask
+
+  task automatic issue_thread_source_read(
+      input logic [DICE_TID_WIDTH-1:0] tid
+  );
+    logic [DICE_TOTAL_REGS-1:0] src_bitmap;
+    logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
+    begin
+      src_bitmap = '0;
+      dst_bitmap = '0;
+      for (int i = 0; i < NUM_SRC_BANKS; i++) begin
+        src_bitmap[i] = 1'b1;
+      end
+      for (int i = 0; i < NUM_DST_BANKS; i++) begin
+        dst_bitmap[i] = 1'b1;
+      end
+      issue_rf_read(tid, src_bitmap, dst_bitmap);
+    end
+  endtask
+
+  task automatic issue_source_read_burst();
+    logic [DICE_TOTAL_REGS-1:0] src_bitmap;
+    logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
+    begin
+      src_bitmap = '0;
+      dst_bitmap = '0;
+      for (int i = 0; i < NUM_SRC_BANKS; i++) begin
+        src_bitmap[i] = 1'b1;
+      end
+      for (int i = 0; i < NUM_DST_BANKS; i++) begin
+        dst_bitmap[i] = 1'b1;
+      end
+
+      @(negedge clk_i);
+      rd_bitmap_i    = src_bitmap;
+      wr_bitmap_i    = dst_bitmap;
+      rd_tid_valid_i = 1'b1;
+      rd_en_i        = 1'b1;
+
+      for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
+        rd_tid_i = tid[DICE_TID_WIDTH-1:0];
+        @(posedge clk_i);
+        @(negedge clk_i);
+      end
+      wr_bitmap_i    = '0;
+      // @(posedge clk_i);
+      // @(posedge clk_i);
+      // @(posedge clk_i);
+
+      rd_tid_valid_i = 1'b0;
+      rd_en_i        = 1'b0;
+      rd_tid_i       = '0;
+      rd_bitmap_i    = '0;
+      
+    end
+  endtask
+
+  task automatic issue_thread_writeback_read(
+      input logic [DICE_TID_WIDTH-1:0] tid
+  );
+    logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
+    logic [DICE_TOTAL_REGS-1:0] wb_disable_bitmap;
+    begin
+      dst_bitmap = '0;
+      wb_disable_bitmap = '0;
+      for (int i = 0; i < NUM_DST_BANKS; i++) begin
+        dst_bitmap[i] = 1'b1;
+      end
+      issue_rf_read(tid, dst_bitmap, wb_disable_bitmap);
     end
   endtask
 
@@ -325,17 +460,13 @@ module tb_dice_cgra_rf_vector_mul;
 
   initial begin
     string bitstream_file;
-    logic [7:0] a_values [0:3];
-    logic [7:0] b_values [0:3];
-    logic [7:0] expected_values [0:3];
-    logic [7:0] rf_input_values [0:7];
-    logic [DICE_TOTAL_REGS-1:0] src_bitmap;
-    logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
-    logic [DICE_TOTAL_REGS-1:0] wb_disable_bitmap;
+    logic [7:0] thread_rf_input_values [0:NUM_TEST_THREADS-1][0:NUM_SRC_BANKS-1];
+    logic [7:0] thread_expected_values [0:NUM_TEST_THREADS-1][0:NUM_DST_BANKS-1];
 
     bitstream_file = DEFAULT_BITSTREAM_FILE;
     void'($value$plusargs("bitstream_bin=%s", bitstream_file));
 
+    dump_params();
     reset_dut();
     dice_vector_mul_bitstream_init(bitstream_file);
 
@@ -343,37 +474,29 @@ module tb_dice_cgra_rf_vector_mul;
     stream_bitstream_to_bank(1'b1);
     program_bank(1'b0);
 
-    load_directed_case(a_values, b_values, expected_values);
-    for (int i = 0; i < 4; i++) begin
-      rf_input_values[i] = a_values[i];
-      rf_input_values[i+4] = b_values[i];
+    for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
+      build_thread_case(
+          tid[DICE_TID_WIDTH-1:0],
+          thread_rf_input_values[tid],
+          thread_expected_values[tid]
+      );
     end
 
-    for (int i = 0; i < 8; i++) begin
-      send_ldst_write('0, i, rf_input_values[i]);
+    for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
+      preload_thread_registers(tid[DICE_TID_WIDTH-1:0], thread_rf_input_values[tid]);
     end
     repeat (RF_WRITE_SETTLE) @(posedge clk_i);
 
-    src_bitmap = '0;
-    dst_bitmap = '0;
-    wb_disable_bitmap = '0;
-    for (int i = 0; i < 8; i++) begin
-      src_bitmap[i] = 1'b1;
+    issue_source_read_burst();
+
+    repeat (CGRA_LATENCY + WRITEBACK_SETTLE + NUM_TEST_THREADS) @(posedge clk_i);
+
+    for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
+      issue_thread_writeback_read(tid[DICE_TID_WIDTH-1:0]);
+      check_rf_read_data($sformatf("writeback read tid %0d", tid), thread_expected_values[tid], NUM_DST_BANKS);
     end
-    for (int i = 0; i < 4; i++) begin
-      dst_bitmap[i] = 1'b1;
-    end
 
-    issue_rf_read('0, src_bitmap, dst_bitmap);
-    check_rf_read_data("source read", rf_input_values, 8);
-    check_cgra_outputs(expected_values);
-
-    repeat (WRITEBACK_SETTLE) @(posedge clk_i);
-
-    issue_rf_read('0, dst_bitmap, wb_disable_bitmap);
-    check_rf_read_data("writeback read", expected_values, 4);
-
-    $display("[TB] PASS: dice_cgra_rf vector-multiply RF roundtrip test completed");
+    $display("[TB] PASS: dice_cgra_rf pipelined multi-thread vector-multiply RF roundtrip test completed");
     $finish;
   end
 
