@@ -1,11 +1,9 @@
-`include "VX_define.vh"
-
 module bitstream_fetch_load
   import dice_pkg::*;
   import dice_frontend_pkg::*;
 #(
     parameter int TAG_WIDTH = DICE_ADDR_WIDTH,
-    parameter int CHUNK_SIZE = VX_gpu_pkg::VX_MEM_DATA_WIDTH,
+    parameter int CHUNK_SIZE = DICE_MEM_DATA_WIDTH,
     parameter int NUM_CHUNKS = (DICE_BITSTREAM_SIZE + CHUNK_SIZE - 1) / CHUNK_SIZE
 ) (
     input logic clk_i,
@@ -82,7 +80,7 @@ module bitstream_fetch_load
 
   // Tag verification: ensure response matches the address we requested
   logic tag_match;
-  assign tag_match = (cache_bus_if.rsp_data.tag[DICE_ADDR_WIDTH-1:0] == addr_q);
+  assign tag_match = (cache_bus_if.rsp_data.tag.uuid[DICE_ADDR_WIDTH-1:0] == addr_q);
 
   // Vortex Bus Assignments
   assign cache_bus_if.req_data.flags = '0;
@@ -91,7 +89,7 @@ module bitstream_fetch_load
   assign cache_bus_if.req_data.data = '0;
 
   // Use address as tag for request/response correlation
-  assign cache_bus_if.req_data.tag = TAG_WIDTH'(addr_q);
+  assign cache_bus_if.req_data.tag.uuid = TAG_WIDTH'(addr_q);
 
   assign cache_bus_if.req_data.addr = addr_q;
 

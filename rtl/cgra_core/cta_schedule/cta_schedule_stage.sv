@@ -33,6 +33,10 @@ module cta_schedule_stage
     output simt_stack_status_entry_t simt_status_o
 );
 
+
+   dice_cta_id_t pop_cta_id, out_cta_id;
+   assign cta_if_inst.complete_cta_id = pop_cta_id;
+
   // ---- SIMT stack top signals ----
   logic                        stack_top_valid;
   logic [DICE_ADDR_WIDTH-1:0]  stack_top_next_pc;
@@ -57,8 +61,6 @@ module cta_schedule_stage
   logic active_table_pop_ready;
   logic active_table_out_valid;
   logic active_table_out_ready;
-  dice_cta_id_t active_table_out_cta_id;
-  logic [DICE_KERNEL_ID_WIDTH-1:0] active_table_out_kernel_id;
   active_cta_t active_cta_entry;
   logic [DICE_TID_WIDTH:0] active_table_add_cta_thread_count;
 
@@ -90,6 +92,7 @@ module cta_schedule_stage
       .pop_ready_i            (active_table_pop_ready),
       .active_cta_valid_i     (active_cta_entry.cta_valid),
       .pop_out_valid_i        (active_table_out_valid),
+      .pop_out_cta_id_i       (pop_cta_id),
       .init_valid_o           (simt_init_valid),
       .init_pc_o              (simt_init_pc),
       .init_reconvergence_pc_o(simt_init_reconvergence_pc),
@@ -108,9 +111,10 @@ module cta_schedule_stage
       .add_cta_thread_count_i(active_table_add_cta_thread_count),
       .pop_valid_i           (active_table_pop_valid),
       .pop_ready_o           (active_table_pop_ready),
+      .out_cta_id_o          (out_cta_id),
       .out_valid_o           (active_table_out_valid),
       .out_ready_i           (active_table_out_ready),
-      .active_cta_entry_o    (active_cta_entry),
+      .active_cta_entry_o    (active_cta_entry)
   );
 
   // ---- CTA Scheduler ----
@@ -164,12 +168,5 @@ module cta_schedule_stage
       .stack_empty_o                (stack_empty),
       .stack_full_o                 (stack_full)
   );
-
-
-`ifndef SYNTHESIS
-
-
-`endif
-
 
 endmodule

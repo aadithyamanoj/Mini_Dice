@@ -1,21 +1,18 @@
-`include "VX_define.vh"
-
 module fdr_top_syn_wrap
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-  import VX_gpu_pkg::*;
 #(
   parameter int TAG_WIDTH                      = DICE_ADDR_WIDTH,
-  parameter int BITSTREAM_SIZE                 = 2056,
-  parameter int MEM_FLAGS_WIDTH_P              = VX_gpu_pkg::MEM_FLAGS_WIDTH,
-  parameter int MEM_ADDR_WIDTH_P               = `MEM_ADDR_WIDTH,
-  parameter int METACACHE_MEM_DATA_SIZE_P      = VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8,
+  parameter int BITSTREAM_SIZE                 = DICE_BITSTREAM_SIZE,
+  parameter int MEM_FLAGS_WIDTH_P              = DICE_MEM_FLAGS_WIDTH,
+  parameter int MEM_ADDR_WIDTH_P               = DICE_MEM_ADDR_WIDTH,
+  parameter int METACACHE_MEM_DATA_SIZE_P      = DICE_MEM_DATA_WIDTH / 8,
   parameter int METACACHE_MEM_DATA_WIDTH_P     = METACACHE_MEM_DATA_SIZE_P * 8,
   parameter int METACACHE_MEM_REQ_ADDR_WIDTH_P = MEM_ADDR_WIDTH_P - $clog2(METACACHE_MEM_DATA_SIZE_P),
-  parameter int BITSTREAM_MEM_DATA_SIZE_P      = VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8,
+  parameter int BITSTREAM_MEM_DATA_SIZE_P      = DICE_MEM_DATA_WIDTH / 8,
   parameter int BITSTREAM_MEM_DATA_WIDTH_P     = BITSTREAM_MEM_DATA_SIZE_P * 8,
   parameter int BITSTREAM_MEM_REQ_ADDR_WIDTH_P = MEM_ADDR_WIDTH_P - $clog2(BITSTREAM_MEM_DATA_SIZE_P),
-  parameter int CM_DATA_WIDTH_P                = VX_gpu_pkg::VX_MEM_DATA_WIDTH,
+  parameter int CM_DATA_WIDTH_P                = DICE_MEM_DATA_WIDTH,
   parameter int CM_CHUNK_COUNT_P               = (DICE_BITSTREAM_SIZE + CM_DATA_WIDTH_P - 1) / CM_DATA_WIDTH_P
 ) (
   input logic clk_i,

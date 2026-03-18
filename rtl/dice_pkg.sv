@@ -23,6 +23,9 @@ package dice_pkg;
   parameter int DICE_CORE_ID_WIDTH            = $clog2(`DICE_NUM_CGRA_CORES);
   parameter int DICE_SMEM_SIZE_WIDTH          = $clog2(`DICE_SMEM_SIZE_PER_CORE);
   parameter int DICE_BITSTREAM_SIZE           = 2048;  // 256 bytes max bitstream size
+  parameter int DICE_MEM_DATA_WIDTH           = 512;
+  parameter int DICE_MEM_FLAGS_WIDTH          = 1;
+  parameter int DICE_MEM_ADDR_WIDTH           = DICE_ADDR_WIDTH;
 
   parameter int DICE_DATA_WIDTH               = 32;
   parameter int DICE_NUMBER_OF_MAX_COALESCED_COMMANDS = 8;
@@ -61,17 +64,13 @@ package dice_pkg;
 
   typedef struct packed {
     // IDs and geometry
-    // logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
     dice_grid_size_t                 grid_size;
     dice_cta_size_t                  cta_size;
-    // Resources for backend to determine shared memory address for each CTA
-    // logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
 
     // Initial
     logic [DICE_ADDR_WIDTH-1:0] start_pc;
     // logic [DICE_ADDR_WIDTH-1:0] arg_ptr;   //might not need -> add to bitstream
   } dice_kernel_desc_t;  // Kernel descriptor for top driver to receive kernel launch info
-
 
 
   typedef struct packed {

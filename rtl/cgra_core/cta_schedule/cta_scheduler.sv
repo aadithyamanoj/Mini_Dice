@@ -53,8 +53,6 @@ module cta_scheduler
     scheduled_eblock.data.schedule_prefetch_block = cta_branch_resolving;
     scheduled_eblock.data.schedule_grid_size = active_cta_entry_i.grid_size;
     scheduled_eblock.data.schedule_cta_size = active_cta_entry_i.cta_size;
-    scheduled_eblock.data.schedule_kernel_id = active_cta_entry_i.kernel_id;
-    scheduled_eblock.data.schedule_smem_per_cta = active_cta_entry_i.smem_per_cta;
     scheduled_eblock.data.schedule_cta_thread_count = active_cta_entry_i.cta_thread_count;
   end
 
