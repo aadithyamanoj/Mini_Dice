@@ -61,16 +61,18 @@ package dice_pkg;
 
   typedef struct packed {
     // IDs and geometry
-    logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
+    // logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
     dice_grid_size_t                 grid_size;
     dice_cta_size_t                  cta_size;
     // Resources for backend to determine shared memory address for each CTA
-    logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
+    // logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
 
     // Initial
     logic [DICE_ADDR_WIDTH-1:0] start_pc;
-    logic [DICE_ADDR_WIDTH-1:0] arg_ptr;   //might not need
+    // logic [DICE_ADDR_WIDTH-1:0] arg_ptr;   //might not need -> add to bitstream
   } dice_kernel_desc_t;  // Kernel descriptor for top driver to receive kernel launch info
+
+
 
   typedef struct packed {
     dice_kernel_desc_t kernel_desc;
