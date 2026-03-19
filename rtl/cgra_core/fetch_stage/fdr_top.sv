@@ -51,6 +51,10 @@ module fdr_top
   logic [DICE_ADDR_WIDTH-1:0] simt_stack_pc;
   assign simt_stack_pc = simt_status_i.next_pc;
 
+  // Forward declarations (needed before use below)
+  logic schedule_ready_internal;
+  thread_mask_t branch_mask_internal;
+
   assign schedule_if.ready = schedule_ready_internal;
 
   // ---- FDR output pass-through (schedule_data_q → fdr_if) ----
@@ -73,7 +77,6 @@ module fdr_top
   pgraph_meta_t meta_internal;
   logic         meta_valid_internal;
   logic         fire_eblock_internal;
-  logic         schedule_ready_internal;
 
   // ---- Internal signals: bitstream ----
   logic [DICE_ADDR_WIDTH-1:0]        bitstream_addr;
@@ -82,7 +85,6 @@ module fdr_top
   logic                              done_streaming_internal;
 
   // ---- Internal signals: branch handler ----
-  thread_mask_t branch_mask_internal;
   branch_meta_t branch_meta_internal;
   logic         branch_mask_valid;
   logic         branch_req_valid_internal;

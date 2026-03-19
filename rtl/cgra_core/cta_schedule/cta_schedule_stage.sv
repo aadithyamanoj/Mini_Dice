@@ -35,7 +35,6 @@ module cta_schedule_stage
 
 
    dice_cta_id_t pop_cta_id, out_cta_id;
-   assign cta_if_inst.complete_cta_id = pop_cta_id;
 
   // ---- SIMT stack top signals ----
   logic                        stack_top_valid;

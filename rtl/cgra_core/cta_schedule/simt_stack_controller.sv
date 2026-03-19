@@ -120,6 +120,9 @@ module simt_stack_controller
   // DERIVED SIGNAL ASSIGNMENTS
   // ===========================================================================
 
+  logic stack_empty_internal;
+  logic stack_full_internal;
+
   // Output status signals - direct pass-through from single stack
   assign stack_empty_o = stack_empty_internal;
   assign stack_full_o = stack_full_internal;
@@ -140,9 +143,6 @@ module simt_stack_controller
   // ===========================================================================
   // SIMT STACK INSTANTIATION
   // ===========================================================================
-
-  logic stack_empty_internal;
-  logic stack_full_internal;
 
   simt_stack stack_inst (
       .clk_i                  (clk_i),
