@@ -106,7 +106,25 @@ module tb_cgra_io_mem_top;
         .link_tx_v_o     (link_tx_v),
         .link_tx_data_o  (link_tx_data),
         .link_tx_ready_i (link_tx_ready),
-        .fpga_axi_i      (fpga_axi)
+        .fpga_axi_i_aw_addr  (fpga_axi.aw_addr),
+        .fpga_axi_i_aw_prot  (fpga_axi.aw_prot),
+        .fpga_axi_i_aw_valid (fpga_axi.aw_valid),
+        .fpga_axi_i_aw_ready (fpga_axi.aw_ready),
+        .fpga_axi_i_w_data   (fpga_axi.w_data),
+        .fpga_axi_i_w_strb   (fpga_axi.w_strb),
+        .fpga_axi_i_w_valid  (fpga_axi.w_valid),
+        .fpga_axi_i_w_ready  (fpga_axi.w_ready),
+        .fpga_axi_i_b_resp   (fpga_axi.b_resp),
+        .fpga_axi_i_b_valid  (fpga_axi.b_valid),
+        .fpga_axi_i_b_ready  (fpga_axi.b_ready),
+        .fpga_axi_i_ar_addr  (fpga_axi.ar_addr),
+        .fpga_axi_i_ar_prot  (fpga_axi.ar_prot),
+        .fpga_axi_i_ar_valid (fpga_axi.ar_valid),
+        .fpga_axi_i_ar_ready (fpga_axi.ar_ready),
+        .fpga_axi_i_r_data   (fpga_axi.r_data),
+        .fpga_axi_i_r_resp   (fpga_axi.r_resp),
+        .fpga_axi_i_r_valid  (fpga_axi.r_valid),
+        .fpga_axi_i_r_ready  (fpga_axi.r_ready)
     );
 
     // =========================================================================

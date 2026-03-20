@@ -30,7 +30,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //   CGRA link  : link_rx_v_i / link_rx_data_i / link_rx_ready_o
 //                link_tx_v_o / link_tx_data_o / link_tx_ready_i
-//   FPGA AXI   : fpga_axi_i  (AXI_LITE.Slave)
+//   FPGA AXI   : flat AXI-Lite pins
 // =============================================================================
 
 `include "axi/typedef.svh"
@@ -61,10 +61,27 @@ module cgra_io_mem_top #(
     input  logic                  link_tx_ready_i,
 
     // ---- FPGA AXI-Lite master (CSR writes, SRAM reads/writes) --------------
-    AXI_LITE.Slave  fpga_axi_i
+    input  logic [ADDR_WIDTH-1:0]     fpga_axi_i_aw_addr,
+    input  logic [2:0]                fpga_axi_i_aw_prot,
+    input  logic                      fpga_axi_i_aw_valid,
+    output logic                      fpga_axi_i_aw_ready,
+    input  logic [DATA_WIDTH-1:0]     fpga_axi_i_w_data,
+    input  logic [(DATA_WIDTH/8)-1:0] fpga_axi_i_w_strb,
+    input  logic                      fpga_axi_i_w_valid,
+    output logic                      fpga_axi_i_w_ready,
+    output logic [1:0]                fpga_axi_i_b_resp,
+    output logic                      fpga_axi_i_b_valid,
+    input  logic                      fpga_axi_i_b_ready,
+    input  logic [ADDR_WIDTH-1:0]     fpga_axi_i_ar_addr,
+    input  logic [2:0]                fpga_axi_i_ar_prot,
+    input  logic                      fpga_axi_i_ar_valid,
+    output logic                      fpga_axi_i_ar_ready,
+    output logic [DATA_WIDTH-1:0]     fpga_axi_i_r_data,
+    output logic [1:0]                fpga_axi_i_r_resp,
+    output logic                      fpga_axi_i_r_valid,
+    input  logic                      fpga_axi_i_r_ready
 );
 
-    // -------------------------------------------------------------------------
     // Internal PHY wires (between io_rx_tx_adapter and flit_axil_bridge)
     // -------------------------------------------------------------------------
     logic                  phy_rx_v;
@@ -75,6 +92,35 @@ module cgra_io_mem_top #(
     logic [FLIT_WIDTH-1:0] phy_tx_data;
     logic                  phy_tx_ready;
 
+    AXI_LITE #(
+        .AXI_ADDR_WIDTH (ADDR_WIDTH),
+        .AXI_DATA_WIDTH (DATA_WIDTH)
+    ) fpga_axi_i ();
+
+    assign fpga_axi_i.aw_addr  = fpga_axi_i_aw_addr;
+    assign fpga_axi_i.aw_prot  = fpga_axi_i_aw_prot;
+    assign fpga_axi_i.aw_valid = fpga_axi_i_aw_valid;
+    assign fpga_axi_i_aw_ready = fpga_axi_i.aw_ready;
+
+    assign fpga_axi_i.w_data   = fpga_axi_i_w_data;
+    assign fpga_axi_i.w_strb   = fpga_axi_i_w_strb;
+    assign fpga_axi_i.w_valid  = fpga_axi_i_w_valid;
+    assign fpga_axi_i_w_ready  = fpga_axi_i.w_ready;
+
+    assign fpga_axi_i_b_resp   = fpga_axi_i.b_resp;
+    assign fpga_axi_i_b_valid  = fpga_axi_i.b_valid;
+    assign fpga_axi_i.b_ready  = fpga_axi_i_b_ready;
+
+    assign fpga_axi_i.ar_addr  = fpga_axi_i_ar_addr;
+    assign fpga_axi_i.ar_prot  = fpga_axi_i_ar_prot;
+    assign fpga_axi_i.ar_valid = fpga_axi_i_ar_valid;
+    assign fpga_axi_i_ar_ready = fpga_axi_i.ar_ready;
+
+    assign fpga_axi_i_r_data   = fpga_axi_i.r_data;
+    assign fpga_axi_i_r_resp   = fpga_axi_i.r_resp;
+    assign fpga_axi_i_r_valid  = fpga_axi_i.r_valid;
+    assign fpga_axi_i.r_ready  = fpga_axi_i_r_ready;
+
     // -------------------------------------------------------------------------
     // AXI-Lite interface: flit_axil_bridge → data_fetch port on the crossbar
     // -------------------------------------------------------------------------
@@ -82,7 +128,7 @@ module cgra_io_mem_top #(
         .AXI_ADDR_WIDTH (ADDR_WIDTH),
         .AXI_DATA_WIDTH (DATA_WIDTH)
     ) cgra_data_axi ();
-
+    
     // Flat wires driven by flit_axil_bridge (master outputs)
     logic [ADDR_WIDTH-1:0]         fab_awaddr;
     logic [2:0]                    fab_awprot;
