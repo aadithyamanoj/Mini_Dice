@@ -35,18 +35,10 @@ import dice_pkg::*;
     , output logic[WIDTH-1:0]        data_o
     , output logic                   we_o
 );
-
-
-
-  // arbitrated output
-  reg_wr_cmd cmd_lo;
-  // ---------------- LDST buffer ----------------
-  logic                 ldst_full,  ldst_empty;
+  reg_wr_cmd             cmd_lo;
+  logic                  ldst_full, ldst_empty;
   reg_wr_cmd             ldst_wb;
   logic                  ldst_wb_valid;
-  // logic [BUF_DEPTH-1:0]  ldst_fw_hit;
-  // logic [WIDTH-1:0]      ldst_fw_data_o;
-  // logic                  ldst_fw_valid;
   logic                  pop_ldst;
 
   localparam int WBUF = $bits(reg_wr_cmd);
@@ -68,14 +60,14 @@ import dice_pkg::*;
     );
 
   assign stall_o = ldst_full;
+  assign cgra_ready_o = 1'b1;
 
   always_comb begin
     cmd_lo   = cgra_valid_i ? cgra_wr_i : ldst_wb;
     pop_ldst = !cgra_valid_i && ldst_wb_valid;
-
-    data_o = cmd_lo.data;
-    we_o   = (cgra_valid_i | ldst_wb_valid) & cmd_lo.mask;
-    ws_o   = cmd_lo.tid;
+    data_o   = cmd_lo.data;
+    we_o     = (cgra_valid_i | ldst_wb_valid) & cmd_lo.mask;
+    ws_o     = cmd_lo.tid;
   end
 
 

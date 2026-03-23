@@ -287,7 +287,7 @@ import dice_pkg::*;
         if (reset_i) begin
             tid_o <= '0;
             wr_bitmap_o <= '0;
-        end else begin
+        end else if (rd_en_i && rd_tid_valid_i) begin
             tid_o <= rd_tid_i;
             wr_bitmap_o <= wr_bitmap_i;
         end
