@@ -1,3 +1,4 @@
+`define DICE_RF_DEBUG
 `timescale 1ns/1ps
 import "DPI-C" context function void dice_vector_mul_bitstream_init(
     input string bitstream_file
@@ -64,7 +65,7 @@ module tb_dice_cgra_rf_vector_mul;
 
   logic                           rd_tid_valid_i;
   logic                           rd_tid_ready_o;
-  logic                           rd_en_i;
+  // logic                           rd_en_i;
   logic [DICE_TID_WIDTH-1:0]      rd_tid_i;
   logic [DICE_TOTAL_REGS-1:0]     rd_bitmap_i;
   logic [DICE_TOTAL_REGS-1:0]     wr_bitmap_i;
@@ -73,6 +74,22 @@ module tb_dice_cgra_rf_vector_mul;
   logic [$bits(cache_wr_cmd)-1:0] ldst_wr_i;
   logic                           ldst_valid_i;
   logic                           ldst_ready_o;
+
+  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o;
+  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o;
+  logic                                                                mem_valid_o;
+
+`ifdef DICE_RF_DEBUG
+  logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0]      dbg_rf_rd_data;
+  logic [DICE_NUM_PRED-1:0]                                            dbg_pred;
+  logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0]      dbg_rf_launch_data;
+  logic [DICE_NUM_PRED-1:0]                                            dbg_pred_launch;
+  logic [((DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH)-1:0]   dbg_cgra_data;
+  logic [DICE_TOTAL_REGS-1:0]                                          dbg_cgra_wr_bitmap;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                    dbg_cgra_tid;
+  logic                                                                dbg_cgra_valid;
+  logic                                                                dbg_rf_rd_valid;
+`endif
 
   integer cycle_count;
 
@@ -99,14 +116,28 @@ module tb_dice_cgra_rf_vector_mul;
       .latency_i(latency_i),
       .rd_tid_valid_i(rd_tid_valid_i),
       .rd_tid_ready_o(rd_tid_ready_o),
-      .rd_en_i(rd_en_i),
+      // .rd_en_i(rd_en_i),
       .rd_tid_i(rd_tid_i),
       .rd_bitmap_i(rd_bitmap_i),
       .wr_bitmap_i(wr_bitmap_i),
       .rf_rd_valid_o(rf_rd_valid_o),
       .ldst_wr_i(ldst_wr_i),
       .ldst_valid_i(ldst_valid_i),
-      .ldst_ready_o(ldst_ready_o)
+      .ldst_ready_o(ldst_ready_o),
+      .mem_data_o(mem_data_o),
+      .mem_addr_o(mem_addr_o),
+      .mem_valid_o(mem_valid_o)
+`ifdef DICE_RF_DEBUG
+      , .dbg_rf_rd_data_o(dbg_rf_rd_data)
+      , .dbg_pred_o(dbg_pred)
+      , .dbg_rf_launch_data_o(dbg_rf_launch_data)
+      , .dbg_pred_launch_o(dbg_pred_launch)
+      , .dbg_cgra_data_o(dbg_cgra_data)
+      , .dbg_cgra_wr_bitmap_o(dbg_cgra_wr_bitmap)
+      , .dbg_cgra_tid_o(dbg_cgra_tid)
+      , .dbg_cgra_valid_o(dbg_cgra_valid)
+      , .dbg_rf_rd_valid_o(dbg_rf_rd_valid)
+`endif
   );
 
   initial begin
@@ -125,18 +156,20 @@ module tb_dice_cgra_rf_vector_mul;
     end
   end
 
+`ifdef DICE_RF_DEBUG
   always_ff @(posedge clk_i) begin
-    if (!reset_i && ENABLE_WB_TRACE && dut.cgra_valid_lo) begin
+    if (!reset_i && ENABLE_WB_TRACE && dbg_cgra_valid) begin
       $display("[WB] cyc=%0d wb_tid=%0d wr_bitmap=%b d0=%0d d1=%0d d2=%0d d3=%0d",
                cycle_count,
-               dut.cgra_tid_lo,
-               dut.cgra_wr_bitmap_li[NUM_DST_BANKS-1:0],
-               dut.cgra_ext_data_o[0],
-               dut.cgra_ext_data_o[1],
-               dut.cgra_ext_data_o[2],
-               dut.cgra_ext_data_o[3]);
+               dbg_cgra_tid,
+               dbg_cgra_wr_bitmap[NUM_DST_BANKS-1:0],
+               dbg_cgra_data[0*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH],
+               dbg_cgra_data[1*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH],
+               dbg_cgra_data[2*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH],
+               dbg_cgra_data[3*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]);
     end
   end
+`endif
 
   task automatic clear_stream_inputs();
     begin
@@ -152,7 +185,7 @@ module tb_dice_cgra_rf_vector_mul;
   task automatic clear_rf_inputs();
     begin
       rd_tid_valid_i = 1'b0;
-      rd_en_i        = 1'b0;
+      // rd_en_i        = 1'b0;
       rd_tid_i       = '0;
       rd_bitmap_i    = '0;
       wr_bitmap_i    = '0;
@@ -302,11 +335,11 @@ module tb_dice_cgra_rf_vector_mul;
       rd_bitmap_i    = rd_bitmap;
       wr_bitmap_i    = wr_bitmap;
       rd_tid_valid_i = 1'b1;
-      rd_en_i        = 1'b1;
+      // rd_en_i        = 1'b1;
       @(posedge clk_i);
       @(negedge clk_i);
       rd_tid_valid_i = 1'b0;
-      rd_en_i        = 1'b0;
+      // rd_en_i        = 1'b0;
     end
   endtask
 
@@ -315,10 +348,15 @@ module tb_dice_cgra_rf_vector_mul;
       input logic [7:0] expected[],
       input int count
   );
-    logic [DICE_NUM_BANKS*DICE_REG_DATA_WIDTH-1:0] sampled_rd_data;
+    logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] sampled_rd_data;
     begin
+`ifdef DICE_RF_DEBUG
+      @(posedge clk_i iff (dbg_rf_rd_valid === 1'b1));
+      sampled_rd_data = dbg_rf_rd_data;
+`else
       @(posedge clk_i iff (rf_rd_valid_o === 1'b1));
       sampled_rd_data = dut.rf_rd_data_lo;
+`endif
       for (int i = 0; i < count; i++) begin
         if (sampled_rd_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] !== expected[i]) begin
           $fatal(1, "%s: RF read bank %0d expected %0d got %0d",
@@ -392,7 +430,7 @@ module tb_dice_cgra_rf_vector_mul;
       rd_bitmap_i    = src_bitmap;
       wr_bitmap_i    = dst_bitmap;
       rd_tid_valid_i = 1'b1;
-      rd_en_i        = 1'b1;
+      // rd_en_i        = 1'b1;
 
       for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
         rd_tid_i = tid[DICE_TID_WIDTH-1:0];
@@ -405,7 +443,7 @@ module tb_dice_cgra_rf_vector_mul;
       // @(posedge clk_i);
 
       rd_tid_valid_i = 1'b0;
-      rd_en_i        = 1'b0;
+      // rd_en_i        = 1'b0;
       rd_tid_i       = '0;
       rd_bitmap_i    = '0;
       
@@ -430,7 +468,21 @@ module tb_dice_cgra_rf_vector_mul;
   task automatic check_cgra_outputs(
       input logic [7:0] expected [0:3]
   );
+    logic [DICE_REG_DATA_WIDTH-1:0] got;
     begin
+`ifdef DICE_RF_DEBUG
+      wait (dbg_cgra_valid === 1'b1);
+      for (int i = 0; i < 4; i++) begin
+        got = dbg_cgra_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
+        if (^got === 1'bX) begin
+          $fatal(1, "CGRA output %0d contains X/Z (%b)", i, got);
+        end
+        if (got !== expected[i]) begin
+          $fatal(1, "CGRA output %0d expected %0d got %0d",
+                 i, expected[i], got);
+        end
+      end
+`else
       wait (dut.cgra_valid_lo === 1'b1);
       for (int i = 0; i < 4; i++) begin
         if (^dut.cgra_ext_data_o[i] === 1'bX) begin
@@ -441,6 +493,7 @@ module tb_dice_cgra_rf_vector_mul;
                  i, expected[i], dut.cgra_ext_data_o[i]);
         end
       end
+`endif
     end
   endtask
 

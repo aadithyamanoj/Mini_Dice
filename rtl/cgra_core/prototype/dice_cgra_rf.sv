@@ -1,3 +1,4 @@
+`define DICE_RF_DEBUG
 module dice_cgra_rf
   import dice_pkg::*;
   import DE_pkg::*;
@@ -26,7 +27,7 @@ module dice_cgra_rf
 
     input  logic                                                 rd_tid_valid_i,
     output logic                                                 rd_tid_ready_o,
-    input  logic                                                 rd_en_i,
+    // input  logic                                                 rd_en_i,
     input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]     rd_tid_i,
     input  logic [DICE_TOTAL_REGS-1:0]                           rd_bitmap_i,
     input  logic [DICE_TOTAL_REGS-1:0]                           wr_bitmap_i,
@@ -35,6 +36,18 @@ module dice_cgra_rf
     input  logic [$bits(cache_wr_cmd)-1:0]                       ldst_wr_i,
     input  logic                                                 ldst_valid_i,
     output logic                                                 ldst_ready_o
+
+`ifdef DICE_RF_DEBUG
+    , output logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_rd_data_o
+    , output logic [DICE_NUM_PRED-1:0]                                        dbg_pred_o
+    , output logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_launch_data_o
+    , output logic [DICE_NUM_PRED-1:0]                                        dbg_pred_launch_o
+    , output logic [((DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH)-1:0] dbg_cgra_data_o
+    , output logic [DICE_TOTAL_REGS-1:0]                                      dbg_cgra_wr_bitmap_o
+    , output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]               dbg_cgra_tid_o
+    , output logic                                                            dbg_cgra_valid_o
+    , output logic                                                            dbg_rf_rd_valid_o
+`endif
 );
 
   localparam int NUM_BANKS = DICE_NUM_BANKS;
@@ -177,7 +190,7 @@ module dice_cgra_rf
       .reset_i(reset_i),
       .rd_tid_valid_i(rd_tid_valid_i),
       .rd_tid_ready_o(rd_tid_ready_o),
-      .rd_en_i(rd_en_i),
+      // .rd_en_i(rd_en_i),
       .rd_tid_i(rd_tid_i),
       .rd_bitmap_i(rd_bitmap_i),
       .wr_bitmap_i(wr_bitmap_i),
@@ -195,5 +208,17 @@ module dice_cgra_rf
       .ldst_ready_o(ldst_ready_o)
   );
   assign mem_valid_o = cgra_valid_lo;
+
+`ifdef DICE_RF_DEBUG
+  assign dbg_rf_rd_data_o    = rf_rd_data_lo;
+  assign dbg_pred_o          = pred_lo;
+  assign dbg_rf_launch_data_o = rf_launch_data_lo;
+  assign dbg_pred_launch_o   = pred_launch_lo;
+  assign dbg_cgra_data_o     = cgra_data_li;
+  assign dbg_cgra_wr_bitmap_o = cgra_wr_bitmap_li;
+  assign dbg_cgra_tid_o      = cgra_tid_lo;
+  assign dbg_cgra_valid_o    = cgra_valid_lo;
+  assign dbg_rf_rd_valid_o   = rf_rd_valid_o;
+`endif
 
 endmodule

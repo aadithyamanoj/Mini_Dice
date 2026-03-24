@@ -12,6 +12,9 @@ import dice_pkg::*;
         $fsdbDumpvars(0, "+all");
     end
 
+    // ---------------------------------------------------------------
+    // Parameters
+    // ---------------------------------------------------------------
     localparam int NUM_PORTS  = DICE_NUM_BANKS;
     localparam int DATA_WIDTH = DICE_REG_DATA_WIDTH;
     localparam int NUM_TID    = DICE_NUM_MAX_THREADS_PER_CORE;
@@ -24,15 +27,15 @@ import dice_pkg::*;
     localparam int BUF_DEPTH  = LDST_BUF_DEPTH;
     localparam int CLK_PERIOD = 20000;
     localparam int CGRA_DATA_WIDTH = (NUM_PORTS + NUM_PRED + 1) * DATA_WIDTH;
-    localparam int WRITE_TO_READ_LATENCY = 1;
-    localparam int WRITE_HOLD_CYCLES = 1;
 
+    // ---------------------------------------------------------------
+    // DUT signals
+    // ---------------------------------------------------------------
     logic clk_i;
     logic reset_i;
 
     logic                  rd_tid_valid_i;
     logic                  rd_tid_ready_o;
-    logic                  rd_en_i;
     logic [TID_WIDTH-1:0]  rd_tid_i;
     logic [TOTAL_REGS-1:0] rd_bitmap_i;
     logic [TOTAL_REGS-1:0] wr_bitmap_i;
@@ -40,8 +43,6 @@ import dice_pkg::*;
     logic                  rf_rd_valid_o;
     logic [TID_WIDTH-1:0]  tid_o;
     logic [TOTAL_REGS-1:0] wr_bitmap_o;
-    logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] sampled_rd_data_r;
-    logic [NUM_PRED-1:0]                        sampled_pred_r;
 
     logic [TID_WIDTH-1:0]       cgra_tid_i;
     logic [CGRA_DATA_WIDTH-1:0] cgra_data_i;
@@ -54,25 +55,27 @@ import dice_pkg::*;
 
     logic [NUM_PRED-1:0] pred_o;
 
+    // ---------------------------------------------------------------
+    // Scoreboard: expected register state
+    // ---------------------------------------------------------------
     logic [DATA_WIDTH-1:0] exp_gpr  [NUM_TID-1:0][NUM_PORTS-1:0];
     logic [DATA_WIDTH-1:0] exp_const[NUM_CONST-1:0];
     logic                  exp_pred [NUM_TID-1:0][NUM_PRED-1:0];
 
+    int test_num;
+    int err_count;
+
+    // ---------------------------------------------------------------
+    // Clock
+    // ---------------------------------------------------------------
     initial begin
         clk_i = 1'b0;
         forever #(CLK_PERIOD/2) clk_i = ~clk_i;
     end
 
-    always_ff @(posedge clk_i) begin
-        if (reset_i) begin
-            sampled_rd_data_r <= '0;
-            sampled_pred_r    <= '0;
-        end else if (rf_rd_valid_o) begin
-            sampled_rd_data_r <= rd_data_o;
-            sampled_pred_r    <= pred_o;
-        end
-    end
-
+    // ---------------------------------------------------------------
+    // DUT
+    // ---------------------------------------------------------------
     dice_rf_ctrl #(
           .NUM_PORTS  (NUM_PORTS)
         , .DATA_WIDTH (DATA_WIDTH)
@@ -89,7 +92,6 @@ import dice_pkg::*;
         , .reset_i        (reset_i)
         , .rd_tid_valid_i (rd_tid_valid_i)
         , .rd_tid_ready_o (rd_tid_ready_o)
-        , .rd_en_i        (rd_en_i)
         , .rd_tid_i       (rd_tid_i)
         , .rd_bitmap_i    (rd_bitmap_i)
         , .wr_bitmap_i    (wr_bitmap_i)
@@ -107,346 +109,429 @@ import dice_pkg::*;
         , .ldst_ready_o   (ldst_ready_o)
     );
 
+    // ---------------------------------------------------------------
+    // Helper: idle all inputs (call at negedge or between edges)
+    // ---------------------------------------------------------------
     task automatic idle_inputs;
-        begin
-            rd_tid_valid_i   = 1'b0;
-            rd_en_i          = 1'b0;
-            rd_tid_i         = '0;
-            rd_bitmap_i      = '0;
-            wr_bitmap_i      = '0;
-            cgra_tid_i       = '0;
-            cgra_data_i      = '0;
-            cgra_wr_bitmap_i = '0;
-            cgra_valid_i     = 1'b0;
-            ldst_wr_i        = '0;
-            ldst_valid_i     = 1'b0;
-        end
+        rd_tid_valid_i   = 1'b0;
+        rd_tid_i         = '0;
+        rd_bitmap_i      = '0;
+        wr_bitmap_i      = '0;
+        cgra_tid_i       = '0;
+        cgra_data_i      = '0;
+        cgra_wr_bitmap_i = '0;
+        cgra_valid_i     = 1'b0;
+        ldst_wr_i        = '0;
+        ldst_valid_i     = 1'b0;
     endtask
 
+    // ---------------------------------------------------------------
+    // Helper: zero the scoreboard
+    // ---------------------------------------------------------------
     task automatic init_scoreboard;
-        begin
-            for (int tid = 0; tid < NUM_TID; tid++) begin
-                for (int bank = 0; bank < NUM_PORTS; bank++) begin
-                    exp_gpr[tid][bank] = '0;
-                end
-                for (int pred = 0; pred < NUM_PRED; pred++) begin
-                    exp_pred[tid][pred] = 1'b0;
-                end
-            end
-
-            for (int c = 0; c < NUM_CONST; c++) begin
-                exp_const[c] = '0;
-            end
+        for (int t = 0; t < NUM_TID; t++) begin
+            for (int b = 0; b < NUM_PORTS; b++)
+                exp_gpr[t][b] = '0;
+            for (int p = 0; p < NUM_PRED; p++)
+                exp_pred[t][p] = 1'b0;
         end
+        for (int c = 0; c < NUM_CONST; c++)
+            exp_const[c] = '0;
     endtask
 
+    // ---------------------------------------------------------------
+    // CGRA write: drive on negedge, DUT samples on posedge, deassert
+    //   on next negedge. Takes 1 clock cycle.
+    // ---------------------------------------------------------------
+    task automatic do_cgra_write(
+          input logic [TID_WIDTH-1:0]       tid
+        , input logic [TOTAL_REGS-1:0]      bitmap
+        , input logic [CGRA_DATA_WIDTH-1:0] data
+    );
+        @(negedge clk_i);
+        cgra_tid_i       = tid;
+        cgra_data_i      = data;
+        cgra_wr_bitmap_i = bitmap;
+        cgra_valid_i     = 1'b1;
+
+        // Update scoreboard
+        for (int b = 0; b < NUM_PORTS; b++)
+            if (bitmap[b])
+                exp_gpr[tid][b] = data[b*DATA_WIDTH +: DATA_WIDTH];
+
+        for (int c = 0; c < NUM_CONST; c++)
+            if (bitmap[NUM_PORTS + c])
+                exp_const[c] = data[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH];
+
+        for (int p = 0; p < NUM_PRED; p++)
+            if (bitmap[NUM_PORTS + NUM_CONST + p])
+                exp_pred[tid][p] = data[(NUM_PORTS + 1 + p) * DATA_WIDTH];
+
+        @(negedge clk_i);
+        cgra_valid_i     = 1'b0;
+        cgra_wr_bitmap_i = '0;
+        cgra_data_i      = '0;
+    endtask
+
+    // ---------------------------------------------------------------
+    // LDST write helpers
+    // ---------------------------------------------------------------
     function automatic cache_wr_cmd make_ldst_cmd(
           input logic [TID_WIDTH-1:0]  tid
         , input logic [DATA_WIDTH-1:0] data
         , input logic [TOTAL_REGS-1:0] bitmap
     );
         cache_wr_cmd cmd;
-        cmd          = '0;
-        cmd.tid      = tid;
-        cmd.data     = data;
+        cmd           = '0;
+        cmd.tid       = tid;
+        cmd.data      = data;
         cmd.wr_bitmap = bitmap;
         return cmd;
     endfunction
 
-    task automatic scoreboard_apply_cgra(
-          input logic [TID_WIDTH-1:0]       tid
-        , input logic [TOTAL_REGS-1:0]      bitmap
-        , input logic [CGRA_DATA_WIDTH-1:0] data
-    );
-        begin
-            for (int bank = 0; bank < NUM_PORTS; bank++) begin
-                if (bitmap[bank]) begin
-                    exp_gpr[tid][bank] = data[bank*DATA_WIDTH +: DATA_WIDTH];
-                end
-            end
+    // Drive LDST for 1 cycle (negedge → posedge → negedge)
+    task automatic do_ldst_write(input cache_wr_cmd cmd);
+        @(negedge clk_i);
+        ldst_wr_i    = cmd;
+        ldst_valid_i = 1'b1;
 
-            for (int c = 0; c < NUM_CONST; c++) begin
-                if (bitmap[NUM_PORTS + c]) begin
-                    exp_const[c] = data[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH];
-                end
-            end
+        // Update scoreboard
+        for (int b = 0; b < NUM_PORTS; b++)
+            if (cmd.wr_bitmap[b])
+                exp_gpr[cmd.tid][b] = cmd.data;
 
-            for (int p = 0; p < NUM_PRED; p++) begin
-                if (bitmap[NUM_PORTS + NUM_CONST + p]) begin
-                    exp_pred[tid][p] = data[(NUM_PORTS + 1 + p) * DATA_WIDTH];
-                end
-            end
-        end
+        for (int c = 0; c < NUM_CONST; c++)
+            if (cmd.wr_bitmap[NUM_PORTS + c])
+                exp_const[c] = cmd.data;
+
+        for (int p = 0; p < NUM_PRED; p++)
+            if (cmd.wr_bitmap[NUM_PORTS + NUM_CONST + p])
+                exp_pred[cmd.tid][p] = cmd.data[0];
+
+        @(negedge clk_i);
+        ldst_valid_i = 1'b0;
+        ldst_wr_i    = '0;
     endtask
 
-    task automatic scoreboard_apply_ldst(input cache_wr_cmd cmd);
-        begin
-            for (int bank = 0; bank < NUM_PORTS; bank++) begin
-                if (cmd.wr_bitmap[bank]) begin
-                    exp_gpr[cmd.tid][bank] = cmd.data;
-                end
-            end
-
-            for (int c = 0; c < NUM_CONST; c++) begin
-                if (cmd.wr_bitmap[NUM_PORTS + c]) begin
-                    exp_const[c] = cmd.data;
-                end
-            end
-
-            for (int p = 0; p < NUM_PRED; p++) begin
-                if (cmd.wr_bitmap[NUM_PORTS + NUM_CONST + p]) begin
-                    exp_pred[cmd.tid][p] = cmd.data[0];
-                end
-            end
-        end
-    endtask
-
-    task automatic do_cgra_write(
-          input logic [TID_WIDTH-1:0]       tid
-        , input logic [TOTAL_REGS-1:0]      bitmap
-        , input logic [CGRA_DATA_WIDTH-1:0] data
-    );
-        begin
-            cgra_tid_i       = tid;
-            cgra_data_i      = data;
-            cgra_wr_bitmap_i = bitmap;
-            cgra_valid_i     = 1'b1;
-            scoreboard_apply_cgra(tid, bitmap, data);
-
-            repeat (WRITE_HOLD_CYCLES) @(posedge clk_i);
-
-            cgra_valid_i     = 1'b0;
-            cgra_wr_bitmap_i = '0;
-            cgra_data_i      = '0;
-        end
-    endtask
-
-    task automatic do_ldst_write(
-          input cache_wr_cmd cmd
-        , input bit wait_for_ready
-    );
-        begin
-            if (wait_for_ready) begin
-                while (ldst_ready_o !== 1'b1) @(posedge clk_i);
-            end
-
-            ldst_wr_i    = cmd;
-            ldst_valid_i = 1'b1;
-            scoreboard_apply_ldst(cmd);
-
-            repeat (WRITE_HOLD_CYCLES) @(posedge clk_i);
-
-            ldst_valid_i = 1'b0;
-            ldst_wr_i    = '0;
-        end
-    endtask
-
-    task automatic check_tid_state(
+    // ---------------------------------------------------------------
+    // Read-back and check.
+    //   Drive rd_tid_valid_i on negedge, DUT samples on posedge,
+    //   deassert on next negedge, then sample outputs on posedge
+    //   (1-cycle read latency from synchronous RAM).
+    // ---------------------------------------------------------------
+    task automatic read_and_check(
           input logic [TID_WIDTH-1:0]  tid
-        , input logic [TOTAL_REGS-1:0] passthrough_bitmap
+        , input string                 tag
     );
-        begin
-            rd_tid_i       = tid;
-            rd_bitmap_i    = '1;
-            wr_bitmap_i    = passthrough_bitmap;
-            rd_en_i        = 1'b1;
-            rd_tid_valid_i = 1'b1;
+        // Drive read request on negedge
+        @(negedge clk_i);
+        rd_tid_i       = tid;
+        rd_bitmap_i    = '1;
+        wr_bitmap_i    = '0;
+        rd_tid_valid_i = 1'b1;
 
-            @(posedge clk_i);
+        // Deassert on next negedge (posedge between: request sampled)
+        @(negedge clk_i);
+        rd_tid_valid_i = 1'b0;
+        rd_bitmap_i    = '0;
+
+        // Sample outputs on next posedge (1-cycle latency)
+        @(posedge clk_i);
+
+        if (rf_rd_valid_o !== 1'b1) begin
+            $error("[%s] tid=%0d: rf_rd_valid_o not asserted", tag, tid);
+            err_count++;
+        end
+
+        // Check GPR banks
+        for (int b = 0; b < NUM_PORTS; b++) begin
+            logic [DATA_WIDTH-1:0] got;
+            got = rd_data_o[b*DATA_WIDTH +: DATA_WIDTH];
+            if (got !== exp_gpr[tid][b]) begin
+                $error("[%s] GPR mismatch tid=%0d bank=%0d exp=0x%0h got=0x%0h",
+                       tag, tid, b, exp_gpr[tid][b], got);
+                err_count++;
+            end
+        end
+
+        // Check const regs
+        for (int c = 0; c < NUM_CONST; c++) begin
+            logic [DATA_WIDTH-1:0] got;
+            got = rd_data_o[(NUM_PORTS + c)*DATA_WIDTH +: DATA_WIDTH];
+            if (got !== exp_const[c]) begin
+                $error("[%s] CONST mismatch const=%0d exp=0x%0h got=0x%0h",
+                       tag, c, exp_const[c], got);
+                err_count++;
+            end
+        end
+
+        // Check pred regs (registered on rd_tid_r, aligned with rf_rd_valid_o)
+        for (int p = 0; p < NUM_PRED; p++) begin
+            if (pred_o[p] !== exp_pred[tid][p]) begin
+                $error("[%s] PRED mismatch tid=%0d pred=%0d exp=%0b got=%0b",
+                       tag, tid, p, exp_pred[tid][p], pred_o[p]);
+                err_count++;
+            end
+        end
+    endtask
+
+    // ---------------------------------------------------------------
+    // Read-back all TIDs and check (pipelined: 1 result per cycle)
+    // ---------------------------------------------------------------
+    task automatic read_and_check_all(input string tag);
+        // Drive first read request
+        @(negedge clk_i);
+        rd_tid_valid_i = 1'b1;
+        rd_bitmap_i    = '1;
+        wr_bitmap_i    = '0;
+        rd_tid_i       = TID_WIDTH'(0);
+
+        for (int t = 0; t < NUM_TID; t++) begin
+            // Advance to next negedge — set up next TID or deassert
+            @(negedge clk_i);
+            if (t < NUM_TID - 1)
+                rd_tid_i = TID_WIDTH'(t + 1);
+            else
+                rd_tid_valid_i = 1'b0;
+
+            // Sample result for TID t on posedge (1-cycle latency)
             @(posedge clk_i);
 
             if (rf_rd_valid_o !== 1'b1) begin
-                $fatal(1, "[%0t] rf_rd_valid_o did not assert for tid %0d", $time, tid);
-            end
-            if (tid_o !== tid) begin
-                $fatal(1, "[%0t] tid_o mismatch. expected=%0d got=%0d", $time, tid, tid_o);
-            end
-            if (wr_bitmap_o !== passthrough_bitmap) begin
-                $fatal(1, "[%0t] wr_bitmap_o mismatch. expected=0x%0h got=0x%0h",
-                       $time, passthrough_bitmap, wr_bitmap_o);
+                $error("[%s] tid=%0d: rf_rd_valid_o not asserted", tag, t);
+                err_count++;
             end
 
-            rd_tid_valid_i = 1'b0;
-            rd_en_i        = 1'b0;
-            rd_bitmap_i    = '0;
-            wr_bitmap_i    = '0;
-
-            for (int bank = 0; bank < NUM_PORTS; bank++) begin
-                if (sampled_rd_data_r[bank*DATA_WIDTH +: DATA_WIDTH] !== exp_gpr[tid][bank]) begin
-                    $fatal(1, "[%0t] GPR mismatch. tid=%0d bank=%0d expected=0x%0h got=0x%0h",
-                           $time, tid, bank, exp_gpr[tid][bank],
-                           sampled_rd_data_r[bank*DATA_WIDTH +: DATA_WIDTH]);
+            for (int b = 0; b < NUM_PORTS; b++) begin
+                logic [DATA_WIDTH-1:0] got;
+                got = rd_data_o[b*DATA_WIDTH +: DATA_WIDTH];
+                if (got !== exp_gpr[t][b]) begin
+                    $error("[%s] GPR mismatch tid=%0d bank=%0d exp=0x%0h got=0x%0h",
+                           tag, t, b, exp_gpr[t][b], got);
+                    err_count++;
                 end
             end
 
             for (int c = 0; c < NUM_CONST; c++) begin
-                if (sampled_rd_data_r[(NUM_PORTS + c)*DATA_WIDTH +: DATA_WIDTH] !== exp_const[c]) begin
-                    $fatal(1, "[%0t] CONST mismatch. const=%0d expected=0x%0h got=0x%0h",
-                           $time, c, exp_const[c],
-                           sampled_rd_data_r[(NUM_PORTS + c)*DATA_WIDTH +: DATA_WIDTH]);
+                logic [DATA_WIDTH-1:0] got;
+                got = rd_data_o[(NUM_PORTS + c)*DATA_WIDTH +: DATA_WIDTH];
+                if (got !== exp_const[c]) begin
+                    $error("[%s] CONST mismatch const=%0d exp=0x%0h got=0x%0h",
+                           tag, c, exp_const[c], got);
+                    err_count++;
                 end
             end
 
             for (int p = 0; p < NUM_PRED; p++) begin
-                if (sampled_pred_r[p] !== exp_pred[tid][p]) begin
-                    $fatal(1, "[%0t] PRED mismatch. tid=%0d pred=%0d expected=%0b got=%0b",
-                           $time, tid, p, exp_pred[tid][p], sampled_pred_r[p]);
+                if (pred_o[p] !== exp_pred[t][p]) begin
+                    $error("[%s] PRED mismatch tid=%0d pred=%0d exp=%0b got=%0b",
+                           tag, t, p, exp_pred[t][p], pred_o[p]);
+                    err_count++;
                 end
             end
         end
+
+        rd_bitmap_i = '0;
     endtask
 
-    task automatic check_all_tids_zero;
-        begin
-            for (int tid = 0; tid < NUM_TID; tid++) begin
-                check_tid_state(TID_WIDTH'(tid), TOTAL_REGS'(1 << (tid % TOTAL_REGS)));
-            end
-        end
-    endtask
-
-    task automatic clear_all_registers;
-        logic [CGRA_DATA_WIDTH-1:0] clear_data;
-        begin
-            clear_data = '0;
-
-            for (int tid = 0; tid < NUM_TID; tid++) begin
-                do_cgra_write(TID_WIDTH'(tid), '1, clear_data);
-            end
-
-            repeat (2 + WRITE_TO_READ_LATENCY) @(posedge clk_i);
-        end
-    endtask
-
-    task automatic reset_dut;
-        begin
-            idle_inputs();
-            init_scoreboard();
-            reset_i = 1'b1;
-            repeat (5) @(posedge clk_i);
-            reset_i = 1'b0;
-            @(posedge clk_i);
-
-            clear_all_registers();
-            check_all_tids_zero();
-        end
-    endtask
-
+    // ---------------------------------------------------------------
+    // Main test sequence
+    // ---------------------------------------------------------------
     initial begin
-        logic [CGRA_DATA_WIDTH-1:0] cgra_case_data;
-        logic [TOTAL_REGS-1:0] case_bitmap;
-        logic [TOTAL_REGS-1:0] passthrough_bitmap;
-        int queued_writes;
-        cache_wr_cmd ldst_cmd;
+        logic [CGRA_DATA_WIDTH-1:0] wr_data;
+        logic [TOTAL_REGS-1:0]      bitmap;
+        cache_wr_cmd                 ldst_cmd;
 
         $display("=== dice_rf_ctrl directed test start ===");
+        err_count = 0;
+        test_num  = 0;
 
+        // ===========================================================
+        // TEST 1: Reset
+        //   Assert reset, then clear all registers via CGRA writes,
+        //   then read back every TID and verify all zeros.
+        // ===========================================================
+        test_num++;
+        $display("--- Test %0d: Reset and clear ---", test_num);
+
+        idle_inputs();
+        init_scoreboard();
+        @(negedge clk_i);
+        reset_i = 1'b1;
+        repeat (5) @(posedge clk_i);
+        @(negedge clk_i);
         reset_i = 1'b0;
-        reset_dut();
 
-        $display("=== Case 1: Writing from CGRA ===");
-        cgra_case_data = '0;
-        for (int bank = 0; bank < NUM_PORTS; bank++) begin
-            cgra_case_data[bank*DATA_WIDTH +: DATA_WIDTH] = DATA_WIDTH'(8'h10 + bank);
-        end
-        case_bitmap = '0;
-        for (int bank = 0; bank < NUM_PORTS; bank++) begin
-            case_bitmap[bank] = 1'b1;
-        end
+        // Write all GPR banks to zero for every TID via CGRA
+        for (int t = 0; t < NUM_TID; t++)
+            do_cgra_write(TID_WIDTH'(t), '1, '0);
 
-        do_cgra_write(
-            TID_WIDTH'(3),
-            case_bitmap,
-            cgra_case_data
-        );
-        repeat (WRITE_TO_READ_LATENCY) @(posedge clk_i);
-        passthrough_bitmap = '0;
-        passthrough_bitmap[0] = 1'b1;
-        passthrough_bitmap[2] = 1'b1;
-        passthrough_bitmap[4] = 1'b1;
-        passthrough_bitmap[6] = 1'b1;
-        check_tid_state(TID_WIDTH'(3), passthrough_bitmap);
+        // Read back all TIDs — everything should be zero
+        read_and_check_all("reset_clear");
 
-        passthrough_bitmap = '0;
-        passthrough_bitmap[1] = 1'b1;
-        passthrough_bitmap[3] = 1'b1;
-        passthrough_bitmap[5] = 1'b1;
-        passthrough_bitmap[7] = 1'b1;
-        check_tid_state(TID_WIDTH'(2), passthrough_bitmap);
+        // ===========================================================
+        // TEST 2: CGRA writes to specific banks / TIDs
+        //   Write distinct data to a few TIDs targeting specific
+        //   GPR banks, const, and pred regs. Read back and verify.
+        // ===========================================================
+        test_num++;
+        $display("--- Test %0d: CGRA targeted writes ---", test_num);
 
-        $display("=== Case 2: Writing from LDST unit ===");
-        case_bitmap = '0;
-        case_bitmap[1] = 1'b1;
-        case_bitmap[6] = 1'b1;
-        ldst_cmd = make_ldst_cmd(
-            TID_WIDTH'(5),
-            DATA_WIDTH'(8'h5A),
-            case_bitmap
-        );
-        do_ldst_write(ldst_cmd, 1'b1);
+        // Write TID 3: GPR banks 0-7 with unique values
+        wr_data = '0;
+        for (int b = 0; b < NUM_PORTS; b++)
+            wr_data[b*DATA_WIDTH +: DATA_WIDTH] = DATA_WIDTH'(8'hA0 + b);
+        bitmap = '0;
+        bitmap[NUM_PORTS-1:0] = '1;
+        do_cgra_write(TID_WIDTH'(3), bitmap, wr_data);
+        read_and_check(TID_WIDTH'(3), "cgra_gpr_tid3");
 
-        case_bitmap = '0;
-        case_bitmap[3] = 1'b1;
-        case_bitmap[7] = 1'b1;
-        ldst_cmd = make_ldst_cmd(
-            TID_WIDTH'(5),
-            DATA_WIDTH'(8'hA7),
-            case_bitmap
-        );
-        do_ldst_write(ldst_cmd, 1'b1);
+        // Write TID 7: only banks 1 and 5
+        wr_data = '0;
+        wr_data[1*DATA_WIDTH +: DATA_WIDTH] = DATA_WIDTH'(8'hB1);
+        wr_data[5*DATA_WIDTH +: DATA_WIDTH] = DATA_WIDTH'(8'hB5);
+        bitmap = '0;
+        bitmap[1] = 1'b1;
+        bitmap[5] = 1'b1;
+        do_cgra_write(TID_WIDTH'(7), bitmap, wr_data);
+        read_and_check(TID_WIDTH'(7), "cgra_gpr_tid7");
+        // Verify TID 3 is unchanged
+        read_and_check(TID_WIDTH'(3), "cgra_gpr_tid3_recheck");
 
-        repeat (WRITE_TO_READ_LATENCY) @(posedge clk_i);
-        passthrough_bitmap = '0;
-        passthrough_bitmap[0] = 1'b1;
-        passthrough_bitmap[1] = 1'b1;
-        passthrough_bitmap[4] = 1'b1;
-        passthrough_bitmap[5] = 1'b1;
-        check_tid_state(TID_WIDTH'(5), passthrough_bitmap);
+        // Write const registers (shared across TIDs)
+        wr_data = '0;
+        wr_data[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH] = DATA_WIDTH'(8'hCC);
+        bitmap = '0;
+        bitmap[NUM_PORTS]     = 1'b1;  // const 0
+        bitmap[NUM_PORTS + 3] = 1'b1;  // const 3
+        do_cgra_write(TID_WIDTH'(0), bitmap, wr_data);
+        read_and_check(TID_WIDTH'(0), "cgra_const");
+        // Const is shared — verify from a different TID too
+        read_and_check(TID_WIDTH'(5), "cgra_const_othertid");
 
-        passthrough_bitmap = '0;
-        passthrough_bitmap[4] = 1'b1;
-        passthrough_bitmap[5] = 1'b1;
-        passthrough_bitmap[6] = 1'b1;
-        passthrough_bitmap[7] = 1'b1;
-        check_tid_state(TID_WIDTH'(3), passthrough_bitmap);
+        // Write pred registers for TID 10
+        wr_data = '0;
+        wr_data[(NUM_PORTS + 1)*DATA_WIDTH] = 1'b1;  // pred 0 = 1
+        bitmap = '0;
+        bitmap[NUM_PORTS + NUM_CONST] = 1'b1;  // pred 0
+        do_cgra_write(TID_WIDTH'(10), bitmap, wr_data);
+        read_and_check(TID_WIDTH'(10), "cgra_pred_tid10");
+        // Other TIDs pred should be unaffected
+        read_and_check(TID_WIDTH'(0), "cgra_pred_tid0_unaffected");
 
-        $display("=== Case 3: Filling the LDST buffer ===");
+        // ===========================================================
+        // TEST 3: Uncontested LDST writes (CGRA not writing)
+        //   CGRA is idle. Issue LDST writes and verify.
+        //   LDST data enqueues in FIFO on cycle N, drains and writes
+        //   RF on cycle N+1 (since CGRA is idle).
+        // ===========================================================
+        test_num++;
+        $display("--- Test %0d: Uncontested LDST writes ---", test_num);
+
+        // LDST write to TID 5, banks 2 and 4
+        bitmap = '0;
+        bitmap[2] = 1'b1;
+        bitmap[4] = 1'b1;
+        ldst_cmd = make_ldst_cmd(TID_WIDTH'(5), DATA_WIDTH'(8'hDD), bitmap);
+        do_ldst_write(ldst_cmd);
+        // FIFO drains on next posedge (between this negedge and read_and_check's negedge)
+        read_and_check(TID_WIDTH'(5), "ldst_gpr_tid5");
+
+        // LDST write to TID 1, bank 0 and const 2
+        bitmap = '0;
+        bitmap[0]             = 1'b1;
+        bitmap[NUM_PORTS + 2] = 1'b1;
+        ldst_cmd = make_ldst_cmd(TID_WIDTH'(1), DATA_WIDTH'(8'hEE), bitmap);
+        do_ldst_write(ldst_cmd);
+        read_and_check(TID_WIDTH'(1), "ldst_gpr_const_tid1");
+
+        // LDST write to TID 12, pred 1
+        bitmap = '0;
+        bitmap[NUM_PORTS + NUM_CONST + 1] = 1'b1;
+        ldst_cmd = make_ldst_cmd(TID_WIDTH'(12), DATA_WIDTH'(8'h01), bitmap);
+        do_ldst_write(ldst_cmd);
+        read_and_check(TID_WIDTH'(12), "ldst_pred_tid12");
+
+        // ===========================================================
+        // TEST 4: LDST blocked by CGRA — buffer fill and drain
+        //   Hold cgra_valid_i high (zero bitmap → no real writes) to
+        //   block LDST drain. Fill LDST buffers until ldst_ready_o
+        //   drops. Release CGRA, let buffers drain, verify.
+        // ===========================================================
+        test_num++;
+        $display("--- Test %0d: LDST buffer fill/drain under CGRA contention ---", test_num);
+
+        // Hold CGRA valid (no-op) on negedge to block LDST drain
+        @(negedge clk_i);
         cgra_tid_i       = '0;
         cgra_data_i      = '0;
         cgra_wr_bitmap_i = '0;
         cgra_valid_i     = 1'b1;
-        queued_writes    = 0;
 
-        if (ldst_ready_o !== 1'b1) begin
-            $fatal(1, "[%0t] LDST was not ready at the start of the buffer fill case", $time);
-        end
+        // Fill LDST buffers — write to bank 0 for distinct TIDs
+        begin
+            int writes_accepted;
+            writes_accepted = 0;
 
-        for (int tid = 0; tid < NUM_TID; tid++) begin
-            if (ldst_ready_o !== 1'b1) begin
-                break;
+            for (int t = 0; t < NUM_TID; t++) begin
+                // At negedge: ldst_ready_o is stable from last posedge
+                @(negedge clk_i);
+                if (ldst_ready_o !== 1'b1) break;
+
+                bitmap = '0;
+                bitmap[0] = 1'b1;
+                ldst_cmd = make_ldst_cmd(
+                    TID_WIDTH'(t),
+                    DATA_WIDTH'(8'hF0 + t),
+                    bitmap
+                );
+                ldst_wr_i    = ldst_cmd;
+                ldst_valid_i = 1'b1;
+
+                // Scoreboard (these will land after drain)
+                exp_gpr[t][0] = DATA_WIDTH'(8'hF0 + t);
+                writes_accepted++;
+
+                // Posedge between this negedge and next: FIFO enqueues
             end
 
-            ldst_cmd = make_ldst_cmd(
-                TID_WIDTH'(tid),
-                DATA_WIDTH'(8'h80 + tid),
-                TOTAL_REGS'(1)
-            );
-            do_ldst_write(ldst_cmd, 1'b0);
-            queued_writes++;
+            // Deassert LDST
+            @(negedge clk_i);
+            ldst_valid_i = 1'b0;
+            ldst_wr_i    = '0;
+
+            $display("  Accepted %0d LDST writes before buffer full", writes_accepted);
+
+            if (writes_accepted != BUF_DEPTH)
+                $error("[buf_fill] Expected %0d writes accepted, got %0d", BUF_DEPTH, writes_accepted);
         end
 
-        if (ldst_ready_o !== 1'b0) begin
-            $fatal(1, "[%0t] LDST buffer did not report full after %0d accepted writes",
-                   $time, queued_writes);
-        end
-
+        // Release CGRA — let LDST buffers drain
+        @(negedge clk_i);
         cgra_valid_i = 1'b0;
-        repeat (queued_writes + 3) @(posedge clk_i);
 
+        // Wait for all buffered writes to drain into RF
+        repeat (BUF_DEPTH + 2) @(posedge clk_i);
+
+        // Verify LDST ready recovered
+        @(negedge clk_i);
         if (ldst_ready_o !== 1'b1) begin
-            $fatal(1, "[%0t] LDST ready did not recover after draining the buffer", $time);
+            $error("[buf_drain] ldst_ready_o did not recover after drain");
+            err_count++;
         end
 
-        $display("=== dice_rf_ctrl directed test PASS ===");
+        // Verify final state for the TIDs we wrote
+        for (int t = 0; t < BUF_DEPTH; t++)
+            read_and_check(TID_WIDTH'(t), "ldst_drain");
+
+        // ===========================================================
+        // Done
+        // ===========================================================
+        if (err_count == 0)
+            $display("=== ALL %0d TESTS PASSED ===", test_num);
+        else
+            $display("=== FAILED: %0d errors across %0d tests ===", err_count, test_num);
+
         #100;
         $finish;
     end

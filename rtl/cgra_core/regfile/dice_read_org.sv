@@ -17,7 +17,7 @@ import dice_pkg::*;
     , input logic                             rd_tid_valid_i
     , output logic                            rd_tid_ready_o
 
-    , input logic                             rd_en_i
+    // , input logic                             rd_en_i
     , input logic [TID_WIDTH-1:0]             rd_tid_i
     , input logic [NUM_PORTS-1:0]             rd_bitmap_i
 
@@ -33,14 +33,15 @@ import dice_pkg::*;
     assign shifted_bitmap = rd_bitmap_i;
    
     // Ready when enabled
-    assign rd_tid_ready_o = rd_en_i;
+    // change later
+    assign rd_tid_ready_o = '1;
 
     // Route single TID to all banks
     always_comb begin
         rd_sel_o = '0;
         rd_en_o = '0;
 
-        if (rd_en_i && rd_tid_valid_i) begin
+        if (rd_tid_valid_i) begin
             rd_en_o = shifted_bitmap;
             rd_sel_o = {NUM_PORTS{rd_tid_i}};
         end

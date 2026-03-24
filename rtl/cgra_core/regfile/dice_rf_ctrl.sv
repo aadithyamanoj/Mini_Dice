@@ -28,7 +28,7 @@ import dice_pkg::*;
     , input logic                             rd_tid_valid_i
     , output logic                            rd_tid_ready_o
 
-    , input logic                             rd_en_i
+    // , input logic                             rd_en_i
     , input logic [TID_WIDTH-1:0]             rd_tid_i
     , input logic [TOTAL_REGS-1:0]            rd_bitmap_i
     , input logic [TOTAL_REGS-1:0]            wr_bitmap_i
@@ -217,10 +217,19 @@ import dice_pkg::*;
         end
     end
 
-    // Const read: wire all const registers to rd_data_o for routability
+    // Const read: registered to match 1-cycle GPR read latency
+    logic [NUM_CONST-1:0][DATA_WIDTH-1:0] const_rd_r;
+
+    always_ff @(posedge clk_i) begin
+        if (reset_i)
+            const_rd_r <= '0;
+        else if (rd_tid_valid_i)
+            const_rd_r <= const_regs;
+    end
+
     generate
         for (i = 0; i < NUM_CONST; i++) begin : gen_const_rd
-            assign rd_data_o[(NUM_PORTS + i)*DATA_WIDTH +: DATA_WIDTH] = const_regs[i];
+            assign rd_data_o[(NUM_PORTS + i)*DATA_WIDTH +: DATA_WIDTH] = const_rd_r[i];
         end
     endgenerate
 
@@ -228,6 +237,8 @@ import dice_pkg::*;
     // Predicate registers — NUM_PRED banks × NUM_TID entries (1 bit each)
     // =========================================================================
     logic [NUM_TID-1:0][NUM_PRED-1:0] pred_regs;
+
+    logic [TID_WIDTH-1:0] rd_tid_r;
 
     always_ff @(posedge clk_i) begin
         if (reset_i) begin
@@ -240,8 +251,16 @@ import dice_pkg::*;
         end
     end
 
+    always_ff @(posedge clk_i) begin
+        if (reset_i)
+            rd_tid_r <= 0;
+        else if (rd_tid_valid_i)
+            rd_tid_r <= rd_tid_i;
+    end
+
     // Predicate output — selected TID only
-    assign pred_o = pred_regs[rd_tid_i];
+
+    assign pred_o = pred_regs[rd_tid_r];
 
     // =========================================================================
     // GPR read path — only pass GPR portion of bitmap to read_org
@@ -261,7 +280,7 @@ import dice_pkg::*;
         , .rd_tid_valid_i (rd_tid_valid_i)
         , .rd_tid_ready_o (rd_tid_ready_o)
 
-        , .rd_en_i (rd_en_i)
+        // , .rd_en_i (rd_en_i)
         , .rd_tid_i (rd_tid_i)
         , .rd_bitmap_i (rd_bitmap_i[NUM_PORTS-1:0])
 
@@ -287,7 +306,7 @@ import dice_pkg::*;
         if (reset_i) begin
             tid_o <= '0;
             wr_bitmap_o <= '0;
-        end else if (rd_en_i && rd_tid_valid_i) begin
+        end else if (rd_tid_valid_i) begin
             tid_o <= rd_tid_i;
             wr_bitmap_o <= wr_bitmap_i;
         end

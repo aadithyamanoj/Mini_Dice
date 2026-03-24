@@ -272,7 +272,7 @@ import dice_pkg::*;
         , .rd_tid_valid_i(rd_tid_valid_i)
         , .rd_tid_ready_o(rd_tid_ready_o)
 
-        , .rd_en_i(rd_en_i)
+        // , .rd_en_i(rd_en_i)
         , .rd_tid_i(rd_tid_i)
         , .rd_bitmap_i(rd_bitmap_i[NUM_PORTS-1:0])
 
