@@ -7,7 +7,7 @@ constexpr std::uint32_t kDefaultSeed = 0xD1CEu;
 std::mt19937 g_rng(kDefaultSeed);
 
 std::uint32_t lane_mul(std::uint32_t a, std::uint32_t b) {
-  return ((a & 0xFFu) * (b & 0xFFu)) & 0xFFu;
+  return ((a & 0xFFFFu) * (b & 0xFFFFu)) & 0xFFFFu;
 }
 
 void write_case(
@@ -60,8 +60,8 @@ void dice_vector_mul_golden_directed_case(
     unsigned int* y1,
     unsigned int* y2,
     unsigned int* y3) {
-  const std::uint32_t a[4] = {3u, 5u, 2u, 7u};
-  const std::uint32_t b[4] = {4u, 6u, 8u, 1u};
+  const std::uint32_t a[4] = {300u, 500u, 256u, 65535u};
+  const std::uint32_t b[4] = {400u, 600u, 512u, 2u};
   write_case(a, b, a0, a1, a2, a3, b0, b1, b2, b3, y0, y1, y2, y3);
 }
 
@@ -78,7 +78,7 @@ void dice_vector_mul_golden_random_case(
     unsigned int* y1,
     unsigned int* y2,
     unsigned int* y3) {
-  std::uniform_int_distribution<std::uint32_t> dist(0u, 15u);
+  std::uniform_int_distribution<std::uint32_t> dist(0u, 0xFFFFu);
   std::uint32_t a[4];
   std::uint32_t b[4];
 

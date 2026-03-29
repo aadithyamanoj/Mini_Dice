@@ -33,7 +33,7 @@ package cgra_test_pkg;
   );
 
   task automatic drive_boundary_to_zero(
-      output logic [7:0] ext_data_i [0:15],
+      output logic [15:0] ext_data_i [0:15],
       output logic       ext_pred_i [0:1]
   );
     int i;
@@ -48,10 +48,10 @@ package cgra_test_pkg;
   endtask
 
   task automatic apply_mul_array_inputs(
-      output logic [7:0] ext_data_i [0:15],
+      output logic [15:0] ext_data_i [0:15],
       output logic       ext_pred_i [0:1],
-      input  logic [7:0] a_values [0:3],
-      input  logic [7:0] b_values [0:3]
+      input  logic [15:0] a_values [0:3],
+      input  logic [15:0] b_values [0:3]
   );
     int i;
     begin
@@ -64,9 +64,9 @@ package cgra_test_pkg;
   endtask
 
   task automatic load_directed_case(
-      output logic [7:0] a_values [0:3],
-      output logic [7:0] b_values [0:3],
-      output logic [7:0] expected_values [0:3]
+      output logic [15:0] a_values [0:3],
+      output logic [15:0] b_values [0:3],
+      output logic [15:0] expected_values [0:3]
   );
     int unsigned a0, a1, a2, a3;
     int unsigned b0, b1, b2, b3;
@@ -77,25 +77,25 @@ package cgra_test_pkg;
           b0, b1, b2, b3,
           y0, y1, y2, y3
       );
-      a_values[0] = a0[7:0];
-      a_values[1] = a1[7:0];
-      a_values[2] = a2[7:0];
-      a_values[3] = a3[7:0];
-      b_values[0] = b0[7:0];
-      b_values[1] = b1[7:0];
-      b_values[2] = b2[7:0];
-      b_values[3] = b3[7:0];
-      expected_values[0] = y0[7:0];
-      expected_values[1] = y1[7:0];
-      expected_values[2] = y2[7:0];
-      expected_values[3] = y3[7:0];
+      a_values[0] = a0[15:0];
+      a_values[1] = a1[15:0];
+      a_values[2] = a2[15:0];
+      a_values[3] = a3[15:0];
+      b_values[0] = b0[15:0];
+      b_values[1] = b1[15:0];
+      b_values[2] = b2[15:0];
+      b_values[3] = b3[15:0];
+      expected_values[0] = y0[15:0];
+      expected_values[1] = y1[15:0];
+      expected_values[2] = y2[15:0];
+      expected_values[3] = y3[15:0];
     end
   endtask
 
   task automatic load_random_case(
-      output logic [7:0] a_values [0:3],
-      output logic [7:0] b_values [0:3],
-      output logic [7:0] expected_values [0:3]
+      output logic [15:0] a_values [0:3],
+      output logic [15:0] b_values [0:3],
+      output logic [15:0] expected_values [0:3]
   );
     int unsigned a0, a1, a2, a3;
     int unsigned b0, b1, b2, b3;
@@ -106,27 +106,27 @@ package cgra_test_pkg;
           b0, b1, b2, b3,
           y0, y1, y2, y3
       );
-      a_values[0] = a0[7:0];
-      a_values[1] = a1[7:0];
-      a_values[2] = a2[7:0];
-      a_values[3] = a3[7:0];
-      b_values[0] = b0[7:0];
-      b_values[1] = b1[7:0];
-      b_values[2] = b2[7:0];
-      b_values[3] = b3[7:0];
-      expected_values[0] = y0[7:0];
-      expected_values[1] = y1[7:0];
-      expected_values[2] = y2[7:0];
-      expected_values[3] = y3[7:0];
+      a_values[0] = a0[15:0];
+      a_values[1] = a1[15:0];
+      a_values[2] = a2[15:0];
+      a_values[3] = a3[15:0];
+      b_values[0] = b0[15:0];
+      b_values[1] = b1[15:0];
+      b_values[2] = b2[15:0];
+      b_values[3] = b3[15:0];
+      expected_values[0] = y0[15:0];
+      expected_values[1] = y1[15:0];
+      expected_values[2] = y2[15:0];
+      expected_values[3] = y3[15:0];
     end
   endtask
 
   task automatic check_mul_outputs(
       input string test_name,
-      input logic [7:0] ext_data_o [0:15],
-      input logic [7:0] a_values [0:3],
-      input logic [7:0] b_values [0:3],
-      input logic [7:0] expected_values [0:3]
+      input logic [15:0] ext_data_o [0:15],
+      input logic [15:0] a_values [0:3],
+      input logic [15:0] b_values [0:3],
+      input logic [15:0] expected_values [0:3]
   );
     int i;
     begin

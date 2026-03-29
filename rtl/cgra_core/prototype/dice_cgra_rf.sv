@@ -62,7 +62,7 @@ module dice_cgra_rf
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_launch_data_lo;
   logic [NUM_PRED-1:0]                         pred_launch_lo;
 
-  logic [7:0] cgra_ext_data_o [0:15];
+  logic [15:0] cgra_ext_data_o [0:15];
   logic       cgra_ext_pred_o [0:1];
   logic [((NUM_BANKS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_li;
   logic [TOTAL_REGS-1:0]                           cgra_wr_bitmap_li;

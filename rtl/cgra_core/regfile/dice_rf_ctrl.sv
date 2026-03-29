@@ -290,7 +290,7 @@ import dice_pkg::*;
     );
 
     dice_register_file
-     registers (
+     gp_registers (
           .clk (clk_i)
 
         , .rd_en (rf_rd_en)
