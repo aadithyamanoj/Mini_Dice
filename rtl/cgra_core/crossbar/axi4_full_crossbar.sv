@@ -237,6 +237,7 @@ module axi4_full_crossbar
   // --------------------------------------------------------------------------
   axi_xbar #(
     .Cfg           ( XbarCfg        ),
+    .ATOPs         ( 1'b0           ),  // no atomic ops in this design; avoids axi_atop_filter dep
     .slv_aw_chan_t ( slv_aw_t       ),
     .mst_aw_chan_t ( mst_aw_t       ),
     .w_chan_t      ( w_t            ),

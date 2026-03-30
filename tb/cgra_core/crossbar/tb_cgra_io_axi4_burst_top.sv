@@ -158,7 +158,6 @@ module tb_cgra_io_axi4_burst_top;
   // Behavioral slave – FPGA SRAM  (mst port [0])
   // =========================================================================
   logic [15:0] sram [0:MEM_WORDS-1];
-  initial for (int i = 0; i < MEM_WORDS; i++) sram[i] = '0;
 
   typedef enum logic [2:0] {
     MEM_IDLE, MEM_W_WAIT, MEM_B_RESP, MEM_R_BEAT
@@ -172,6 +171,7 @@ module tb_cgra_io_axi4_burst_top;
 
   always_ff @(posedge clk_i or posedge rst_i) begin
     if (rst_i) begin
+      foreach (sram[i]) sram[i] <= '0;
       mem_st        <= MEM_IDLE;
       fpga_mem_resp <= '0;
     end else begin
@@ -187,17 +187,8 @@ module tb_cgra_io_axi4_burst_top;
             fpga_mem_resp.aw_ready <= 1'b1;
             mem_aw_addr            <= fpga_mem_req.aw.addr;
             mem_aw_id              <= fpga_mem_req.aw.id;
-            if (fpga_mem_req.w_valid) begin
-              fpga_mem_resp.w_ready <= 1'b1;
-              begin
-                automatic int wa = int'((fpga_mem_req.aw.addr - MEM_BASE) >> 1);
-                if (wa >= 0 && wa < MEM_WORDS) begin
-                  if (fpga_mem_req.w.strb[0]) sram[wa][ 7:0] <= fpga_mem_req.w.data[ 7:0];
-                  if (fpga_mem_req.w.strb[1]) sram[wa][15:8] <= fpga_mem_req.w.data[15:8];
-                end
-              end
-              mem_st <= MEM_B_RESP;
-            end else mem_st <= MEM_W_WAIT;
+            mem_beat_cnt           <= '0;
+            mem_st                 <= MEM_W_WAIT;  // always wait for W beats
           end else if (fpga_mem_req.ar_valid) begin
             fpga_mem_resp.ar_ready <= 1'b1;
             mem_ar_addr            <= fpga_mem_req.ar.addr;
@@ -209,13 +200,15 @@ module tb_cgra_io_axi4_burst_top;
         end
         MEM_W_WAIT: begin
           fpga_mem_resp.w_ready <= 1'b1;
-          if (fpga_mem_req.w_valid) begin
-            automatic int wa = int'((mem_aw_addr - MEM_BASE) >> 1);
+          // Handshake fires only when BOTH w_valid and (registered) w_ready are high
+          if (fpga_mem_req.w_valid && fpga_mem_resp.w_ready) begin
+            automatic int wa = int'((mem_aw_addr - MEM_BASE) >> 1) + int'(mem_beat_cnt);
             if (wa >= 0 && wa < MEM_WORDS) begin
               if (fpga_mem_req.w.strb[0]) sram[wa][ 7:0] <= fpga_mem_req.w.data[ 7:0];
               if (fpga_mem_req.w.strb[1]) sram[wa][15:8] <= fpga_mem_req.w.data[15:8];
             end
-            mem_st <= MEM_B_RESP;
+            if (fpga_mem_req.w.last) mem_st <= MEM_B_RESP;
+            else mem_beat_cnt <= mem_beat_cnt + 8'd1;
           end
         end
         MEM_B_RESP: begin
@@ -249,7 +242,6 @@ module tb_cgra_io_axi4_burst_top;
   // Behavioral slave – CGRA CSR bank  (mst port [1])
   // =========================================================================
   logic [15:0] csr_regs [0:CSR_NUM_REG-1];
-  initial foreach (csr_regs[i]) csr_regs[i] = '0;
 
   typedef enum logic [1:0] {
     CSR_IDLE, CSR_W_WAIT, CSR_B_RESP, CSR_R_RESP
@@ -261,6 +253,7 @@ module tb_cgra_io_axi4_burst_top;
 
   always_ff @(posedge clk_i or posedge rst_i) begin
     if (rst_i) begin
+      foreach (csr_regs[i]) csr_regs[i] <= '0;
       csr_st        <= CSR_IDLE;
       cgra_csr_resp <= '0;
     end else begin
@@ -276,17 +269,7 @@ module tb_cgra_io_axi4_burst_top;
             cgra_csr_resp.aw_ready <= 1'b1;
             csr_aw_addr            <= cgra_csr_req.aw.addr;
             csr_aw_id              <= cgra_csr_req.aw.id;
-            if (cgra_csr_req.w_valid) begin
-              cgra_csr_resp.w_ready <= 1'b1;
-              begin
-                automatic int ci = int'((cgra_csr_req.aw.addr - CSR_BASE) >> 1);
-                if (ci >= 0 && ci < CSR_NUM_REG) begin
-                  if (cgra_csr_req.w.strb[0]) csr_regs[ci][ 7:0] <= cgra_csr_req.w.data[ 7:0];
-                  if (cgra_csr_req.w.strb[1]) csr_regs[ci][15:8] <= cgra_csr_req.w.data[15:8];
-                end
-              end
-              csr_st <= CSR_B_RESP;
-            end else csr_st <= CSR_W_WAIT;
+            csr_st                 <= CSR_W_WAIT;  // always wait for W
           end else if (cgra_csr_req.ar_valid) begin
             cgra_csr_resp.ar_ready <= 1'b1;
             csr_ar_addr            <= cgra_csr_req.ar.addr;
@@ -572,16 +555,19 @@ module tb_cgra_io_axi4_burst_top;
       dvals    = new[3];
       dvals[0] = 16'hAAAA;
       dvals[1] = 16'hBBBB;
-      dvals[2] = 16'hCCCC;   // last write wins
+      dvals[2] = 16'hCCCC;
 
+      // Bridge sends one INCR burst (AWLEN=2): beats go to mem_a(10), (11), (12)
       cgra_send_write_n(mem_a(10), dvals, 3);
       cgra_recv_bresp(resp);
-      shadow_write(mem_a(10), 16'hCCCC);
+      shadow_write(mem_a(10), 16'hAAAA);
+      shadow_write(mem_a(11), 16'hBBBB);
+      shadow_write(mem_a(12), 16'hCCCC);
       check16({14'b0, resp}, 16'd0, "T4: OKAY bresp from multi-flit AW");
 
-      cgra_send_read(mem_a(10));
+      cgra_send_read(mem_a(12));
       cgra_recv_rresp(rdata, resp);
-      check16(rdata, 16'hCCCC, "T4: multi-flit AW last value persists");
+      check16(rdata, 16'hCCCC, "T4: burst last beat at mem_a(12)");
     end
 
     // -----------------------------------------------------------------------
@@ -590,9 +576,12 @@ module tb_cgra_io_axi4_burst_top;
       logic [LW-1:0] hdr, stat, w0, w1, w2, w3;
       logic [1:0]    resp;
 
-      cgra_send_write(mem_a(20), 16'hF0F0);
-      cgra_recv_bresp(resp);
-      shadow_write(mem_a(20), 16'hF0F0);
+      // 4-beat INCR burst read: addresses mem_a(20..23); write all first
+      for (int i = 0; i < 4; i++) begin
+        cgra_send_write(mem_a(20 + i), 16'hF0F0);
+        cgra_recv_bresp(resp);
+        shadow_write(mem_a(20 + i), 16'hF0F0);
+      end
 
       cgra_send_read(mem_a(20), 4);
 
