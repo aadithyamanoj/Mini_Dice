@@ -45,7 +45,7 @@ module dice_backend
     input  logic [((DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1) / DICE_MEM_DATA_WIDTH)-1:0]     cgra_cm1_chunk_en_i,
 
     // CGRA Scan chain / bitstream interface
-    input  logic        en_i; 
+    input  logic        en_i, 
     input  logic        cgra_v_i,
     input  logic        cgra_bank_i,
     output logic        cgra_ready_o,
@@ -63,46 +63,22 @@ module dice_backend
   logic [NUM_LANES-1:0] rd_tid_valid;
   logic [DICE_TOTAL_REGS-1:0] full_reg_bitmap_lo;
 
-  // Register File Control
-  logic rf_rd_valid_lo;
-  logic rf_rd_ready_lo;
-
-  logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_lo;
-  logic [DICE_NUM_PRED-1:0] pred_lo;
+  // RF + CGRA wrapper outputs
+  logic                                      rf_rd_ready_lo;
+  logic                                      ldst_ready_lo;
+  logic                                      cgra_v_lo;
+  logic [DICE_TID_WIDTH-1:0]                 cgra_tid_lo;
+  logic [DICE_REG_DATA_WIDTH-1:0]            cgra_mem_data_lo;
+  logic [DICE_REG_DATA_WIDTH-1:0]            cgra_mem_addr_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                    ldst_cmd;
   logic [$bits(cache_wr_cmd)-1:0] ldst_wr_lo;
   logic                           ldst_valid_lo;
-  logic                           ldst_ready_lo;
 
-  logic [DICE_TID_WIDTH-1:0] cgra_tid_li; // out of rf, in to shift reg and cgra
-
-  logic [DICE_TOTAL_REGS-1:0] wb_map_li; // shifted form metadata, goes to rf
-
-  // CGRA write-back wires
-  logic cgra_v_lo; // asserted lat cycles after RF read valid
-  logic [DICE_TID_WIDTH-1:0] cgra_tid_lo;
   // One-hot TID bitmap for scoreboard writeback release
   logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] cgra_wb_tid_bitmap;
   assign cgra_wb_tid_bitmap = cgra_v_lo ? (DICE_NUM_MAX_THREADS_PER_CORE'(1'b1) << cgra_tid_lo) : '0;
-
-  // CGRA output arrays (mirrors dice_cgra_rf pattern)
-  logic [DICE_REG_DATA_WIDTH-1:0] cgra_ext_data_lo [0:(DICE_NUM_BANKS+DICE_NUM_CONST)-1];
-  logic                           cgra_ext_pred_lo [0:DICE_NUM_PRED-1];
-
-  // Packed writeback bus for dice_rf_ctrl (layout matches dice_cgra_rf)
-  logic [(DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH-1:0] cgra_data_li;
-
-  always_comb begin
-    cgra_data_li = '0;
-    for (int j = 0; j < DICE_NUM_BANKS; j++) begin
-      cgra_data_li[j*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cgra_ext_data_lo[j];
-    end
-    cgra_data_li[DICE_NUM_BANKS*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]       = cgra_ext_data_lo[DICE_NUM_BANKS];
-    cgra_data_li[(DICE_NUM_BANKS+1)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]   = {{(DICE_REG_DATA_WIDTH-1){1'b0}}, cgra_ext_pred_lo[0]};
-    cgra_data_li[(DICE_NUM_BANKS+2)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]   = {{(DICE_REG_DATA_WIDTH-1){1'b0}}, cgra_ext_pred_lo[1]};
-  end
 
   // Block Commit Table
   logic                                    bct_insert_valid;
@@ -118,11 +94,9 @@ module dice_backend
 
   assign fdr_if_i.ready = ~dispatch_busy;
 
-  assign ldst_cmd.outcmd_base_tid    = mem_rsp_base_tid_i;
-  assign ldst_cmd.outcmd_tid_bitmap  = mem_rsp_tid_bitmap_i;
-  assign ldst_cmd.outcmd_ld_dest_reg = mem_rsp_ld_dest_reg_i;
-  assign ldst_cmd.outcmd_address_map = mem_rsp_address_map_i;
-  assign ldst_cmd.core_rsp_data      = mem_rsp_data_i;
+  assign ldst_cmd.tid       = mem_rsp_base_tid_i;
+  assign ldst_cmd.data      = mem_rsp_data_i[DICE_REG_DATA_WIDTH-1:0];
+  assign ldst_cmd.wr_bitmap = DICE_TOTAL_REGS'(1'b1) << mem_rsp_ld_dest_reg_i;
 
   assign ldst_wr_lo    = ldst_cmd;
   assign ldst_valid_lo = mem_rsp_valid_i;
@@ -150,154 +124,50 @@ module dice_backend
   );
 
   // =========================================================================
-  // Register File Control
+  // Register File + CGRA Wrapper
   // =========================================================================
 
-  dice_rf_ctrl u_dice_rf_ctrl (
-      .clk_i(clk_i),
-      .reset_i(rst_i),
+  dice_cgra_rf u_dice_cgra_rf (
+      .clk_i          (clk_i),
+      .reset_i        (rst_i),
+      .en_i           (1'b1),
 
-      // Read Interface
-      .rd_tid_valid_i(rd_tid_valid),
-      .rd_tid_ready_o(rf_rd_ready_lo),
-      .rd_en_i(rd_tid_valid),
-      .rd_tid_i(rd_tid),
-      .rd_bitmap_i(full_reg_bitmap_lo),
-      .rd_data_o(rd_data_lo),
-      .rf_rd_valid_o(rf_rd_valid_lo),
-      .tid_o        (cgra_tid_li),
+      // Configuration memory
+      .cm0_data_i     (cgra_cm0_data_i),
+      .cm0_chunk_en_i (cgra_cm0_chunk_en_i),
+      .cm1_data_i     (cgra_cm1_data_i),
+      .cm1_chunk_en_i (cgra_cm1_chunk_en_i),
 
-      // Predicate output
-      .pred_o(pred_lo),
+      // Scan chain / bitstream
+      .v_i            (cgra_v_i),
+      .bank_i         (cgra_bank_i),
+      .ready_o        (cgra_ready_o),
+      .busy_o         (cgra_busy_o),
+      .bank_valid_o   (cgra_bank_valid_o),
+      .prog_dout_o    (cgra_prog_dout_o),
+      .prog_we_o      (cgra_prog_we_o),
 
-      // Write Interface — CGRA
-      .cgra_tid_i(cgra_tid_lo),
-      .cgra_data_i(cgra_data_li),
-      .wr_bitmap_i(wb_map_li),
-      .cgra_valid_i(cgra_v_lo),
+      // Memory outputs (TODO: connect to MSHR)
+      .mem_data_o     (cgra_mem_data_lo),
+      .mem_addr_o     (cgra_mem_addr_lo),
+      .mem_valid_o    (cgra_v_lo),
+      .cgra_tid_o     (cgra_tid_lo),
 
-      // Write Interface — LDST
-      .ldst_wr_i(ldst_wr_lo),
-      .ldst_valid_i(ldst_valid_lo),
-      .ldst_ready_o(ldst_ready_lo)
-  );
+      // CGRA latency from instruction metadata
+      .latency_i      (fdr_if_i.data.metadata.lat),
 
-    shift_reg
-        #(.WIDTH          (DICE_TID_WIDTH)
-            ,.MAX_PIPE_STAGE (128) // 
-        )
-        TID_SHIFT
-        (.clk_i(clk_i)
-        ,.reset_i(rst_i)   
-        
-        ,.latency (fdr_if_i.data.metadata.lat) // 
+      // RF read interface (from dispatcher)
+      .rd_tid_valid_i (rd_tid_valid),
+      .rd_tid_ready_o (rf_rd_ready_lo),
+      .rd_en_i        (1'b1),
+      .rd_tid_i       (rd_tid),
+      .rd_bitmap_i    (full_reg_bitmap_lo),
+      .wr_bitmap_i    (fdr_if_i.data.metadata.out_regs_bitmap),
 
-        ,.in_data (cgra_tid_li) // as if it comes out of the cgra
-        ,.out_data (cgra_tid_lo)
-        );
-
-    shift_reg
-        #(.WIDTH          (DICE_TOTAL_REGS)
-            ,.MAX_PIPE_STAGE (128+1) //
-        )
-        WB_MAP_SHIFT
-        (.clk_i(clk_i)
-        ,.reset_i(rst_i)
-
-        ,.latency (fdr_if_i.data.metadata.lat+1) //
-
-        ,.in_data (fdr_if_i.data.metadata.out_regs_bitmap) //straight from metadata
-        ,.out_data (wb_map_li) //
-        );
-
-  // CGRA valid: asserted `lat` cycles after the RF read produces valid data.
-  // Replaces a direct ready signal from mini_dice (which has no such output).
-  shift_reg
-      #(.WIDTH          (1)
-       ,.MAX_PIPE_STAGE (128)
-      )
-      CGRA_V_SHIFT
-      (.clk_i   (clk_i)
-      ,.reset_i (rst_i)
-      ,.latency (fdr_if_i.data.metadata.lat)
-      ,.in_data (rf_rd_valid_lo)   // pulse when RF read data is presented to CGRA
-      ,.out_data(cgra_v_lo)        // pulse to RF ctrl to trigger write-back
-      );
-
-  
-  // =========================================================================
-  // CGRA Instantiation
-  // =========================================================================
-  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo; // TODO: Connect to MSHR
-  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo;
-
-  dice_cgra_subs u_dice_cgra_subs (
-      .clk_i   (clk_i),
-      .reset_i (rst_i),
-      .en_i    (1'b1),   // TODO: connect to top-level enable when available
-
-      // Configuration memory — driven from external IOs
-      .cm0_data_i      (cgra_cm0_data_i),
-      .cm0_chunk_en_i  (cgra_cm0_chunk_en_i),
-      .cm1_data_i      (cgra_cm1_data_i),
-      .cm1_chunk_en_i  (cgra_cm1_chunk_en_i),
-
-      // Scan-chain / bitstream interface — driven from external IOs
-      .v_i          (cgra_v_i),
-      .bank_i       (cgra_bank_i),
-      .ready_o      (cgra_ready_o),
-      .busy_o       (cgra_busy_o),
-      .bank_valid_o (cgra_bank_valid_o),
-      .prog_dout_o  (cgra_prog_dout_o),
-      .prog_we_o    (cgra_prog_we_o),
-
-      // Register file reads → CGRA data inputs (unpacked from rd_data_lo)
-      .ext_data_i_0  (rd_data_lo[ 0*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_1  (rd_data_lo[ 1*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_2  (rd_data_lo[ 2*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_3  (rd_data_lo[ 3*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_4  (rd_data_lo[ 4*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_5  (rd_data_lo[ 5*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_6  (rd_data_lo[ 6*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_7  (rd_data_lo[ 7*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_8  (rd_data_lo[ 8*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_9  (rd_data_lo[ 9*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_10 (rd_data_lo[10*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_11 (rd_data_lo[11*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_12 (rd_data_lo[12*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_13 (rd_data_lo[13*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_14 (rd_data_lo[14*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .ext_data_i_15 (rd_data_lo[15*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-
-      // CGRA data outputs → register file writeback
-      .ext_data_o_0  (cgra_ext_data_lo[0]),
-      .ext_data_o_1  (cgra_ext_data_lo[1]),
-      .ext_data_o_2  (cgra_ext_data_lo[2]),
-      .ext_data_o_3  (cgra_ext_data_lo[3]),
-      .ext_data_o_4  (cgra_ext_data_lo[4]),
-      .ext_data_o_5  (cgra_ext_data_lo[5]),
-      .ext_data_o_6  (cgra_ext_data_lo[6]),
-      .ext_data_o_7  (cgra_ext_data_lo[7]),
-      .ext_data_o_8  (cgra_ext_data_lo[8]),
-      .ext_data_o_9  (cgra_ext_data_lo[9]),
-      .ext_data_o_10 (cgra_ext_data_lo[10]),
-      .ext_data_o_11 (cgra_ext_data_lo[11]),
-      .ext_data_o_12 (cgra_ext_data_lo[12]),
-      .ext_data_o_13 (cgra_ext_data_lo[13]),
-      .ext_data_o_14 (cgra_ext_data_lo[14]),
-      .ext_data_o_15 (cgra_ext_data_lo[15]),
-
-      // Predicate register reads → CGRA predicate inputs
-      .ext_pred_i_0 (pred_lo[0]),
-      .ext_pred_i_1 (pred_lo[1]),
-
-      // CGRA predicate outputs → predicate register writeback
-      .ext_pred_o_0 (cgra_ext_pred_lo[0]),
-      .ext_pred_o_1 (cgra_ext_pred_lo[1]),
-
-      // Memory outputs — internal, to be connected when mem interface is added
-      .mem_data_o (cgra_mem_data_lo),
-      .mem_addr_o (cgra_mem_addr_lo)
+      // LDST write interface
+      .ldst_wr_i      (ldst_wr_lo),
+      .ldst_valid_i   (ldst_valid_lo),
+      .ldst_ready_o   (ldst_ready_lo)
   );
 
   // =========================================================================
@@ -305,7 +175,7 @@ module dice_backend
   // =========================================================================
 
   block_commit_table u_block_commit_table (
-      .clk                 (clk_i),
+      .clk_i               (clk_i),
       .rst                 (rst_i),
 
       // Insert interface

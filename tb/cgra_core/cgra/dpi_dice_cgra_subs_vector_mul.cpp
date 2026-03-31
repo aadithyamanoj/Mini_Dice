@@ -1,6 +1,8 @@
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -23,21 +25,26 @@ std::uint32_t load_word_le(std::size_t byte_offset) {
 extern "C" {
 
 void dice_vector_mul_bitstream_init(const char* bitstream_file) {
-  g_bitstream_bytes.fill(0);
+  try {
+    g_bitstream_bytes.fill(0);
 
-  if (bitstream_file == nullptr || bitstream_file[0] == '\0') {
-    throw std::runtime_error("dice_vector_mul_bitstream_init: empty bitstream path");
+    if (bitstream_file == nullptr || bitstream_file[0] == '\0') {
+      throw std::runtime_error("dice_vector_mul_bitstream_init: empty bitstream path");
+    }
+
+    std::ifstream stream(bitstream_file, std::ios::binary);
+    if (!stream) {
+      throw std::runtime_error(
+          "dice_vector_mul_bitstream_init: could not open bitstream file '" +
+          std::string(bitstream_file) + "'");
+    }
+
+    stream.read(reinterpret_cast<char*>(g_bitstream_bytes.data()),
+                static_cast<std::streamsize>(g_bitstream_bytes.size()));
+  } catch (const std::exception& e) {
+    std::cerr << "[DPI] " << e.what() << std::endl;
+    std::abort();
   }
-
-  std::ifstream stream(bitstream_file, std::ios::binary);
-  if (!stream) {
-    throw std::runtime_error(
-        "dice_vector_mul_bitstream_init: could not open bitstream file '" +
-        std::string(bitstream_file) + "'");
-  }
-
-  stream.read(reinterpret_cast<char*>(g_bitstream_bytes.data()),
-              static_cast<std::streamsize>(g_bitstream_bytes.size()));
 }
 
 void dice_vector_mul_bitstream_get_chunk(
@@ -58,21 +65,26 @@ void dice_vector_mul_bitstream_get_chunk(
     unsigned int* w13,
     unsigned int* w14,
     unsigned int* w15) {
-  if (chunk_idx >= (kBitstreamBytes / kChunkBytes)) {
-    throw std::runtime_error(
-        "dice_vector_mul_bitstream_get_chunk: chunk index out of range");
-  }
+  try {
+    if (chunk_idx >= (kBitstreamBytes / kChunkBytes)) {
+      throw std::runtime_error(
+          "dice_vector_mul_bitstream_get_chunk: chunk index out of range");
+    }
 
-  unsigned int* outputs[kWordsPerChunk] = {
-      w0,  w1,  w2,  w3,
-      w4,  w5,  w6,  w7,
-      w8,  w9,  w10, w11,
-      w12, w13, w14, w15,
-  };
+    unsigned int* outputs[kWordsPerChunk] = {
+        w0,  w1,  w2,  w3,
+        w4,  w5,  w6,  w7,
+        w8,  w9,  w10, w11,
+        w12, w13, w14, w15,
+    };
 
-  const std::size_t chunk_base = static_cast<std::size_t>(chunk_idx) * kChunkBytes;
-  for (std::size_t word_idx = 0; word_idx < kWordsPerChunk; ++word_idx) {
-    *outputs[word_idx] = load_word_le(chunk_base + word_idx * sizeof(std::uint32_t));
+    const std::size_t chunk_base = static_cast<std::size_t>(chunk_idx) * kChunkBytes;
+    for (std::size_t word_idx = 0; word_idx < kWordsPerChunk; ++word_idx) {
+      *outputs[word_idx] = load_word_le(chunk_base + word_idx * sizeof(std::uint32_t));
+    }
+  } catch (const std::exception& e) {
+    std::cerr << "[DPI] " << e.what() << std::endl;
+    std::abort();
   }
 }
 

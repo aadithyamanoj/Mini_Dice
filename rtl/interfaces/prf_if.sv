@@ -2,6 +2,7 @@
  * Predicate Register File Interface
  * Valid/ready handshaked interface for FDR to read predicate registers.
  */
+`include "dice_define.vh"
 interface prf_if
   import dice_pkg::*;
   import dice_frontend_pkg::*;

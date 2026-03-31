@@ -48,7 +48,7 @@ import dice_pkg::*;
         ,.reset_i  (reset_i)
 
         ,.v_i      (valid_i)
-        ,.ready_o  (ready_lo)
+        ,.ready_param_o  (ready_lo)
         ,.data_i   (data_li)
 
         ,.v_o      (wb_valid_o)

@@ -38,8 +38,8 @@ import dice_pkg::*;
 
     // Write Interface — CGRA
     , input logic [TID_WIDTH-1:0]               cgra_tid_i
-    , input logic [(TOTAL_REGS*DATA_WIDTH)-1:0] cgra_data_i
-    , input logic [TOTAL_REGS-1:0]              wr_bitmap_i
+    , input logic [((NUM_PORTS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_i
+    , input logic [TOTAL_REGS-1:0]              cgra_wr_bitmap_i
     , input logic                               cgra_valid_i
 
     // Write Interface — LDST
@@ -93,7 +93,7 @@ import dice_pkg::*;
 
     // GPR portion of the bitmap (no swizzling)
     logic [NUM_PORTS-1:0] cgra_bitmap;
-    assign cgra_bitmap = wr_bitmap_i[NUM_PORTS-1:0];
+    assign cgra_bitmap = cgra_wr_bitmap_i[NUM_PORTS-1:0];
 
     genvar i;
     generate
@@ -117,9 +117,9 @@ import dice_pkg::*;
     logic ldst_special_valid;
 
     assign ldst_gpr_valid     = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg < DICE_REG_ADDR_WIDTH'(NUM_PORTS));
+                                && (|ldst_convert.wr_bitmap[NUM_PORTS-1:0]);
     assign ldst_special_valid = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS));
+                                && (|ldst_convert.wr_bitmap[TOTAL_REGS-1:NUM_PORTS]);
 
     generate
         for (i = 0; i < NUM_PORTS; i++) begin : gen_wr_ctrl
@@ -159,34 +159,21 @@ import dice_pkg::*;
     always_comb begin
         cgra_special = '0;
         for (int j = 0; j < NUM_CONST; j++) begin
-            cgra_special.const_mask[j] = wr_bitmap_i[NUM_PORTS + j];
+            cgra_special.const_mask[j] = cgra_wr_bitmap_i[NUM_PORTS + j];
             cgra_special.const_data[j*DATA_WIDTH +: DATA_WIDTH] =
-                cgra_data_i[(NUM_PORTS + j)*DATA_WIDTH +: DATA_WIDTH];
+                cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH];
         end
         for (int j = 0; j < NUM_PRED; j++) begin
-            cgra_special.pred_mask[j] = wr_bitmap_i[NUM_PORTS + NUM_CONST + j];
-            cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + NUM_CONST + j)*DATA_WIDTH];
+            cgra_special.pred_mask[j] = cgra_wr_bitmap_i[NUM_PORTS + NUM_CONST + j];
+            cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + 1 + j)*DATA_WIDTH];
         end
     end
 
     // LDST special regs command from cache response
     assign ldst_special_in = assemble_special_wr(ldst_convert);
 
-    // Extract first matching TID from LDST command (for per-TID pred writes)
-    logic ldst_tid_found;
     logic [TID_WIDTH-1:0] ldst_special_tid_in;
-
-    always_comb begin
-        ldst_tid_found = 1'b0;
-        ldst_special_tid_in = ldst_convert.outcmd_base_tid;
-        for (int k = 0; k < NUMBER_OF_MAX_COALESCED_COMMANDS; k++) begin
-            if (ldst_convert.outcmd_tid_bitmap[k] && !ldst_tid_found) begin
-                ldst_special_tid_in = TID_WIDTH'(ldst_convert.outcmd_base_tid
-                                     + ldst_convert.outcmd_address_map[k]);
-                ldst_tid_found = 1'b1;
-            end
-        end
-    end
+    assign ldst_special_tid_in = ldst_convert.tid;
 
     // FIFO buffer for LDST special writes (widened to include TID for pred)
     localparam int SPECIAL_ENTRY_WIDTH = $bits(special_regs_cmd) + TID_WIDTH;

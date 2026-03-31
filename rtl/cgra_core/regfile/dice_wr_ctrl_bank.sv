@@ -49,8 +49,9 @@ import dice_pkg::*;
   // logic                  ldst_fw_valid;
   logic                  pop_ldst;
 
+  localparam int WBUF = $bits(reg_wr_cmd);
   reg_wr_buffer #(
-          .WIDTH     (WIDTH)
+          .WIDTH     (WBUF)
         , .ADDR_WIDTH(ADDR_WIDTH)
         , .DEPTH     (BUF_DEPTH)
     ) u_ldst_buf (

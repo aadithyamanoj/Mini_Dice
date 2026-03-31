@@ -123,7 +123,7 @@ module next_active_thread_logic
         .DATA_WIDTH($clog2(CHUNK_SIZE)),
         .DEPTH(2)
     ) next_tid_fifo (
-        .clk(clk),
+        .clk_i(clk),
         .rst(rst),
         .push(fifo_push),
         .push_data(active_mask_index),

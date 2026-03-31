@@ -31,9 +31,11 @@ import dice_pkg::*;
     , input logic                             rd_en_i
     , input logic [TID_WIDTH-1:0]             rd_tid_i
     , input logic [TOTAL_REGS-1:0]            rd_bitmap_i
+    , input logic [TOTAL_REGS-1:0]            wr_bitmap_i
     , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] rd_data_o
     , output logic                            rf_rd_valid_o
     , output logic [TID_WIDTH-1:0]            tid_o
+    , output logic [TOTAL_REGS-1:0]           wr_bitmap_o
 
     // Predicate output — all TIDs, all preds, always valid
     , output logic [NUM_PRED-1:0]              pred_o
@@ -41,7 +43,7 @@ import dice_pkg::*;
     // Write Interface — CGRA
     , input logic [TID_WIDTH-1:0]               cgra_tid_i
     , input logic [((NUM_PORTS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_i
-    , input logic [TOTAL_REGS-1:0]              wr_bitmap_i
+    , input logic [TOTAL_REGS-1:0]              cgra_wr_bitmap_i
     , input logic                               cgra_valid_i
 
     // Write Interface — LDST
@@ -72,7 +74,7 @@ import dice_pkg::*;
 
     // GPR portion of the bitmap (no swizzling)
     logic [NUM_PORTS-1:0] cgra_shifted_bitmap;
-    assign cgra_shifted_bitmap = wr_bitmap_i[NUM_PORTS-1:0];
+    assign cgra_shifted_bitmap = cgra_wr_bitmap_i[NUM_PORTS-1:0];
 
     genvar i;
     generate
@@ -98,12 +100,11 @@ import dice_pkg::*;
     logic ldst_special_valid;
 
     assign ldst_gpr_valid     = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg < DICE_REG_ADDR_WIDTH'(NUM_PORTS));
+                                && (|ldst_convert.wr_bitmap[NUM_PORTS-1:0]);
     assign ldst_const_valid   = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS))
-                                && (ldst_convert.outcmd_ld_dest_reg <  DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST));
+                                && (|ldst_convert.wr_bitmap[NUM_PORTS +: NUM_CONST]);
     assign ldst_pred_valid    = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST));
+                                && (|ldst_convert.wr_bitmap[NUM_PORTS + NUM_CONST +: NUM_PRED]);
     assign ldst_special_valid = ldst_const_valid || ldst_pred_valid;
 
     generate
@@ -145,12 +146,12 @@ import dice_pkg::*;
     always_comb begin
         cgra_special = '0;
         for (int j = 0; j < NUM_CONST; j++) begin
-            cgra_special.const_mask[j] = wr_bitmap_i[NUM_PORTS + j];
+            cgra_special.const_mask[j] = cgra_wr_bitmap_i[NUM_PORTS + j];
             cgra_special.const_data[j*DATA_WIDTH +: DATA_WIDTH] =
                 cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH];
         end
         for (int j = 0; j < NUM_PRED; j++) begin
-            cgra_special.pred_mask[j] = wr_bitmap_i[NUM_PORTS + NUM_CONST + j];
+            cgra_special.pred_mask[j] = cgra_wr_bitmap_i[NUM_PORTS + NUM_CONST + j];
             cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + 1 + j)*DATA_WIDTH];
         end
     end
@@ -161,9 +162,7 @@ import dice_pkg::*;
     // Extract TID for per-TID pred writes (single coalesced command only)
     logic [TID_WIDTH-1:0] ldst_special_tid_in;
 
-    assign ldst_special_tid_in = ldst_pred_valid
-        ? TID_WIDTH'(ldst_convert.outcmd_base_tid + ldst_convert.outcmd_address_map[0])
-        : ldst_convert.outcmd_base_tid;
+    assign ldst_special_tid_in = ldst_convert.tid;
 
     // FIFO buffer for LDST special writes (widened to include TID for pred)
     localparam int SPECIAL_ENTRY_WIDTH = $bits(special_regs_cmd) + TID_WIDTH;
@@ -178,7 +177,7 @@ import dice_pkg::*;
           .clk_i   (clk_i)
         , .reset_i (reset_i)
         , .v_i     (ldst_special_valid)
-        , .ready_o (special_fifo_ready)
+        , .ready_param_o (special_fifo_ready)
         , .data_i  ({ldst_special_in, ldst_special_tid_in})
         , .v_o     (special_fifo_valid)
         , .yumi_i  (pop_special)
@@ -275,6 +274,7 @@ import dice_pkg::*;
      registers (
           .clk (clk_i)
 
+        , .rd_en (rf_rd_en)
         , .rd_addr (rf_rd_addr)
         , .rd_data (rd_data_o[NUM_PORTS*DATA_WIDTH-1:0])
 
@@ -284,10 +284,13 @@ import dice_pkg::*;
     );
 
     always_ff @(posedge clk_i) begin
-        if(reset_i)
+        if (reset_i) begin
             tid_o <= '0;
-        else
+            wr_bitmap_o <= '0;
+        end else begin
             tid_o <= rd_tid_i;
+            wr_bitmap_o <= wr_bitmap_i;
+        end
     end
 
 endmodule
