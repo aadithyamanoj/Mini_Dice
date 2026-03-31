@@ -20,8 +20,14 @@ module dice_cgra_rf
     output logic [1:0] bank_valid_o,
     output logic prog_dout_o,
     output logic prog_we_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0]                         mem_data_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0]                         mem_addr_o,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_0,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_0,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_1,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_1,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_2,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_2,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_3,
+    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_3,
     output logic                                                   mem_valid_o,
     input  logic [7:0]                                             latency_i,
 
@@ -144,8 +150,14 @@ module dice_cgra_rf
       .ext_pred_i_1(pred_launch_lo[1]),
       .ext_pred_o_0(cgra_ext_pred_o[0]),
       .ext_pred_o_1(cgra_ext_pred_o[1]),
-      .mem_data_o(mem_data_o),
-      .mem_addr_o(mem_addr_o)
+      .mem_data_o_0(mem_data_o_0[15:0]),
+      .mem_addr_o_0(mem_addr_o_0[15:0]),
+      .mem_data_o_1(mem_data_o_1[15:0]),
+      .mem_addr_o_1(mem_addr_o_1[15:0]),
+      .mem_data_o_2(mem_data_o_2[15:0]),
+      .mem_addr_o_2(mem_addr_o_2[15:0]),
+      .mem_data_o_3(mem_data_o_3[15:0]),
+      .mem_addr_o_3(mem_addr_o_3[15:0])
   );
 
   wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i + 1;

@@ -75,14 +75,8 @@ module tb_dice_cgra_rf_vector_mul;
   logic                           ldst_valid_i;
   logic                           ldst_ready_o;
 
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o_0;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o_0;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o_1;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o_1;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o_2;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o_2;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o_3;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o_3;
+  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o;
+  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o;
   logic                                                                mem_valid_o;
 
 `ifdef DICE_RF_DEBUG
@@ -130,14 +124,8 @@ module tb_dice_cgra_rf_vector_mul;
       .ldst_wr_i(ldst_wr_i),
       .ldst_valid_i(ldst_valid_i),
       .ldst_ready_o(ldst_ready_o),
-      .mem_data_o_0(mem_data_o_0),
-      .mem_addr_o_0(mem_addr_o_0),
-      .mem_data_o_1(mem_data_o_1),
-      .mem_addr_o_1(mem_addr_o_1),
-      .mem_data_o_2(mem_data_o_2),
-      .mem_addr_o_2(mem_addr_o_2),
-      .mem_data_o_3(mem_data_o_3),
-      .mem_addr_o_3(mem_addr_o_3),
+      .mem_data_o(mem_data_o),
+      .mem_addr_o(mem_addr_o),
       .mem_valid_o(mem_valid_o)
 `ifdef DICE_RF_DEBUG
       , .dbg_rf_rd_data_o(dbg_rf_rd_data)

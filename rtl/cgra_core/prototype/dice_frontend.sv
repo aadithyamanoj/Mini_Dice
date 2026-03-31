@@ -21,51 +21,51 @@ module dice_frontend
     cgra_cm_if.master cm1_if_o,
 
     // Block commit table feedback (from backend)
-    input  logic                            eblock_commit_valid_i,
-    input  logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i
+    input logic                            eblock_commit_valid_i,
+    input logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i
 );
 
   // =========================================================================
   // Internal interfaces and wires
   // =========================================================================
-  cta_sched_if              schedule_if ();
-  simt_stack_status_entry_t simt_status;
+  cta_sched_if schedule_if ();
+  simt_stack_status_entry_t                        simt_status;
 
   // FDR -> scheduler status table/branch prediction wires
-  branch_predict_interface_t bh_branch_predict_info;
-  logic                      bh_branch_predict_info_we;
-  dice_cta_status_t          cta_status_data;
+  branch_predict_interface_t                       bh_branch_predict_info;
+  logic                                            bh_branch_predict_info_we;
+  dice_cta_status_t                                cta_status_data;
 
   // FDR -> scheduler SIMT update wires
-  logic                            simt_update_valid;
-  logic                            simt_update_ready;
-  simt_stack_update_t              simt_update_stack_data;
+  logic                                            simt_update_valid;
+  logic                                            simt_update_ready;
+  simt_stack_update_t                              simt_update_stack_data;
 
   // Eblock flush wires (FDR -> Scheduler)
-  logic                       eblock_flush_valid;
-  logic [EBLOCK_ID_WIDTH-1:0] eblock_flush_id;
+  logic                                            eblock_flush_valid;
+  logic                      [EBLOCK_ID_WIDTH-1:0] eblock_flush_id;
 
   // =========================================================================
   // CTA Schedule Stage
   // =========================================================================
   cta_schedule_stage u_cta_schedule_stage (
-      .clk_i                   (clk_i),
-      .rst_i                   (rst_i),
-      .cta_if_inst             (cta_if_inst),
-      .schedule_if             (schedule_if),
-      .eblock_commit_valid_i   (eblock_commit_valid_i),
-      .eblock_commit_id_i      (eblock_commit_id_i),
-      .eblock_flush_valid_i    (eblock_flush_valid),
-      .eblock_flush_id_i       (eblock_flush_id),
-      .bh_branch_predict_info_i(bh_branch_predict_info),
+      .clk_i                      (clk_i),
+      .rst_i                      (rst_i),
+      .cta_if_inst                (cta_if_inst),
+      .schedule_if                (schedule_if),
+      .eblock_commit_valid_i      (eblock_commit_valid_i),
+      .eblock_commit_id_i         (eblock_commit_id_i),
+      .eblock_flush_valid_i       (eblock_flush_valid),
+      .eblock_flush_id_i          (eblock_flush_id),
+      .bh_branch_predict_info_i   (bh_branch_predict_info),
       .bh_branch_predict_info_we_i(bh_branch_predict_info_we),
-      .cta_status_data_o       (cta_status_data),
-      .brt_info_i              (),
-      .brt_info_write_enable_i (),
-      .simt_update_valid_i     (simt_update_valid),
-      .simt_update_ready_o     (simt_update_ready),
-      .simt_update_stack_data_i(simt_update_stack_data),
-      .simt_status_o           (simt_status)
+      .cta_status_data_o          (cta_status_data),
+      .brt_info_i                 (),
+      .brt_info_write_enable_i    (),
+      .simt_update_valid_i        (simt_update_valid),
+      .simt_update_ready_o        (simt_update_ready),
+      .simt_update_stack_data_i   (simt_update_stack_data),
+      .simt_status_o              (simt_status)
   );
 
   // =========================================================================
