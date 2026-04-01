@@ -40,6 +40,8 @@
 
 `timescale 1ns/1ps
 
+`include "dice_define.vh"
+
 `ifndef AXI_TYPEDEF_SVH_
 `include "axi/typedef.svh"
 `endif
@@ -52,6 +54,8 @@ module tb_cgra_io_axi4_burst_top;
 
   import axi4_xbar_pkg::*;
   import axi_pkg::*;
+  import dice_pkg::*;
+  import DE_pkg::*;
 
   // -------------------------------------------------------------------------
   // Parameters
@@ -102,6 +106,26 @@ module tb_cgra_io_axi4_burst_top;
   `AXI_LITE_ASSIGN(fpga_axi, fpga_dv)
 
   // -------------------------------------------------------------------------
+  // mem_req_fifo enqueue / response signals
+  // -------------------------------------------------------------------------
+  logic                                                              enq_valid;
+  logic                                                              enq_ready;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                enq_base_tid;
+  logic [TID_BITMAP_WIDTH-1:0]                                      enq_tid_bitmap;
+  logic [DICE_REG_ADDR_WIDTH-1:0]                                   enq_ld_dest_reg;
+  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] enq_address_map;
+  logic [15:0]                                                       enq_addr;
+  logic [15:0]                                                       enq_data;
+  logic                                                              enq_write_en;
+
+  logic                                                              rsp_valid;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                rsp_base_tid;
+  logic [TID_BITMAP_WIDTH-1:0]                                      rsp_tid_bitmap;
+  logic [DICE_REG_ADDR_WIDTH-1:0]                                   rsp_ld_dest_reg;
+  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] rsp_address_map;
+  logic [(CACHE_LINE_SIZE*8)-1:0]                                   rsp_data;
+
+  // -------------------------------------------------------------------------
   // AXI4 slave port signals  (crossbar master ports → behavioral slaves)
   // -------------------------------------------------------------------------
   mst_req_t  fpga_mem_req,  cgra_csr_req;
@@ -147,6 +171,23 @@ module tb_cgra_io_axi4_burst_top;
     .fpga_axi_i_r_resp    ( fpga_axi.r_resp   ),
     .fpga_axi_i_r_valid   ( fpga_axi.r_valid  ),
     .fpga_axi_i_r_ready   ( fpga_axi.r_ready  ),
+
+    .enq_valid_i          ( enq_valid         ),
+    .enq_ready_o          ( enq_ready         ),
+    .enq_base_tid_i       ( enq_base_tid      ),
+    .enq_tid_bitmap_i     ( enq_tid_bitmap    ),
+    .enq_ld_dest_reg_i    ( enq_ld_dest_reg   ),
+    .enq_address_map_i    ( enq_address_map   ),
+    .enq_addr_i           ( enq_addr          ),
+    .enq_data_i           ( enq_data          ),
+    .enq_write_en_i       ( enq_write_en      ),
+
+    .rsp_valid_o          ( rsp_valid         ),
+    .rsp_base_tid_o       ( rsp_base_tid      ),
+    .rsp_tid_bitmap_o     ( rsp_tid_bitmap    ),
+    .rsp_ld_dest_reg_o    ( rsp_ld_dest_reg   ),
+    .rsp_address_map_o    ( rsp_address_map   ),
+    .rsp_data_o           ( rsp_data          ),
 
     .fpga_mem_req_o       ( fpga_mem_req    ),
     .fpga_mem_resp_i      ( fpga_mem_resp   ),
@@ -485,6 +526,15 @@ module tb_cgra_io_axi4_burst_top;
     link_rx_data  = '0;
     link_tx_ready = 1'b0;
 
+    enq_valid       = 1'b0;
+    enq_base_tid    = '0;
+    enq_tid_bitmap  = '0;
+    enq_ld_dest_reg = '0;
+    enq_address_map = '0;
+    enq_addr        = '0;
+    enq_data        = '0;
+    enq_write_en    = 1'b0;
+
     fpga_agent = new(fpga_dv, "FPGA");
     fpga_agent.reset();
     pass_cnt = 0;
@@ -649,6 +699,35 @@ module tb_cgra_io_axi4_burst_top;
         check16(rdata, shadow[mem_a(400 + i)],
                 $sformatf("T7: stress readback SRAM[%0d]", 400 + i));
       end
+    end
+
+    // -----------------------------------------------------------------------
+    $display("\n--- T8: mem_req_fifo load via mfetch port ---");
+    begin
+      // Pre-load a value into SRAM via the FPGA AXI path
+      fpga_write(mem_a(100), 16'hCAFE);
+      shadow_write(mem_a(100), 16'hCAFE);
+
+      // Enqueue a load request (thread 0, address mem_a(100))
+      @(posedge clk_i); #1;
+      enq_valid       = 1'b1;
+      enq_base_tid    = '0;
+      enq_tid_bitmap  = 8'b0000_0001;   // thread slot 0
+      enq_ld_dest_reg = '0;
+      enq_address_map = '0;
+      enq_addr        = mem_a(100);
+      enq_data        = '0;
+      enq_write_en    = 1'b0;
+      while (!enq_ready) @(posedge clk_i);
+      @(posedge clk_i); #1;
+      enq_valid = 1'b0;
+
+      // Wait for rsp_valid to pulse
+      while (!rsp_valid) @(posedge clk_i);
+      // slot = lowest set bit of tid_bitmap = 0, so rsp_data[15:0]
+      check16(rsp_data[15:0], 16'hCAFE, "T8: mfetch load returns correct data");
+      check16({{(16-TID_BITMAP_WIDTH){1'b0}}, rsp_tid_bitmap}, 16'h0001, "T8: tid_bitmap passthrough");
+      @(posedge clk_i);
     end
 
     // -----------------------------------------------------------------------

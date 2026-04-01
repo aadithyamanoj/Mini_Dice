@@ -15,6 +15,8 @@
 module cgra_io_axi4_burst_top
   import axi4_xbar_pkg::*;
   import axi_pkg::*;
+  import dice_pkg::*;
+  import DE_pkg::*;
 #(
     parameter int ADDR_WIDTH    = 16,
     parameter int DATA_WIDTH    = 16,
@@ -60,6 +62,25 @@ module cgra_io_axi4_burst_top
     output logic                      fpga_axi_i_r_valid,
     input  logic                      fpga_axi_i_r_ready,
 
+    // mem_req_fifo enqueue interface (from CGRA backend)
+    input  logic                                                              enq_valid_i,
+    output logic                                                              enq_ready_o,
+    input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                enq_base_tid_i,
+    input  logic [TID_BITMAP_WIDTH-1:0]                                      enq_tid_bitmap_i,
+    input  logic [DICE_REG_ADDR_WIDTH-1:0]                                   enq_ld_dest_reg_i,
+    input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] enq_address_map_i,
+    input  logic [15:0]                                                       enq_addr_i,
+    input  logic [15:0]                                                       enq_data_i,
+    input  logic                                                              enq_write_en_i,
+
+    // mem_req_fifo response interface (to CGRA backend)
+    output logic                                                              rsp_valid_o,
+    output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                rsp_base_tid_o,
+    output logic [TID_BITMAP_WIDTH-1:0]                                      rsp_tid_bitmap_o,
+    output logic [DICE_REG_ADDR_WIDTH-1:0]                                   rsp_ld_dest_reg_o,
+    output logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] rsp_address_map_o,
+    output logic [(CACHE_LINE_SIZE*8)-1:0]                                   rsp_data_o,
+
     // AXI4 slave ports (connect to external behavioral or RTL slaves)
     output mst_req_t  fpga_mem_req_o,
     input  mst_resp_t fpga_mem_resp_i,
@@ -97,6 +118,17 @@ module cgra_io_axi4_burst_top
   logic [1:0]                    fab_rresp;
   logic                          fab_rlast;
   logic                          fab_rvalid;
+
+  // AXI-Lite wires for mem_req_fifo → mfetch_req
+  logic [15:0] fifo_awaddr, fifo_araddr;
+  logic [15:0] fifo_wdata;
+  logic [1:0]  fifo_wstrb,  fifo_bresp, fifo_rresp;
+  logic        fifo_awvalid, fifo_awready;
+  logic        fifo_wvalid,  fifo_wready;
+  logic        fifo_bvalid,  fifo_bready;
+  logic        fifo_arvalid, fifo_arready;
+  logic [DATA_WIDTH-1:0] fifo_rdata;
+  logic        fifo_rvalid,  fifo_rready;
 
   // Crossbar request/response structs
   slv_req_t  fpga_mst_req,  dfetch_req;
@@ -169,11 +201,37 @@ module cgra_io_axi4_burst_top
   assign fab_rlast   = dfetch_resp.r.last;  // RLAST back to bridge
   assign fab_rvalid  = dfetch_resp.r_valid;
 
-  // Idle masters
+  // mem_req_fifo AXI-Lite outputs → mfetch_req (AXI-Lite promoted to AXI4)
   always_comb begin
-    mfetch_req          = '0;
-    mfetch_req.b_ready  = 1'b1;
-    mfetch_req.r_ready  = 1'b1;
+    mfetch_req           = '0;
+    mfetch_req.aw_valid  = fifo_awvalid;
+    mfetch_req.aw.addr   = axi_addr_t'(fifo_awaddr);
+    mfetch_req.aw.len    = '0;
+    mfetch_req.aw.size   = 3'b001;
+    mfetch_req.aw.burst  = BURST_INCR;
+    mfetch_req.w_valid   = fifo_wvalid;
+    mfetch_req.w.data    = axi_data_t'(fifo_wdata);
+    mfetch_req.w.strb    = axi_strb_t'(fifo_wstrb);
+    mfetch_req.w.last    = 1'b1;
+    mfetch_req.b_ready   = fifo_bready;
+    mfetch_req.ar_valid  = fifo_arvalid;
+    mfetch_req.ar.addr   = axi_addr_t'(fifo_araddr);
+    mfetch_req.ar.len    = '0;
+    mfetch_req.ar.size   = 3'b001;
+    mfetch_req.ar.burst  = BURST_INCR;
+    mfetch_req.r_ready   = fifo_rready;
+  end
+  assign fifo_awready = mfetch_resp.aw_ready;
+  assign fifo_wready  = mfetch_resp.w_ready;
+  assign fifo_bresp   = mfetch_resp.b.resp;
+  assign fifo_bvalid  = mfetch_resp.b_valid;
+  assign fifo_arready = mfetch_resp.ar_ready;
+  assign fifo_rdata   = DATA_WIDTH'(mfetch_resp.r.data);
+  assign fifo_rresp   = mfetch_resp.r.resp;
+  assign fifo_rvalid  = mfetch_resp.r_valid;
+
+  // bsfetch still idle
+  always_comb begin
     bsfetch_req         = '0;
     bsfetch_req.b_ready = 1'b1;
     bsfetch_req.r_ready = 1'b1;
@@ -239,6 +297,44 @@ module cgra_io_axi4_burst_top
     .m_axi_rlast_i    ( fab_rlast   ),
     .m_axi_rvalid_i   ( fab_rvalid  ),
     .m_axi_rready_o   ( fab_rready  )
+  );
+
+  // mem_req_fifo (CGRA backend → mfetch AXI port)
+  mem_req_fifo u_mem_req_fifo (
+    .clk_i             ( clk_i             ),
+    .rst_i             ( rst_i             ),
+    .enq_valid_i       ( enq_valid_i       ),
+    .enq_ready_o       ( enq_ready_o       ),
+    .enq_base_tid_i    ( enq_base_tid_i    ),
+    .enq_tid_bitmap_i  ( enq_tid_bitmap_i  ),
+    .enq_ld_dest_reg_i ( enq_ld_dest_reg_i ),
+    .enq_address_map_i ( enq_address_map_i ),
+    .enq_addr_i        ( enq_addr_i        ),
+    .enq_data_i        ( enq_data_i        ),
+    .enq_write_en_i    ( enq_write_en_i    ),
+    .axi_awaddr_o      ( fifo_awaddr       ),
+    .axi_awvalid_o     ( fifo_awvalid      ),
+    .axi_awready_i     ( fifo_awready      ),
+    .axi_wdata_o       ( fifo_wdata        ),
+    .axi_wstrb_o       ( fifo_wstrb        ),
+    .axi_wvalid_o      ( fifo_wvalid       ),
+    .axi_wready_i      ( fifo_wready       ),
+    .axi_bresp_i       ( fifo_bresp        ),
+    .axi_bvalid_i      ( fifo_bvalid       ),
+    .axi_bready_o      ( fifo_bready       ),
+    .axi_araddr_o      ( fifo_araddr       ),
+    .axi_arvalid_o     ( fifo_arvalid      ),
+    .axi_arready_i     ( fifo_arready      ),
+    .axi_rdata_i       ( fifo_rdata        ),
+    .axi_rresp_i       ( fifo_rresp        ),
+    .axi_rvalid_i      ( fifo_rvalid       ),
+    .axi_rready_o      ( fifo_rready       ),
+    .rsp_valid_o       ( rsp_valid_o       ),
+    .rsp_base_tid_o    ( rsp_base_tid_o    ),
+    .rsp_tid_bitmap_o  ( rsp_tid_bitmap_o  ),
+    .rsp_ld_dest_reg_o ( rsp_ld_dest_reg_o ),
+    .rsp_address_map_o ( rsp_address_map_o ),
+    .rsp_data_o        ( rsp_data_o        )
   );
 
   // Full AXI4 crossbar
