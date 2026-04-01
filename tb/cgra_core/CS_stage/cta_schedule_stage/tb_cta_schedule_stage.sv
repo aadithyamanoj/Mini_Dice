@@ -145,18 +145,12 @@ module tb_cta_schedule_stage;
     @(posedge clk);
 
     $display("PASS: scheduled one CTA");
-`ifdef MODELSIM
-    $stop;
-`else
-    $finish;
-`endif
-  end
-
-`ifdef VCD
-  initial begin
-    $dumpfile("tb_cta_schedule_stage.vcd");
-    $dumpvars(0, tb_cta_schedule_stage);
-  end
-`endif
+ 
+ `ifdef FSDB
+    initial begin
+      $dumpfile("tb_cta_schedule_stage.fsdb");
+      $dumpvars(0, tb_cta_schedule_stage,  "+struct", "+mda");
+    end
+ `endif
 
 endmodule
