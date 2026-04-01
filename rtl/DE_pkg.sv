@@ -9,6 +9,7 @@ package DE_pkg;
 // =========================================================
 parameter int NUM_SCOREBOARDS  = 1;
 parameter int NUM_LANES        = 1;
+parameter int NUM_MEM_PORTS    = `DICE_CGRA_MEM_PORTS;
 parameter int CHUNK_SIZE       = `DICE_NUM_MAX_THREADS_PER_CORE / NUM_SCOREBOARDS;
 parameter int CHUNK_ADDR_WIDTH = (NUM_SCOREBOARDS == 1) ? 1 : $clog2(NUM_SCOREBOARDS);
 parameter int LANE_SIZE        = CHUNK_SIZE / NUM_LANES;

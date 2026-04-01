@@ -20,15 +20,16 @@ module dice_cgra_rf
     output logic [1:0] bank_valid_o,
     output logic prog_dout_o,
     output logic prog_we_o,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_0,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_0,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_1,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_1,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_2,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_2,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_data_o_3,
-    output logic [DICE_REG_DATA_WIDTH:0] mem_addr_o_3,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_0,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_0,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_1,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_1,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_2,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_2,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_3,
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3,
     output logic                                                   mem_valid_o,
+    output logic [DICE_TID_WIDTH-1:0]                              cgra_tid_o,
     input  logic [7:0]                                             latency_i,
 
     input  logic                                                 rd_tid_valid_i,
@@ -37,7 +38,7 @@ module dice_cgra_rf
     input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]     rd_tid_i,
     input  logic [DICE_TOTAL_REGS-1:0]                           rd_bitmap_i,
     input  logic [DICE_TOTAL_REGS-1:0]                           wr_bitmap_i,
-    output logic                                                 rf_rd_valid_o,
+    // output logic                                                 rf_rd_valid_o,
 
     input  logic [$bits(cache_wr_cmd)-1:0]                       ldst_wr_i,
     input  logic                                                 ldst_valid_i,
@@ -55,6 +56,8 @@ module dice_cgra_rf
     , output logic                                                            dbg_rf_rd_valid_o
 `endif
 );
+
+  logic rf_rd_valid_lo;
 
   localparam int NUM_BANKS = DICE_NUM_BANKS;
   localparam int NUM_CONST = DICE_NUM_CONST;
@@ -81,7 +84,7 @@ module dice_cgra_rf
     if (reset_i) begin
       rf_launch_data_lo <= '0;
       pred_launch_lo <= '0;
-    end else if (rf_rd_valid_o) begin
+    end else if (rf_rd_valid_lo) begin
       rf_launch_data_lo <= rf_rd_data_lo;
       pred_launch_lo <= pred_lo;
     end
@@ -193,7 +196,7 @@ module dice_cgra_rf
       (.clk_i(clk_i)
       ,.reset_i(reset_i)
       ,.latency(cgra_lat)
-      ,.in_data(rf_rd_valid_o)
+      ,.in_data(rf_rd_valid_lo)
       ,.out_data(cgra_valid_lo)
       );
 
@@ -207,7 +210,7 @@ module dice_cgra_rf
       .rd_bitmap_i(rd_bitmap_i),
       .wr_bitmap_i(wr_bitmap_i),
       .rd_data_o(rf_rd_data_lo),
-      .rf_rd_valid_o(rf_rd_valid_o),
+      .rf_rd_valid_o(rf_rd_valid_lo),
       .tid_o(cgra_tid_li),
       .wr_bitmap_o(wr_bitmap_reg_li),
       .pred_o(pred_lo),
@@ -220,6 +223,7 @@ module dice_cgra_rf
       .ldst_ready_o(ldst_ready_o)
   );
   assign mem_valid_o = cgra_valid_lo;
+  assign cgra_tid_o = cgra_tid_lo;
 
 `ifdef DICE_RF_DEBUG
   assign dbg_rf_rd_data_o    = rf_rd_data_lo;
@@ -230,7 +234,7 @@ module dice_cgra_rf
   assign dbg_cgra_wr_bitmap_o = cgra_wr_bitmap_li;
   assign dbg_cgra_tid_o      = cgra_tid_lo;
   assign dbg_cgra_valid_o    = cgra_valid_lo;
-  assign dbg_rf_rd_valid_o   = rf_rd_valid_o;
+  assign dbg_rf_rd_valid_o   = rf_rd_valid_lo;
 `endif
 
 endmodule

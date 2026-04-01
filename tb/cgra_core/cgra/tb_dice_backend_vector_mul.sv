@@ -23,8 +23,9 @@ import "DPI-C" context function void dice_vector_mul_bitstream_get_chunk(
     output int unsigned w15
 );
 
-module tb_dice_cgra_rf_vector_mul;
+module tb_dice_backend_vector_mul;
   import dice_pkg::*;
+  import dice_frontend_pkg::*;
   import DE_pkg::*;
   import cgra_test_pkg::*;
 
@@ -49,6 +50,7 @@ module tb_dice_cgra_rf_vector_mul;
   logic clk_i;
   logic reset_i;
   logic en_i;
+  fdr_if fdr_if_i ();
 
   logic [DICE_MEM_DATA_WIDTH-1:0] cm0_data_i;
   logic [CHUNK_COUNT-1:0]         cm0_chunk_en_i;
@@ -61,23 +63,24 @@ module tb_dice_cgra_rf_vector_mul;
   logic [1:0]                     bank_valid_o;
   logic                           prog_dout_o;
   logic                           prog_we_o;
-  logic [7:0]                     latency_i;
-
-  logic                           rd_tid_valid_i;
-  logic                           rd_tid_ready_o;
-  // logic                           rd_en_i;
-  logic [DICE_TID_WIDTH-1:0]      rd_tid_i;
-  logic [DICE_TOTAL_REGS-1:0]     rd_bitmap_i;
-  logic [DICE_TOTAL_REGS-1:0]     wr_bitmap_i;
-  logic                           rf_rd_valid_o;
-
-  logic [$bits(cache_wr_cmd)-1:0] ldst_wr_i;
-  logic                           ldst_valid_i;
-  logic                           ldst_ready_o;
-
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_data_o;
-  logic [DICE_REG_DATA_WIDTH-1:0]                                      mem_addr_o;
-  logic                                                                mem_valid_o;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_0;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_0;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_1;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_1;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_2;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_2;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_3;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                    mem_rsp_base_tid_i;
+  logic [TID_BITMAP_WIDTH-1:0]                                         mem_rsp_tid_bitmap_i;
+  logic [DICE_REG_ADDR_WIDTH-1:0]                                      mem_rsp_ld_dest_reg_i;
+  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] mem_rsp_address_map_i;
+  logic [(CACHE_LINE_SIZE*8)-1:0]                                      mem_rsp_data_i;
+  logic                                                                mem_rsp_valid_i;
+  logic                                                                eblock_commit_valid_o;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0]                                     eblock_commit_id_o;
+  logic                                                                eblock_commit_ready_i;
+  logic [2**DICE_HW_CTA_ID_WIDTH-1:0]                                  hw_cta_pending_o;
 
 `ifdef DICE_RF_DEBUG
   logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0]      dbg_rf_rd_data;
@@ -95,38 +98,43 @@ module tb_dice_cgra_rf_vector_mul;
 
   initial begin
     $fsdbDumpfile("waveform.fsdb");
-    $fsdbDumpvars(0, tb_dice_cgra_rf_vector_mul, "+struct", "+mda");
+    $fsdbDumpvars(0, tb_dice_backend_vector_mul, "+struct", "+mda");
   end
 
-  dice_cgra_rf dut (
+  dice_backend dut (
       .clk_i(clk_i),
-      .reset_i(reset_i),
+      .rst_i(reset_i),
+      .fdr_if_i(fdr_if_i),
+      .mem_rsp_base_tid_i(mem_rsp_base_tid_i),
+      .mem_rsp_tid_bitmap_i(mem_rsp_tid_bitmap_i),
+      .mem_rsp_ld_dest_reg_i(mem_rsp_ld_dest_reg_i),
+      .mem_rsp_address_map_i(mem_rsp_address_map_i),
+      .mem_rsp_data_i(mem_rsp_data_i),
+      .mem_rsp_valid_i(mem_rsp_valid_i),
+      .eblock_commit_valid_o(eblock_commit_valid_o),
+      .eblock_commit_id_o(eblock_commit_id_o),
+      .eblock_commit_ready_i(eblock_commit_ready_i),
+      .hw_cta_pending_o(hw_cta_pending_o),
+      .cgra_cm0_data_i(cm0_data_i),
+      .cgra_cm0_chunk_en_i(cm0_chunk_en_i),
+      .cgra_cm1_data_i(cm1_data_i),
+      .cgra_cm1_chunk_en_i(cm1_chunk_en_i),
       .en_i(en_i),
-      .cm0_data_i(cm0_data_i),
-      .cm0_chunk_en_i(cm0_chunk_en_i),
-      .cm1_data_i(cm1_data_i),
-      .cm1_chunk_en_i(cm1_chunk_en_i),
-      .v_i(v_i),
-      .bank_i(bank_i),
-      .ready_o(ready_o),
-      .busy_o(busy_o),
-      .bank_valid_o(bank_valid_o),
-      .prog_dout_o(prog_dout_o),
-      .prog_we_o(prog_we_o),
-      .latency_i(latency_i),
-      .rd_tid_valid_i(rd_tid_valid_i),
-      .rd_tid_ready_o(rd_tid_ready_o),
-      // .rd_en_i(rd_en_i),
-      .rd_tid_i(rd_tid_i),
-      .rd_bitmap_i(rd_bitmap_i),
-      .wr_bitmap_i(wr_bitmap_i),
-      .rf_rd_valid_o(rf_rd_valid_o),
-      .ldst_wr_i(ldst_wr_i),
-      .ldst_valid_i(ldst_valid_i),
-      .ldst_ready_o(ldst_ready_o),
-      .mem_data_o(mem_data_o),
-      .mem_addr_o(mem_addr_o),
-      .mem_valid_o(mem_valid_o)
+      .cgra_v_i(v_i),
+      .cgra_bank_i(bank_i),
+      .cgra_ready_o(ready_o),
+      .cgra_busy_o(busy_o),
+      .cgra_bank_valid_o(bank_valid_o),
+      .cgra_prog_dout_o(prog_dout_o),
+      .cgra_prog_we_o(prog_we_o),
+      .cgra_mem_data_o_0(mem_data_o_0),
+      .cgra_mem_addr_o_0(mem_addr_o_0),
+      .cgra_mem_data_o_1(mem_data_o_1),
+      .cgra_mem_addr_o_1(mem_addr_o_1),
+      .cgra_mem_data_o_2(mem_data_o_2),
+      .cgra_mem_addr_o_2(mem_addr_o_2),
+      .cgra_mem_data_o_3(mem_data_o_3),
+      .cgra_mem_addr_o_3(mem_addr_o_3)
 `ifdef DICE_RF_DEBUG
       , .dbg_rf_rd_data_o(dbg_rf_rd_data)
       , .dbg_pred_o(dbg_pred)
@@ -184,13 +192,15 @@ module tb_dice_cgra_rf_vector_mul;
 
   task automatic clear_rf_inputs();
     begin
-      rd_tid_valid_i = 1'b0;
-      // rd_en_i        = 1'b0;
-      rd_tid_i       = '0;
-      rd_bitmap_i    = '0;
-      wr_bitmap_i    = '0;
-      ldst_wr_i      = '0;
-      ldst_valid_i   = 1'b0;
+      mem_rsp_base_tid_i     = '0;
+      mem_rsp_tid_bitmap_i   = '0;
+      mem_rsp_ld_dest_reg_i  = '0;
+      mem_rsp_address_map_i  = '0;
+      mem_rsp_data_i         = '0;
+      mem_rsp_valid_i        = 1'b0;
+      fdr_if_i.valid         = 1'b0;
+      fdr_if_i.data          = '0;
+      eblock_commit_ready_i  = 1'b0;
     end
   endtask
 
@@ -292,71 +302,84 @@ module tb_dice_cgra_rf_vector_mul;
     end
   endtask
 
-  function automatic logic [$bits(cache_wr_cmd)-1:0] build_ldst_write(
+  function automatic logic [(CACHE_LINE_SIZE*8)-1:0] build_mem_rsp_data(
       input logic [DICE_TID_WIDTH-1:0]  tid,
       input int                         reg_idx,
       input logic [DICE_REG_DATA_WIDTH-1:0] data
   );
-    cache_wr_cmd cmd;
+    logic [(CACHE_LINE_SIZE*8)-1:0] rsp_data;
     begin
-      cmd = '0;
-      cmd.tid = tid;
-      cmd.data = data;
-      cmd.wr_bitmap[reg_idx] = 1'b1;
-      return cmd;
+      rsp_data = '0;
+      rsp_data[DICE_REG_DATA_WIDTH-1:0] = data;
+      return rsp_data;
     end
   endfunction
 
-  task automatic send_ldst_write(
+  task automatic send_mem_rsp_write(
       input logic [DICE_TID_WIDTH-1:0]  tid,
       input int                         reg_idx,
       input logic [DICE_REG_DATA_WIDTH-1:0] data
   );
     begin
-      wait (ldst_ready_o === 1'b1);
       @(negedge clk_i);
-      ldst_wr_i = build_ldst_write(tid, reg_idx, data);
-      ldst_valid_i = 1'b1;
+      mem_rsp_base_tid_i    = tid;
+      mem_rsp_tid_bitmap_i  = '0;
+      mem_rsp_ld_dest_reg_i = reg_idx[DICE_REG_ADDR_WIDTH-1:0];
+      mem_rsp_data_i        = build_mem_rsp_data(tid, reg_idx, data);
+      mem_rsp_valid_i       = 1'b1;
       @(posedge clk_i);
       @(negedge clk_i);
-      ldst_valid_i = 1'b0;
-      ldst_wr_i = '0;
+      mem_rsp_valid_i       = 1'b0;
+      mem_rsp_base_tid_i    = '0;
+      mem_rsp_ld_dest_reg_i = '0;
+      mem_rsp_data_i        = '0;
     end
   endtask
 
-  task automatic issue_rf_read(
-      input logic [DICE_TID_WIDTH-1:0]  tid,
-      input logic [DICE_TOTAL_REGS-1:0] rd_bitmap,
-      input logic [DICE_TOTAL_REGS-1:0] wr_bitmap
+  task automatic issue_backend_dispatch(
+      input logic [DICE_TOTAL_REGS-1:0] in_bitmap,
+      input logic [DICE_TOTAL_REGS-1:0] out_bitmap,
+      input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask
   );
+    logic [$clog2(`DICE_CGRA_MEM_PORTS-1):0][REG_INDEX_WIDTH-1:0] ld_dest_regs;
     begin
+      ld_dest_regs = '0;
+      wait (fdr_if_i.ready === 1'b1);
       @(negedge clk_i);
-      rd_tid_i       = tid;
-      rd_bitmap_i    = rd_bitmap;
-      wr_bitmap_i    = wr_bitmap;
-      rd_tid_valid_i = 1'b1;
-      // rd_en_i        = 1'b1;
+      fdr_if_i.data = '0;
+      fdr_if_i.data.real_active_mask        = active_mask;
+      fdr_if_i.data.metadata.in_regs_bitmap = in_bitmap;
+      fdr_if_i.data.metadata.out_regs_bitmap = out_bitmap;
+      fdr_if_i.data.metadata.ld_dest_regs   = ld_dest_regs;
+      fdr_if_i.data.metadata.lat            = CGRA_LATENCY[7:0];
+      fdr_if_i.valid                        = 1'b1;
       @(posedge clk_i);
       @(negedge clk_i);
-      rd_tid_valid_i = 1'b0;
-      // rd_en_i        = 1'b0;
+      fdr_if_i.valid = 1'b0;
     end
   endtask
 
   task automatic check_rf_read_data(
       input string test_name,
+      input logic [DICE_TID_WIDTH-1:0] expected_tid,
       input logic [7:0] expected[],
       input int count
   );
     logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] sampled_rd_data;
+    logic [DICE_TID_WIDTH-1:0] sampled_tid;
     begin
 `ifdef DICE_RF_DEBUG
       @(posedge clk_i iff (dbg_rf_rd_valid === 1'b1));
       sampled_rd_data = dbg_rf_rd_data;
+      sampled_tid = dut.u_dice_cgra_rf.rf_ctrl_inst.tid_o;
 `else
-      @(posedge clk_i iff (rf_rd_valid_o === 1'b1));
-      sampled_rd_data = dut.rf_rd_data_lo;
+      @(posedge clk_i iff (dut.u_dice_cgra_rf.rf_rd_valid_o === 1'b1));
+      sampled_rd_data = dut.u_dice_cgra_rf.rf_rd_data_lo;
+      sampled_tid = dut.u_dice_cgra_rf.rf_ctrl_inst.tid_o;
 `endif
+      if (sampled_tid !== expected_tid) begin
+        $fatal(1, "%s: expected tid %0d got tid %0d", test_name, expected_tid, sampled_tid);
+      end
       for (int i = 0; i < count; i++) begin
         if (sampled_rd_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] !== expected[i]) begin
           $fatal(1, "%s: RF read bank %0d expected %0d got %0d",
@@ -390,63 +413,29 @@ module tb_dice_cgra_rf_vector_mul;
   );
     begin
       for (int bank = 0; bank < NUM_SRC_BANKS; bank++) begin
-        send_ldst_write(tid, bank, rf_values[bank]);
+        send_mem_rsp_write(tid, bank, rf_values[bank]);
       end
-    end
-  endtask
-
-  task automatic issue_thread_source_read(
-      input logic [DICE_TID_WIDTH-1:0] tid
-  );
-    logic [DICE_TOTAL_REGS-1:0] src_bitmap;
-    logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
-    begin
-      src_bitmap = '0;
-      dst_bitmap = '0;
-      for (int i = 0; i < NUM_SRC_BANKS; i++) begin
-        src_bitmap[i] = 1'b1;
-      end
-      for (int i = 0; i < NUM_DST_BANKS; i++) begin
-        dst_bitmap[i] = 1'b1;
-      end
-      issue_rf_read(tid, src_bitmap, dst_bitmap);
     end
   endtask
 
   task automatic issue_source_read_burst();
     logic [DICE_TOTAL_REGS-1:0] src_bitmap;
     logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
+    logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask;
     begin
       src_bitmap = '0;
       dst_bitmap = '0;
+      active_mask = '0;
       for (int i = 0; i < NUM_SRC_BANKS; i++) begin
         src_bitmap[i] = 1'b1;
       end
       for (int i = 0; i < NUM_DST_BANKS; i++) begin
         dst_bitmap[i] = 1'b1;
       end
-
-      @(negedge clk_i);
-      rd_bitmap_i    = src_bitmap;
-      wr_bitmap_i    = dst_bitmap;
-      rd_tid_valid_i = 1'b1;
-      // rd_en_i        = 1'b1;
-
       for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
-        rd_tid_i = tid[DICE_TID_WIDTH-1:0];
-        @(posedge clk_i);
-        @(negedge clk_i);
+        active_mask[tid] = 1'b1;
       end
-      wr_bitmap_i    = '0;
-      // @(posedge clk_i);
-      // @(posedge clk_i);
-      // @(posedge clk_i);
-
-      rd_tid_valid_i = 1'b0;
-      // rd_en_i        = 1'b0;
-      rd_tid_i       = '0;
-      rd_bitmap_i    = '0;
-      
+      issue_backend_dispatch(src_bitmap, dst_bitmap, active_mask);
     end
   endtask
 
@@ -454,14 +443,15 @@ module tb_dice_cgra_rf_vector_mul;
       input logic [DICE_TID_WIDTH-1:0] tid
   );
     logic [DICE_TOTAL_REGS-1:0] dst_bitmap;
-    logic [DICE_TOTAL_REGS-1:0] wb_disable_bitmap;
+    logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask;
     begin
       dst_bitmap = '0;
-      wb_disable_bitmap = '0;
+      active_mask = '0;
       for (int i = 0; i < NUM_DST_BANKS; i++) begin
         dst_bitmap[i] = 1'b1;
       end
-      issue_rf_read(tid, dst_bitmap, wb_disable_bitmap);
+      active_mask[tid] = 1'b1;
+      issue_backend_dispatch(dst_bitmap, '0, active_mask);
     end
   endtask
 
@@ -501,7 +491,6 @@ module tb_dice_cgra_rf_vector_mul;
     begin
       reset_i = 1'b1;
       en_i    = 1'b1;
-      latency_i = CGRA_LATENCY[7:0];
       clear_stream_inputs();
       clear_rf_inputs();
       repeat (RESET_CYCLES) @(posedge clk_i);
@@ -546,10 +535,15 @@ module tb_dice_cgra_rf_vector_mul;
 
     for (int tid = 0; tid < NUM_TEST_THREADS; tid++) begin
       issue_thread_writeback_read(tid[DICE_TID_WIDTH-1:0]);
-      check_rf_read_data($sformatf("writeback read tid %0d", tid), thread_expected_values[tid], NUM_DST_BANKS);
+      check_rf_read_data(
+          $sformatf("writeback read tid %0d", tid),
+          tid[DICE_TID_WIDTH-1:0],
+          thread_expected_values[tid],
+          NUM_DST_BANKS
+      );
     end
 
-    $display("[TB] PASS: dice_cgra_rf pipelined multi-thread vector-multiply RF roundtrip test completed");
+    $display("[TB] PASS: dice_backend dispatcher-driven vector-multiply RF roundtrip test completed");
     $finish;
   end
 

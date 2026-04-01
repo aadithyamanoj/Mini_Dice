@@ -1,3 +1,5 @@
+`include "dice_define.vh"
+
 module dispatcher
     import dice_pkg::*,
            dice_frontend_pkg::*,
@@ -7,7 +9,7 @@ module dispatcher
     input logic rst,
 
     // metadata input package
-    input logic [$clog2(NUM_MEM_PORTS-1):0][REG_INDEX_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(`DICE_CGRA_MEM_PORTS-1):0][REG_INDEX_WIDTH-1:0] ld_dest_regs,
     input logic [REG_NUM-1:0] input_register_bitmap,
 
     // Runtime execution context inputs
@@ -27,7 +29,7 @@ module dispatcher
     output logic [NUM_LANES-1:0] dispatch_valid_o,
 
     //
-    output logic [DICE_TOTAL_REGS-1:0] full_reg_bitmap_o,
+    output logic [`DICE_GPR_NUM-1:0] gpr_bitmap_o,
 
     // Status outputs
     output logic dispatcher_busy,              // Dispatcher is active
@@ -38,7 +40,7 @@ module dispatcher
     localparam int SCOREBOARD_TID_WIDTH   = $clog2(CHUNK_SIZE);    // TID bit-width within one SB
 
     // load destination registers (ld_dest_reg) bitmap assembly
-    localparam int NUM_LD_DEST_REGS = $clog2(NUM_MEM_PORTS-1) + 1; // number of ld_dest entries
+    localparam int NUM_LD_DEST_REGS = $clog2(`DICE_CGRA_MEM_PORTS-1) + 1; // number of ld_dest entries
 
     // Convert packed ld_dest_regs array into a flat REG_NUM-wide bitmap
     logic [REG_NUM-1:0] ld_dest_regs_bitmap;
@@ -62,11 +64,11 @@ module dispatcher
     logic [CHUNK_ADDR_WIDTH-1:0] chunk_base_addr;   // Current chunk index (0-3)
 
     // Scoreboard signals // BITMAP BASED SCOREBOARD INTERFACE USING METADATA INPUT BITMAP SUBJECT TO CHANGE
-    logic [DICE_NUM_REGS-1:0] gpr_bitmap;                   // GPR portion of input registers
-    logic [DICE_NUM_CONST-1:0] const_bitmap;                 // Constant portion of input registers
-    logic [DICE_NUM_PRED-1:0] pred_bitmap;                   // Predicate portion of input registers
+    logic [`DICE_GPR_NUM-1:0] gpr_bitmap;                   // GPR portion of input registers
+    logic [`DICE_CR_NUM-1:0] const_bitmap;                 // Constant portion of input registers
+    logic [`DICE_PR_NUM-1:0] pred_bitmap;                   // Predicate portion of input registers
 
-    assign full_reg_bitmap_o = {pred_bitmap, const_bitmap, gpr_bitmap}; // Output the full register bitmap to the RF controller
+    assign gpr_bitmap_o = gpr_bitmap; // Output the GPR bitmap to the RF controller
 
     logic collision [NUM_SCOREBOARDS];                       // Collision results from regular scoreboards
     logic const_collision;                     // Collision result from constant scoreboard
@@ -235,15 +237,15 @@ module dispatcher
     endgenerate
 
     // Constant scoreboard for shared constant collision detection
-    constant_scoreboard #(.NUM_CONSTANT_REGS(DICE_NUM_CONST)) const_sb (
+    constant_scoreboard #(.NUM_CONSTANT_REGS(`DICE_CR_NUM)) const_sb (
         .clk(clk_i),
         .rst(rst),
         .input_const_map(const_bitmap),         // 32-bit constant register map
         .rd_valid(const_rd_valid),              // Valid when any lane needs checking
         .rsv_const_map(const_bitmap),           // Reserve the same constants
         .rsv_valid(const_rsv_valid),            // Valid when any lane is reserving
-        .wb_const_bitmap(ld_dest_regs_bitmap[(DICE_NUM_REGS + DICE_NUM_CONST - 1):DICE_NUM_REGS]),
-        .wb_valid(wb_valid && |ld_dest_regs_bitmap[(DICE_NUM_REGS + DICE_NUM_CONST - 1):DICE_NUM_REGS]),
+        .wb_const_bitmap(ld_dest_regs_bitmap[(`DICE_GPR_NUM + `DICE_CR_NUM - 1):`DICE_GPR_NUM]),
+        .wb_valid(wb_valid && |ld_dest_regs_bitmap[(`DICE_GPR_NUM + `DICE_CR_NUM - 1):`DICE_GPR_NUM]),
         .collision(const_collision)
     );
 

@@ -1,12 +1,14 @@
+`include "dice_define.vh"
+
 module dispatcher_fsm
     import dice_pkg::*,
            dice_frontend_pkg::*,
            DE_pkg::*;  // CHUNK_SIZE, CHUNK_ADDR_WIDTH, NUM_SCOREBOARDS from DE_pkg
 (
     output logic [CHUNK_SIZE-1:0] current_chunk,
-    output logic [DICE_NUM_REGS-1:0] gpr_bitmap,
-    output logic [DICE_NUM_CONST-1:0] const_bitmap,
-    output logic [DICE_NUM_PRED-1:0] pred_bitmap,
+    output logic [`DICE_GPR_NUM-1:0] gpr_bitmap,
+    output logic [`DICE_CR_NUM-1:0] const_bitmap,
+    output logic [`DICE_PR_NUM-1:0] pred_bitmap,
     output logic [CHUNK_ADDR_WIDTH-1:0] chunk_base_addr,
     output logic start_new_cta,
     output logic dispatcher_busy,
@@ -46,9 +48,9 @@ module dispatcher_fsm
     end
 
     // Extract register bitmaps from latched input
-    assign gpr_bitmap   = latched_input_regs[DICE_NUM_REGS-1:0];
-    assign const_bitmap = latched_input_regs[(DICE_NUM_REGS+DICE_NUM_CONST)-1:DICE_NUM_REGS];
-    assign pred_bitmap  = latched_input_regs[(DICE_NUM_REGS+DICE_NUM_CONST+DICE_NUM_PRED)-1:DICE_NUM_REGS+DICE_NUM_CONST];
+    assign gpr_bitmap   = latched_input_regs[`DICE_GPR_NUM-1:0];
+    assign const_bitmap = latched_input_regs[(`DICE_GPR_NUM+`DICE_CR_NUM)-1:`DICE_GPR_NUM];
+    assign pred_bitmap  = latched_input_regs[(`DICE_GPR_NUM+`DICE_CR_NUM+`DICE_PR_NUM)-1:`DICE_GPR_NUM+`DICE_CR_NUM];
 
     dispatcher_dataflow dispatcher_df_inst (
         .latched_active_mask(latched_active_mask),

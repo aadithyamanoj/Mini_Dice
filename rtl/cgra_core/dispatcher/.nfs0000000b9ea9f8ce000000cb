@@ -49,7 +49,7 @@ module thread_lane_reroute
                 .DATA_WIDTH(2*DICE_TID_WIDTH),  // 2*DICE_TID_WIDTH bits: {compare_tid, real_tid}
                 .DEPTH(2)
             ) fifo_inst (
-                .clk_i(clk),
+                .clk(clk),
                 .rst(rst),
 
                 // Write interface
