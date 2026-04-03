@@ -1,20 +1,8 @@
-// MAY NEED TO STALL THE READY SIGNAL FOR ~3 CYCLES TO PREVENT
-// RACE CONDITION IN THE CTA STATUS TABLE UNRESOLVED CONTROL DIVERGENCE
-// BIT WHICH DETERMINES IF THE NEXT EBLOCK IS A PREFETCHED ONE
-
-
-
-// NEED TO CHANGE IT SO THAT THE FDR STAGE IS READY ONCE THE BRANCH HANDLER IS DONE TOO (MEANS THAT THE FIRE SIGNAL
-// ISN'T WHAT CONTROLS THE READY SIGNAL)
-
-
 module meta_fetch
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-#(
-    // TAG_WIDTH kept for interface parameterization compatibility
-    parameter int TAG_WIDTH = DICE_ADDR_WIDTH
-) (
+  import axi4_xbar_pkg::*;
+(
     input logic clk_i,
     input logic rst_i,
 
@@ -23,8 +11,9 @@ module meta_fetch
     input logic [DICE_ADDR_WIDTH-1:0] fdr_next_pc_i,
     output logic                      schedule_ready_o,
 
-    // Request channel to cache
-    VX_mem_bus_if.master meta_fetch_bus_if,
+    // AXI4 read master → crossbar slave port
+    output slv_req_t  meta_req_o,
+    input  slv_resp_t meta_resp_i,
 
     // To decoder
     output pgraph_meta_t outgoing_meta_o,
@@ -36,6 +25,8 @@ module meta_fetch
     // Flush signal (from valid_check misprediction)
     input logic flush_i
 );
+
+
 
   // FSM states
   typedef enum logic [1:0] {
@@ -50,24 +41,18 @@ module meta_fetch
   logic flushed_q;  // Track if flushed, cleared on new schedule
   pgraph_meta_t outgoing_meta_q;
 
-  // fdr_next_pc_i is already registered in fdr_top (schedule_data_q), so use directly
-  localparam int BusDataBytes = DICE_MEM_DATA_WIDTH / 8;
-  localparam int AddrShift = $clog2(BusDataBytes);
-  localparam int BusAddrWidth = DICE_MEM_ADDR_WIDTH - $clog2(BusDataBytes);
-  logic [BusAddrWidth-1:0] meta_cache_req_addr;
-  assign meta_cache_req_addr = BusAddrWidth'(fdr_next_pc_i >> AddrShift);
-  // 4-byte aligned addresses
+  // 256-bit assembly buffer: 16 × 16-bit beats accumulated here
+  // First received beat ends up in bits [255:240] after all 16 beats
+  logic [MetaBits-1:0] meta_buf_q;
 
-  logic rsp_fire, req_fire;
-  logic rsp_tag_match;
+  // AXI handshake pulses
+  logic ar_fire;
+  logic r_fire;
 
-  // Check if response tag matches expected PC (lower bits of tag contain PC)
-  assign rsp_tag_match = (meta_fetch_bus_if.rsp_data.tag.uuid[DICE_ADDR_WIDTH-1:0] == fdr_next_pc_i);
-  assign rsp_fire = meta_fetch_bus_if.rsp_valid && meta_fetch_bus_if.rsp_ready && rsp_tag_match;
-  assign req_fire = meta_fetch_bus_if.req_valid && meta_fetch_bus_if.req_ready;
+  assign ar_fire = meta_req_o.ar_valid && meta_resp_i.ar_ready;
+  assign r_fire  = meta_resp_i.r_valid && meta_req_o.r_ready;
 
   always_comb begin
-    // Default assignments at top of always_comb
     schedule_ready_o = 1'b0;
     state_d          = state_q;
 
@@ -80,11 +65,11 @@ module meta_fetch
       end
       StateReqVal: begin
         if (flush_i) state_d = StateReady;
-        else if (req_fire) state_d = StateWaitResp;
+        else if (ar_fire) state_d = StateWaitResp;
       end
       StateWaitResp: begin
         if (flush_i) state_d = StateReady;
-        else if (rsp_fire) state_d = StateHoldData;
+        else if (r_fire && meta_resp_i.r.last) state_d = StateHoldData;
       end
       StateHoldData: begin
         if (flush_i) state_d = StateReady;
@@ -97,47 +82,67 @@ module meta_fetch
 
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
-      state_q               <= StateReady;
-      meta_valid_q          <= 1'b0;
-      flushed_q             <= 1'b0;
-      outgoing_meta_q       <= '0;
+      state_q         <= StateReady;
+      meta_valid_q    <= 1'b0;
+      flushed_q       <= 1'b0;
+      outgoing_meta_q <= '0;
+      meta_buf_q      <= '0;
     end else begin
       state_q <= state_d;
 
-      // Set flushed flag on flush, clear on new schedule acceptance
       if (flush_i) begin
         flushed_q    <= 1'b1;
-        meta_valid_q <= 1'b0;  // Invalidate held data
+        meta_valid_q <= 1'b0;
       end
 
       if (state_q == StateReady && schedule_valid_i && schedule_ready_o) begin
-        flushed_q             <= 1'b0;  // Clear flush flag on new schedule
+        flushed_q  <= 1'b0;
+        meta_buf_q <= '0;
       end
-      if (rsp_fire) begin
-        outgoing_meta_q <= pgraph_meta_t'(meta_fetch_bus_if.rsp_data.data);
+
+      // Accumulate 16-bit beats: shift new word into MSB, pushing earlier words down
+      if (r_fire) begin
+        meta_buf_q <= {meta_resp_i.r.data, meta_buf_q[MetaBits-1:16]};
+      end
+
+      if (r_fire && meta_resp_i.r.last) begin
+        outgoing_meta_q <= pgraph_meta_t'({meta_resp_i.r.data, meta_buf_q[MetaBits-1:16]});
         meta_valid_q    <= 1'b1;
       end
+
       if (fire_eblock_i) begin
         meta_valid_q <= 1'b0;
       end
     end
   end
 
+  // AR channel: driven fields
+  assign meta_req_o.ar_valid  = (state_q == StateReqVal) && !flush_i;
+  assign meta_req_o.ar.addr   = fdr_next_pc_i;
+  assign meta_req_o.ar.len    = (DICE_METADATA_WIDTH / 16) - 1;
+  assign meta_req_o.ar.size   = 3'b001;  // 2 bytes per beat
+  assign meta_req_o.ar.burst  = 2'b01;   // INCR
+  assign meta_req_o.ar.id     = '0;
+  assign meta_req_o.ar.lock   = '0;
+  assign meta_req_o.ar.cache  = '0;
+  assign meta_req_o.ar.prot   = '0;
+  assign meta_req_o.ar.qos    = '0;
+  assign meta_req_o.ar.region = '0;
+  assign meta_req_o.ar.user   = '0;
 
-  //============= UNUSED VORTEX CACHE FEATURES =================//
-  assign meta_fetch_bus_if.req_data.flags  = '0;  //misc / not used
-  assign meta_fetch_bus_if.req_data.rw     = 0;   //read/write bit
-  assign meta_fetch_bus_if.req_data.byteen = '1;  //byte mask (for stores)
-  assign meta_fetch_bus_if.req_data.data   = '0;  //write payload
+  // R channel: accept data in StateWaitResp
+  assign meta_req_o.r_ready   = (state_q == StateWaitResp);
 
-  // Use pre-registered PC as tag for request/response matching
-  // (fdr_next_pc_i is already registered in fdr_top via schedule_data_q)
-  assign meta_fetch_bus_if.req_data.tag.uuid = TAG_WIDTH'(fdr_next_pc_i);
+  // Write channels tied off (read-only master)
+  always_comb begin
+    meta_req_o.aw       = '0;
+    meta_req_o.aw_valid = 1'b0;
+    meta_req_o.w        = '0;
+    meta_req_o.w_valid  = 1'b0;
+    meta_req_o.b_ready  = 1'b1;
+  end
 
-  assign meta_fetch_bus_if.req_data.addr   = meta_cache_req_addr;
-  assign meta_fetch_bus_if.req_valid       = (state_q == StateReqVal);
-  // Accept any response while waiting, but only rsp_fire (with tag match) triggers state transition
-  assign meta_fetch_bus_if.rsp_ready       = (state_q == StateWaitResp);
-  assign meta_valid_o                      = meta_valid_q && !flushed_q;
-  assign outgoing_meta_o                   = outgoing_meta_q;
+  assign meta_valid_o    = meta_valid_q && !flushed_q;
+  assign outgoing_meta_o = outgoing_meta_q;
+
 endmodule

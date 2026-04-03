@@ -73,18 +73,10 @@ package dice_frontend_pkg;
 
 
   typedef struct packed {
-    // IDs
     logic [EBLOCK_ID_WIDTH-1:0]               schedule_eblock_id;
     dice_cta_id_t                             schedule_cta_id;
-
-    // Geometry
     dice_grid_size_t                          schedule_grid_size;
-    logic [DICE_TID_WIDTH:0]                  schedule_cta_thread_count; // Exact number of threads
-
-    // Execution state
     logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] real_active_mask;
-
-    // Metadata
     fdr_meta_t                                metadata;
     logic                                     loaded_buffer;
   } fdr_t;
@@ -99,7 +91,6 @@ package dice_frontend_pkg;
   } active_cta_t;
 
 
-
   typedef struct packed {
     logic                       is_prefetch;
     logic [DICE_ADDR_WIDTH-1:0] predict_pc;
@@ -108,8 +99,6 @@ package dice_frontend_pkg;
   typedef struct packed {
     logic                            update_with_divergence;  // 0 = no divergence, 1 = with divergence
     logic [DICE_ADDR_WIDTH-1:0]      update_next_pc;          // No divergence: next PC
-
-    // Divergence case inputs (only used when update_with_divergence = 1)
     thread_mask_t                    predicate_regs_value;
     logic [DICE_ADDR_WIDTH-1:0]      branch_not_taken_pc;
     logic [DICE_ADDR_WIDTH-1:0]      branch_reconvergence_pc;

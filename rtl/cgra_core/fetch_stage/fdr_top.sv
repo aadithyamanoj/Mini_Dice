@@ -1,16 +1,18 @@
 module fdr_top
   import dice_pkg::*;
   import dice_frontend_pkg::*;
+  import axi4_xbar_pkg::*;
 #(
-    parameter int TAG_WIDTH      = 48,
     parameter int BITSTREAM_SIZE = 2056
 ) (
     input logic clk_i,
     input logic rst_i,
 
-    // Memory bus interfaces
-    VX_mem_bus_if.master metacache_mem_if,
-    VX_mem_bus_if.master bitstream_cache_mem_if,
+    // AXI4 crossbar slave-port interfaces (read-only masters)
+    output slv_req_t  mfetch_req_o,
+    input  slv_resp_t mfetch_resp_i,
+    output slv_req_t  bsfetch_req_o,
+    input  slv_resp_t bsfetch_resp_i,
 
     // Scheduler / FDR interfaces
     cta_sched_if.slave schedule_if,
@@ -119,15 +121,14 @@ module fdr_top
   assign bh_update_ready           = simt_update_ready_i;
 
   // ---- Meta Fetch ----
-  meta_fetch #(
-      .TAG_WIDTH(TAG_WIDTH)
-  ) u_meta_fetch (
+  meta_fetch u_meta_fetch (
       .clk_i               (clk_i),
       .rst_i               (rst_i),
       .schedule_valid_i    (schedule_if.valid),
       .fdr_next_pc_i       (schedule_data_q.schedule_next_pc),
       .schedule_ready_o    (schedule_ready_internal),
-      .meta_fetch_bus_if   (metacache_mem_if),
+      .meta_req_o          (mfetch_req_o),
+      .meta_resp_i         (mfetch_resp_i),
       .outgoing_meta_o     (meta_internal),
       .meta_valid_o        (meta_valid_internal),
       .fire_eblock_i       (fire_eblock_internal),
@@ -149,9 +150,7 @@ module fdr_top
   );
 
   // ---- Bitstream Fetch/Load ----
-  bitstream_fetch_load #(
-      .TAG_WIDTH(TAG_WIDTH)
-  ) u_bitstream_fetch_load (
+  bitstream_fetch_load u_bitstream_fetch_load (
       .clk_i           (clk_i),
       .rst_i           (rst_i),
       .flush_i         (predict_miss_internal),
@@ -162,7 +161,8 @@ module fdr_top
       .cm1_data_o      (cm1_if.data),
       .cm1_chunk_en_o  (cm1_if.chunk_en),
       .done_streaming_o(done_streaming_internal),
-      .cache_bus_if    (bitstream_cache_mem_if),
+      .bs_req_o        (bsfetch_req_o),
+      .bs_resp_i       (bsfetch_resp_i),
       .cm_num_o        (fdr_if.data.loaded_buffer)
   );
 
