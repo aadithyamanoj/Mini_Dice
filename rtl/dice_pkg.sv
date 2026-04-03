@@ -63,13 +63,11 @@ package dice_pkg;
   } dice_tid_t;  // Thread ID descriptor
 
   typedef struct packed {
-    // IDs and geometry
-    dice_grid_size_t                 grid_size;
-    dice_cta_size_t                  cta_size;
+    dice_grid_size_t             grid_size;
+    logic [DICE_TID_WIDTH:0]     thread_count;  // Pre-computed CTA thread count, set by dispatcher
 
     // Initial
-    logic [DICE_ADDR_WIDTH-1:0] start_pc;
-    // logic [DICE_ADDR_WIDTH-1:0] arg_ptr;   //might not need -> add to bitstream
+    logic [DICE_ADDR_WIDTH-1:0]  start_pc;
   } dice_kernel_desc_t;  // Kernel descriptor for top driver to receive kernel launch info
 
 

@@ -79,7 +79,6 @@ module active_cta_table
         cta_entry_q.cta_valid        <= 1'b1;
         cta_entry_q.cta_id           <= add_cta_info_i.cta_id;
         cta_entry_q.grid_size        <= add_cta_info_i.kernel_desc.grid_size;
-        cta_entry_q.cta_size         <= add_cta_info_i.kernel_desc.cta_size;
         cta_entry_q.cta_thread_count <= add_cta_thread_count_i;
       end
     end

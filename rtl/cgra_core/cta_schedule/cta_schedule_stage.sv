@@ -67,6 +67,7 @@ module cta_schedule_stage
   logic                                         simt_init_valid;
   logic [DICE_ADDR_WIDTH-1:0]                   simt_init_pc;
   logic [DICE_ADDR_WIDTH-1:0]                   simt_init_reconvergence_pc;
+  logic [DICE_TID_WIDTH:0]                      simt_init_thread_count;
   logic                                         simt_init_ready;
 
   logic simt_stack_update_ready;
@@ -95,6 +96,7 @@ module cta_schedule_stage
       .init_valid_o           (simt_init_valid),
       .init_pc_o              (simt_init_pc),
       .init_reconvergence_pc_o(simt_init_reconvergence_pc),
+      .init_thread_count_o    (simt_init_thread_count),
       .init_ready_i           (simt_init_ready),
       .cta_status_i           (cta_status_real),
       .clear_entry_valid_o    (clear_entry_valid)
@@ -159,6 +161,7 @@ module cta_schedule_stage
       .init_valid_i                 (simt_init_valid),
       .init_pc_i                    (simt_init_pc),
       .init_reconvergence_pc_i      (simt_init_reconvergence_pc),
+      .init_thread_count_i          (simt_init_thread_count),
       .init_ready_o                 (simt_init_ready),
       .stack_top_valid_o            (stack_top_valid),
       .stack_top_next_pc_o          (stack_top_next_pc),

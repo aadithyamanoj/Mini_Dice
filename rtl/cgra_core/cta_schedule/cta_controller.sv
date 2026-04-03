@@ -24,6 +24,7 @@ module cta_controller
     input  logic                       init_ready_i,
     output logic [DICE_ADDR_WIDTH-1:0] init_pc_o,
     output logic [DICE_ADDR_WIDTH-1:0] init_reconvergence_pc_o,
+    output logic [DICE_TID_WIDTH:0]    init_thread_count_o,
 
     // CTA Status Table — single entry
     input  dice_cta_status_t           cta_status_i,
@@ -34,17 +35,13 @@ module cta_controller
   assign add_valid_o    = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready;
   assign add_cta_info_o = cta_if_inst.dispatch_data;
 
-  // Raw thread count calculation
-  logic [DICE_TID_WIDTH+1:0] cta_thread_count;
-  assign cta_thread_count = cta_if_inst.dispatch_data.kernel_desc.cta_size.x
-                            * cta_if_inst.dispatch_data.kernel_desc.cta_size.y
-                            * cta_if_inst.dispatch_data.kernel_desc.cta_size.z;
-  assign add_cta_thread_count_o = cta_thread_count;
+  assign add_cta_thread_count_o = cta_if_inst.dispatch_data.kernel_desc.thread_count;
 
   // SIMT STACK INIT
   assign init_valid_o            = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready;
   assign init_pc_o               = cta_if_inst.dispatch_data.kernel_desc.start_pc;
   assign init_reconvergence_pc_o = '1;
+  assign init_thread_count_o     = cta_if_inst.dispatch_data.kernel_desc.thread_count;
 
   // Completion Logic
   logic victim_found;

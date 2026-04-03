@@ -68,7 +68,6 @@ package dice_frontend_pkg;
     logic                                        schedule_prefetch_block;
     dice_cta_id_t                                schedule_cta_id;
     dice_grid_size_t                             schedule_grid_size;
-    dice_cta_size_t                              schedule_cta_size;
     logic [DICE_TID_WIDTH:0]                     schedule_cta_thread_count;  // Exact number of threads
   } schedule_eblock_t;
 
@@ -80,7 +79,6 @@ package dice_frontend_pkg;
 
     // Geometry
     dice_grid_size_t                          schedule_grid_size;
-    dice_cta_size_t                           schedule_cta_size;
     logic [DICE_TID_WIDTH:0]                  schedule_cta_thread_count; // Exact number of threads
 
     // Execution state
@@ -97,7 +95,6 @@ package dice_frontend_pkg;
     logic                            cta_valid;
     dice_cta_id_t                    cta_id;
     dice_grid_size_t                 grid_size;
-    dice_cta_size_t                  cta_size;
     logic [DICE_TID_WIDTH:0]         cta_thread_count; // Exact number of threads in this CTA
   } active_cta_t;
 
