@@ -7,8 +7,10 @@ module dice_backend
     input logic clk_i,
     input logic rst_i,
 
-    // FDR interface (from frontend)
-    fdr_if.slave fdr_if_i,
+    // FDR interface fields (flattened for synthesis friendliness)
+    input  logic fdr_valid_i,
+    input  logic [$bits(fdr_t)-1:0] fdr_data_i,
+    output logic fdr_ready_o,
 
     // TMCU -> External Memory Interface
     // No more TMCU
@@ -27,9 +29,9 @@ module dice_backend
 
     // Memory Response Input (cache_wr_cmd fields)
     input logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] mem_rsp_base_tid_i,
-    input logic [TID_BITMAP_WIDTH-1:0] mem_rsp_tid_bitmap_i,
+    // input logic [TID_BITMAP_WIDTH-1:0] mem_rsp_tid_bitmap_i,
     input logic [DICE_REG_ADDR_WIDTH-1:0] mem_rsp_ld_dest_reg_i,
-    input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]        mem_rsp_address_map_i,
+    // input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]        mem_rsp_address_map_i,
     input logic [(CACHE_LINE_SIZE*8)-1:0] mem_rsp_data_i,
     input logic mem_rsp_valid_i,
 
@@ -82,6 +84,7 @@ module dice_backend
   logic        [     NUM_LANES*DICE_TID_WIDTH-1:0] rd_tid;
   logic        [                    NUM_LANES-1:0] rd_tid_valid;
   logic        [              DICE_TOTAL_REGS-1:0] full_reg_bitmap_lo;
+  fdr_t                                            fdr_data_li;
 
   // RF + CGRA wrapper outputs
   logic                                            rf_rd_ready_lo;
@@ -118,7 +121,8 @@ module dice_backend
   logic                               bct_update_is_write;
   logic [2**DICE_HW_CTA_ID_WIDTH-1:0] bct_update_reduce_count;
 
-  assign fdr_if_i.ready     = ~dispatch_busy;
+  assign fdr_data_li         = fdr_data_i;
+  assign fdr_ready_o        = ~dispatch_busy;
 
   assign ldst_cmd.tid       = mem_rsp_base_tid_i;
   assign ldst_cmd.data      = mem_rsp_data_i[DICE_REG_DATA_WIDTH-1:0];
@@ -142,10 +146,10 @@ module dice_backend
   dispatcher u_dispatcher (
       .clk_i(clk_i),
       .rst(rst_i),
-      .ld_dest_regs(fdr_if_i.data.metadata.ld_dest_regs),
-      .input_register_bitmap(fdr_if_i.data.metadata.in_regs_bitmap),
-      .active_mask(fdr_if_i.data.real_active_mask),
-      .fetch_done(fdr_if_i.valid),
+      .ld_dest_regs(fdr_data_li.metadata.ld_dest_regs),
+      .input_register_bitmap(fdr_data_li.metadata.in_regs_bitmap),
+      .active_mask(fdr_data_li.real_active_mask),
+      .fetch_done(fdr_valid_i),
       .wb_valid(cgra_v_lo),  // CGRA writeback pulse (lat-shifted RF read valid)
       .wb_tid_bitmap(cgra_wb_tid_bitmap),  // one-hot TID that just completed
       .dispatch_fifo_pop(rf_rd_ready_lo),  // advance FIFO when RF ctrl can accept next TID
@@ -194,7 +198,7 @@ module dice_backend
       .cgra_tid_o  (cgra_tid_lo),
 
       // CGRA latency from instruction metadata
-      .latency_i(fdr_if_i.data.metadata.lat),
+      .latency_i(fdr_data_li.metadata.lat),
 
       // RF read interface (from dispatcher)
       .rd_tid_valid_i(rd_tid_valid),
@@ -202,7 +206,7 @@ module dice_backend
     //   .rd_en_i       (1'b1),
       .rd_tid_i      (rd_tid),
       .rd_bitmap_i   (full_reg_bitmap_lo),
-      .wr_bitmap_i   (fdr_if_i.data.metadata.out_regs_bitmap),
+      .wr_bitmap_i   (fdr_data_li.metadata.out_regs_bitmap),
 
       // LDST write interface
       .ldst_wr_i   (ldst_wr_lo),
