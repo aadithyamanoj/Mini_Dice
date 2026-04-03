@@ -1,6 +1,8 @@
 +define+NO_SRAM
 +libext+.sv
 
+-timescale=1ns/1ps
+
 +incdir+${DICE_HOME}/rtl
 +incdir+${DICE_HOME}/rtl/interfaces
 +incdir+${DICE_HOME}/rtl/dice_ram
