@@ -4,6 +4,17 @@
 package DE_pkg;
 
 
+// =========================================================
+// Dispatcher architecture constants
+// =========================================================
+parameter int NUM_SCOREBOARDS  = 1;
+parameter int NUM_LANES        = 1;
+parameter int CHUNK_SIZE       = `DICE_NUM_MAX_THREADS_PER_CORE / NUM_SCOREBOARDS;
+parameter int CHUNK_ADDR_WIDTH = (NUM_SCOREBOARDS == 1) ? 1 : $clog2(NUM_SCOREBOARDS);
+parameter int LANE_SIZE        = CHUNK_SIZE / NUM_LANES;
+parameter int LANE_WIDTH       = $clog2(LANE_SIZE);
+parameter int NUM_MEM_PORTS    = `DICE_CGRA_MEM_PORTS;
+
 parameter int DICE_REG_DATA_WIDTH = 8;
 parameter int CACHE_LINE_SIZE = 32;
 parameter int NUMBER_OF_MAX_COALESCED_COMMANDS = CACHE_LINE_SIZE/4;
@@ -68,16 +79,13 @@ function automatic ldst_wr_cmd assemble_ldst_wr
     input cache_wr_cmd cmd
 );
     ldst_wr_cmd wr_data;
+    wr_data = '0;
     for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
         if (cmd.outcmd_tid_bitmap[i]) begin
-            wr_data.data[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] 
+            wr_data.data[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]
                 = cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
             wr_data.mask[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = 1'b1;
             wr_data.tid[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = cmd.outcmd_base_tid + cmd.outcmd_address_map[i];
-        end else begin
-            wr_data.data[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = '0;
-            wr_data.mask[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = 1'b0;
-            wr_data.tid[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = '0;
         end
     end
     return wr_data;

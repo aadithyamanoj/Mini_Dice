@@ -1,7 +1,10 @@
+`include "dice_pkg.sv"
+
 module memory_cmd_coalesce_buffer
 import dice_pkg::*;   
-(
-    input logic clk,                        // Clock signal
+#(parameter MAP = DICE_NUMBER_OF_MAX_COALESCED_COMMANDS * DICE_BASE_ADDRESS_OFFSET
+)(
+    input logic clk_i,                        // Clock signal
     input logic rst,                      // Active high reset signal
     input logic clear,
     input logic update_new,                  //update existing cmd to new commnd
@@ -32,7 +35,7 @@ import dice_pkg::*;
     output logic [1:0] outcmd_size,        // Size of the command (e.g., 00=1B, 01=2B, 10=4B, 11=8B)
     output logic [DICE_MAX_REG_WIDTH-1:0] outcmd_ld_dest_reg,  // Load destination register
 
-    output logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] outcmd_address_map
+    output logic [MAP-1:0] outcmd_address_map
 );
     localparam BYTES_PER_WORD = DICE_DATA_WIDTH/8;
     logic outcmd_valid_next; 
@@ -47,7 +50,7 @@ import dice_pkg::*;
     logic [DICE_MAX_REG_WIDTH-1:0] outcmd_ld_dest_reg_next; 
     logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] outcmd_address_map_next; //map from tid bitmap to address_offset
 
-    always_ff@(posedge clk) begin
+    always_ff@(posedge clk_i) begin
         if (rst) begin
             // Reset logic
             outcmd_valid <= 1'b0;

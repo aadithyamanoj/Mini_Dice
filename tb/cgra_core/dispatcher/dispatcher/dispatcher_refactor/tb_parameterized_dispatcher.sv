@@ -1,40 +1,36 @@
+`include "dice_define.vh"
+
 module tb_parameterized_dispatcher
-    import dice_pkg::*, 
-           dice_frontend_pkg::*;
+    import dice_pkg::*,
+           dice_frontend_pkg::*,
+           DE_pkg::*;  // Import all necessary packages for parameters and types
 ();
     // Clock and reset
     logic clk;
-    logic rst_n;
+    logic rst;  // Active-high reset
 
-    // DUT signals - using package parameters
-    pgraph_meta_t pgraph_meta_i;  // Structured metadata input
-    logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask;  // 1024-bit from package
-    cta_size_e cta_size;  // Enum type from package
+    // DUT signals - flat ports matching dispatcher interface
+    logic [$clog2(`DICE_CGRA_MEM_PORTS-1):0][REG_INDEX_WIDTH-1:0] ld_dest_regs;
+    logic [REG_NUM-1:0] input_register_bitmap;
+    logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask;
     logic fetch_done;
     logic wb_valid;
-    logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] wb_tid_bitmap;  // 1024-bit from package
+    logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] wb_tid_bitmap;
     logic dispatch_fifo_pop;
 
-    // DUT outputs - combined format
-    logic [4*DICE_TID_WIDTH-1:0] dispatch_tid_o;  // 40 bits total (4 lanes × 10 bits)
-    logic dispatch_valid_o;
+    // DUT outputs
+    logic [NUM_LANES*DICE_TID_WIDTH-1:0] dispatch_tid_o;
+    logic [NUM_LANES-1:0] dispatch_valid_o;
+    logic [`DICE_GPR_NUM-1:0] gpr_bitmap_o;
     logic dispatch_fifo_empty;
     logic dispatcher_busy, dispatcher_done;
 
-    // Extract individual lane outputs from combined signal
-    logic [DICE_TID_WIDTH-1:0] dispatch_tid_0, dispatch_tid_1, dispatch_tid_2, dispatch_tid_3;
-    logic dispatch_valid_0, dispatch_valid_1, dispatch_valid_2, dispatch_valid_3;
+    // Extract lane 0 output from combined signal
+    logic [DICE_TID_WIDTH-1:0] dispatch_tid_0;
+    logic dispatch_valid_0;
 
-    assign dispatch_tid_0 = dispatch_tid_o[DICE_TID_WIDTH-1:0];
-    assign dispatch_tid_1 = dispatch_tid_o[2*DICE_TID_WIDTH-1:DICE_TID_WIDTH];
-    assign dispatch_tid_2 = dispatch_tid_o[3*DICE_TID_WIDTH-1:2*DICE_TID_WIDTH];
-    assign dispatch_tid_3 = dispatch_tid_o[4*DICE_TID_WIDTH-1:3*DICE_TID_WIDTH];
-
-    // Valid signals need to be checked from ready FIFOs (accessing internal signals)
-    assign dispatch_valid_0 = dut.dispatch_valid_0;
-    assign dispatch_valid_1 = dut.dispatch_valid_1;
-    assign dispatch_valid_2 = dut.dispatch_valid_2;
-    assign dispatch_valid_3 = dut.dispatch_valid_3;
+    assign dispatch_tid_0   = dispatch_tid_o[DICE_TID_WIDTH-1:0];
+    assign dispatch_valid_0 = dispatch_valid_o[0];
 
     // Test control
     int test_num;
@@ -48,20 +44,21 @@ module tb_parameterized_dispatcher
         forever #5 clk = ~clk;
     end
 
-    // DUT instantiation - NEW parameterized interface
+    // DUT instantiation
     dispatcher dut (
-        .clk(clk),
-        .rst_n(rst_n),
-        .pgraph_meta_i(pgraph_meta_i),          // Structured input
+        .clk_i(clk),
+        .rst(rst),
+        .ld_dest_regs(ld_dest_regs),
+        .input_register_bitmap(input_register_bitmap),
         .active_mask(active_mask),
-        .cta_size(cta_size),
         .fetch_done(fetch_done),
         .wb_valid(wb_valid),
         .wb_tid_bitmap(wb_tid_bitmap),
         .dispatch_fifo_pop(dispatch_fifo_pop),
-        .dispatch_tid_o(dispatch_tid_o),        // Combined output
-        .dispatch_valid_o(dispatch_valid_o),
         .dispatch_fifo_empty(dispatch_fifo_empty),
+        .dispatch_tid_o(dispatch_tid_o),
+        .dispatch_valid_o(dispatch_valid_o),
+        .gpr_bitmap_o(gpr_bitmap_o),
         .dispatcher_busy(dispatcher_busy),
         .dispatcher_done(dispatcher_done)
     );
@@ -70,37 +67,30 @@ module tb_parameterized_dispatcher
     task reset_system();
         @(negedge clk);
         $display("=== Resetting System ===");
-        rst_n = 0;
+        rst = 1;  // Assert active-high reset
         fetch_done = 0;
 
-        // Initialize pgraph_meta_i structure
-        pgraph_meta_i.unrolling_factor = 2'b10;  // 4-way unrolling
-        pgraph_meta_i.in_regs_bitmap = '0;
-        pgraph_meta_i.ld_dest_regs = '0;
-
+        // Initialize flat input signals
+        input_register_bitmap = '0;
+        ld_dest_regs = '0;
         active_mask = '0;
-        cta_size = CTA_SIZE_1;  // Use enum from package
         wb_valid = 0;
         wb_tid_bitmap = '0;
         dispatch_fifo_pop = 1'b0;
         dispatched_count = 0;
 
         repeat(3) @(negedge clk);
-        rst_n = 1;
+        rst = 0;  // Deassert active-high reset
         repeat(2) @(negedge clk);
         $display("Reset complete");
     endtask
 
     // Task to start CTA dispatch
-    task start_cta(logic [1023:0] mask, logic [65:0] regs, cta_size_e size, logic [1:0] unroll);
-        $display("Starting CTA - Size: %0d, Unroll: %0d",
-                 (size == CTA_SIZE_1) ? 256 : (size == CTA_SIZE_2) ? 512 : (size == CTA_SIZE_4) ? 1024 : 0,
-                 (unroll == 2'b00) ? 1 : (unroll == 2'b01) ? 2 : 4);
+    task start_cta(logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] mask, logic [REG_NUM-1:0] regs);
+        $display("Starting CTA");
 
         active_mask = mask;
-        pgraph_meta_i.in_regs_bitmap = regs;  // Set register bitmap in structure
-        cta_size = size;
-        pgraph_meta_i.unrolling_factor = unroll;
+        input_register_bitmap = regs;
 
         fetch_done = 1;
         @(negedge clk);
@@ -112,10 +102,8 @@ module tb_parameterized_dispatcher
         repeat (10) @(negedge clk);
     endtask
 
-    // Task to pop from dispatch FIFOs and count
+    // Task to pop from dispatch FIFO and count
     task pop_and_count();
-        logic [3:0] valid_mask = {dispatch_valid_3, dispatch_valid_2, dispatch_valid_1, dispatch_valid_0};
-
         if (!dispatch_fifo_empty) begin
             dispatch_fifo_pop = 1'b1;
             @(posedge clk);  // Pop happens here
@@ -125,29 +113,15 @@ module tb_parameterized_dispatcher
                 $display("Lane 0 dispatched TID: %0d", dispatch_tid_0);
                 dispatched_count++;
             end
-            if (dispatch_valid_1) begin
-                $display("Lane 1 dispatched TID: %0d", dispatch_tid_1);
-                dispatched_count++;
-            end
-            if (dispatch_valid_2) begin
-                $display("Lane 2 dispatched TID: %0d", dispatch_tid_2);
-                dispatched_count++;
-            end
-            if (dispatch_valid_3) begin
-                $display("Lane 3 dispatched TID: %0d", dispatch_tid_3);
-                dispatched_count++;
-            end
 
             dispatch_fifo_pop = 1'b0;
         end
     endtask
 
     // Task to simulate write-back
-    task writeback_register(logic [REG_NUM-1:0] reg_bitmap, logic [1023:0] tid_mask);
+    task writeback_register(logic [REG_NUM-1:0] reg_bitmap, logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] tid_mask);
         $display("Write-back: reg_bitmap=0x%0h for TID mask", reg_bitmap);
         wb_valid = 1;
-        // Set ld_dest_regs such that the assembled bitmap matches reg_bitmap
-        // You need to reverse-engineer which ld_dest_regs entries produce the desired bitmap
         wb_tid_bitmap = tid_mask;
         @(negedge clk);
         wb_valid = 0;
@@ -160,8 +134,8 @@ module tb_parameterized_dispatcher
         int idle_cycles = 0;
         int extra_drain_cycles;
 
-        // Stage 1: Wait for dispatcher_done
-        while (!dispatcher_done && timeout > 0) begin
+        // Stage 1: Wait for dispatcher to finish (busy goes low)
+        while (dispatcher_busy && timeout > 0) begin
             // Pop whenever ANY data is available
             if (!dispatch_fifo_empty) begin
                 pop_and_count();
@@ -171,12 +145,11 @@ module tb_parameterized_dispatcher
                 idle_cycles++;
 
                 // If idle for too long but not done, something is stuck
-                if (idle_cycles > 100 && !dispatcher_done) begin
+                if (idle_cycles > 100 && dispatcher_busy) begin
                     $display("WARNING: Idle for 100 cycles but not done");
-                    $display("  dispatcher_done=%b, dispatch_fifo_empty=%b",
-                            dispatcher_done, dispatch_fifo_empty);
-                    $display("  ready_fifo_empty=%b", {dut.ready_fifo_empty[3], dut.ready_fifo_empty[2],
-                                                        dut.ready_fifo_empty[1], dut.ready_fifo_empty[0]});
+                    $display("  dispatcher_busy=%b, dispatch_fifo_empty=%b",
+                            dispatcher_busy, dispatch_fifo_empty);
+                    $display("  ready_fifo_empty=%b", dut.ready_fifo_empty[0]);
                 end
             end
             timeout--;
@@ -223,9 +196,7 @@ module tb_parameterized_dispatcher
 
         $display("DEBUG: thread_fifo_empty=%b, thread_chunk_done=%b",
                  dut.thread_fifo_empty, dut.thread_chunk_done);
-        $display("DEBUG: All ready_fifo_empty=%b",
-                 {dut.ready_fifo_empty[3], dut.ready_fifo_empty[2],
-                  dut.ready_fifo_empty[1], dut.ready_fifo_empty[0]});
+        $display("DEBUG: ready_fifo_empty=%b", dut.ready_fifo_empty[0]);
     endtask
 
     // Check basic functionality
@@ -257,22 +228,22 @@ module tb_parameterized_dispatcher
         end
     endtask
 
-    // Test 1: Simple 128-thread dispatch (first half of chunk 0)
+    // Test 1: Simple all-thread dispatch
     task test_simple_dispatch();
-        logic [1023:0] simple_mask;
+        logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] simple_mask;
 
-        $display("\n=== Test %0d: Simple 128-Thread Dispatch ===", ++test_num);
+        $display("\n=== Test %0d: Simple All-Thread Dispatch ===", ++test_num);
 
         simple_mask = '1;  // All threads active
 
-        start_cta(simple_mask, 66'h1, CTA_SIZE_1, 2'b10);  // 1 GPR, 256 threads, 4-way
+        start_cta(simple_mask, REG_NUM'(1));  // 1 GPR, all threads
         wait_for_completion();
 
-        if (dispatched_count == 128) begin
-            $display("PASS: Dispatched exactly 128 threads");
+        if (dispatched_count == DICE_NUM_MAX_THREADS_PER_CORE) begin
+            $display("PASS: Dispatched exactly %0d threads", DICE_NUM_MAX_THREADS_PER_CORE);
             tests_passed++;
         end else begin
-            $display("ERROR: Expected 128 threads, got %0d", dispatched_count);
+            $display("ERROR: Expected %0d threads, got %0d", DICE_NUM_MAX_THREADS_PER_CORE, dispatched_count);
             tests_failed++;
         end
 
@@ -281,7 +252,7 @@ module tb_parameterized_dispatcher
 
     // Test 2: Test with register conflicts
     task test_register_conflicts();
-        logic [1023:0] mask;
+        logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] mask;
 
         $display("\n=== Test %0d: Register Conflict Test ===", ++test_num);
 
@@ -289,7 +260,7 @@ module tb_parameterized_dispatcher
         mask[7:0] = 8'hFF;  // Enable first 8 threads
 
         // Start with register dependencies
-        start_cta(mask, 66'h7, CTA_SIZE_1, 2'b10);  // 3 GPRs needed
+        start_cta(mask, REG_NUM'('h7));  // 3 GPRs needed
 
         // Let some threads get stuck on register conflicts
         repeat(20) begin
@@ -300,7 +271,7 @@ module tb_parameterized_dispatcher
         $display("Threads dispatched before writeback: %0d", dispatched_count);
 
         // Release register 0 for some threads
-        writeback_register(8'd0, 8'h0F);
+        writeback_register(REG_NUM'(0), {{(DICE_NUM_MAX_THREADS_PER_CORE-4){1'b0}}, 4'hF});
 
         // Continue until completion
         wait_for_completion();
@@ -316,78 +287,30 @@ module tb_parameterized_dispatcher
         dispatched_count = 0;
     endtask
 
-    // Test 3: Different unrolling factors
-    task test_unrolling_factors();
-        logic [31:0] mask;
-        int count_1way, count_2way, count_4way;
-
-        $display("\n=== Test %0d: Unrolling Factor Test ===", ++test_num);
-
-        mask = 32'hFFFFFFFF;
-
-        // Test 1-way
-        $display("--- Testing 1-way unrolling ---");
-        reset_system();
-        start_cta(mask, 66'h1, CTA_SIZE_1, 2'b00);
-        wait_for_completion();
-        $display("1-way dispatched: %0d threads", dispatched_count);
-        count_1way = dispatched_count;
-
-        // Test 2-way
-        $display("--- Testing 2-way unrolling ---");
-        reset_system();
-        start_cta(mask, 66'h1, CTA_SIZE_1, 2'b01);
-        wait_for_completion();
-        $display("2-way dispatched: %0d threads", dispatched_count);
-        count_2way = dispatched_count;
-
-        // Test 4-way
-        $display("--- Testing 4-way unrolling ---");
-        reset_system();
-        start_cta(mask, 66'h1, CTA_SIZE_1, 2'b10);
-        wait_for_completion();
-        $display("4-way dispatched: %0d threads", dispatched_count);
-        count_4way = dispatched_count;
-
-        // Check results
-        if (count_1way == 32 && count_2way == 32 && count_4way == 32) begin
-            $display("PASS: All unrolling factors dispatch correct thread count");
-            tests_passed++;
-        end else begin
-            $display("ERROR: Unrolling factor test failed");
-            $display("  Expected: 32, 32, 32");
-            $display("  Got: %0d, %0d, %0d", count_1way, count_2way, count_4way);
-            tests_failed++;
-        end
-
-        dispatched_count = 0;
-    endtask
-
-    // Test 6: Back-to-back CTA dispatch without reset
+    // Test: Back-to-back CTA dispatch without reset
     task test_back_to_back_cta();
-        logic [1023:0] mask1, mask2, mask3;
-        logic [65:0] regs1, regs2, regs3;
+        logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] mask1, mask2, mask3;
+        logic [REG_NUM-1:0] regs1, regs2, regs3;
         int cta1_count, cta2_count, cta3_count;
 
         $display("\n=== Test %0d: Back-to-Back CTA Dispatch (No Reset) ===", ++test_num);
 
-        // First CTA: 32 threads, 2 GPRs, 4-way unrolling
-        mask1 = 1024'b0;
-        mask1[31:0] = 32'hFFFFFFFF;
-        regs1 = 66'h3;  // GPR 0 and 1
+        // First CTA: all threads, 2 GPRs
+        mask1 = '1;
+        regs1 = REG_NUM'('h3);  // GPR 0 and 1
 
-        $display("\n--- CTA 1: 32 threads, 2 GPRs, 4-way ---");
-        start_cta(mask1, regs1, CTA_SIZE_1, 2'b10);
+        $display("\n--- CTA 1: all threads, 2 GPRs ---");
+        start_cta(mask1, regs1);
         wait_for_completion();
         cta1_count = dispatched_count;
         $display("CTA 1 completed: %0d threads dispatched", cta1_count);
 
         // Verify state before next CTA
-        if (!dispatcher_done) begin
-            $display("ERROR: dispatcher_done should be asserted after CTA 1");
+        if (dispatcher_busy) begin
+            $display("ERROR: dispatcher should not be busy after CTA 1");
             tests_failed++;
         end else begin
-            $display("PASS: dispatcher_done asserted after CTA 1");
+            $display("PASS: dispatcher idle after CTA 1");
             tests_passed++;
         end
 
@@ -401,53 +324,55 @@ module tb_parameterized_dispatcher
 
         dispatched_count = 0;
 
-        // Second CTA: 32 threads, 1 GPR, 2-way unrolling (different config)
-        mask2 = 1024'b0;
-        mask2[31:0] = 32'hFFFFFFFF;
-        regs2 = 66'h1;  // GPR 0 only
+        // Second CTA: all threads, 1 GPR
+        mask2 = '1;
+        regs2 = REG_NUM'(1);  // GPR 0 only
 
-        $display("\n--- CTA 2: 32 threads, 1 GPR, 2-way ---");
-        start_cta(mask2, regs2, CTA_SIZE_1, 2'b01);
+        $display("\n--- CTA 2: all threads, 1 GPR ---");
+        start_cta(mask2, regs2);
         wait_for_completion();
         cta2_count = dispatched_count;
         $display("CTA 2 completed: %0d threads dispatched", cta2_count);
 
         // Verify state before next CTA
-        if (!dispatcher_done) begin
-            $display("ERROR: dispatcher_done should be asserted after CTA 2");
+        if (dispatcher_busy) begin
+            $display("ERROR: dispatcher should not be busy after CTA 2");
             tests_failed++;
         end else begin
-            $display("PASS: dispatcher_done asserted after CTA 2");
+            $display("PASS: dispatcher idle after CTA 2");
             tests_passed++;
         end
 
         dispatched_count = 0;
 
-        // Third CTA: 8 threads, mixed registers, 1-way unrolling
-        mask3 = 1024'b0;
+        // Third CTA: 8 threads, mixed registers
+        mask3 = '0;
         mask3[7:0] = 8'hFF;
-        regs3 = 66'b0;
-        regs3[1:0] = 2'b11;      // GPR 0-1
-        regs3[33:32] = 2'b11;    // Constant 0-1
-        regs3[64] = 1'b1;        // Predicate 0
+        regs3 = '0;
+        regs3[1:0] = 2'b11;                             // GPR 0-1
+        regs3[`DICE_GPR_NUM +: 2] = 2'b11;              // Constant 0-1 (offset = DICE_GPR_NUM)
+        regs3[`DICE_GPR_NUM + `DICE_CR_NUM] = 1'b1;     // Predicate 0 (offset = DICE_GPR_NUM + DICE_CR_NUM)
 
-        $display("\n--- CTA 3: 8 threads, mixed regs, 1-way ---");
-        start_cta(mask3, regs3, CTA_SIZE_1, 2'b00);
+        $display("\n--- CTA 3: 8 threads, mixed regs ---");
+        start_cta(mask3, regs3);
         wait_for_completion();
         cta3_count = dispatched_count;
         $display("CTA 3 completed: %0d threads dispatched", cta3_count);
 
         // Final verification
         $display("\n--- Back-to-Back CTA Results ---");
-        $display("CTA 1: %0d/32 threads", cta1_count);
-        $display("CTA 2: %0d/32 threads", cta2_count);
+        $display("CTA 1: %0d/%0d threads", cta1_count, DICE_NUM_MAX_THREADS_PER_CORE);
+        $display("CTA 2: %0d/%0d threads", cta2_count, DICE_NUM_MAX_THREADS_PER_CORE);
         $display("CTA 3: %0d/8 threads", cta3_count);
 
-        if (cta1_count == 32 && cta2_count == 32 && cta3_count == 8) begin
+        if (cta1_count == DICE_NUM_MAX_THREADS_PER_CORE &&
+            cta2_count == DICE_NUM_MAX_THREADS_PER_CORE &&
+            cta3_count == 8) begin
             $display("PASS: All CTAs dispatched correctly without reset");
             tests_passed++;
         end else begin
-            $display("FAIL: Expected 32, 32, 8 threads");
+            $display("FAIL: Expected %0d, %0d, 8 threads",
+                     DICE_NUM_MAX_THREADS_PER_CORE, DICE_NUM_MAX_THREADS_PER_CORE);
             $display("      Got %0d, %0d, %0d", cta1_count, cta2_count, cta3_count);
             tests_failed++;
         end
@@ -476,8 +401,6 @@ module tb_parameterized_dispatcher
 
         reset_system();
         test_register_conflicts();
-
-        test_unrolling_factors();
 
         reset_system();
         test_back_to_back_cta();

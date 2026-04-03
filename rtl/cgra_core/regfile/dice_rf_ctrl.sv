@@ -33,13 +33,14 @@ import dice_pkg::*;
     , input logic [TOTAL_REGS-1:0]            rd_bitmap_i
     , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] rd_data_o
     , output logic                            rf_rd_valid_o
+    , output logic [TID_WIDTH-1:0]            tid_o
 
-    // Predicate output — always valid, 1 bit per predicate
-    , output logic [NUM_PRED-1:0]             pred_o
+    // Predicate output — all TIDs, all preds, always valid
+    , output logic [NUM_PRED-1:0]              pred_o
 
     // Write Interface — CGRA
     , input logic [TID_WIDTH-1:0]               cgra_tid_i
-    , input logic [(TOTAL_REGS*DATA_WIDTH)-1:0] cgra_data_i
+    , input logic [((NUM_PORTS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_i
     , input logic [TOTAL_REGS-1:0]              wr_bitmap_i
     , input logic                               cgra_valid_i
 
@@ -69,9 +70,9 @@ import dice_pkg::*;
     // =========================================================================
     reg_wr_cmd cgra_wr_li [NUM_PORTS-1:0];
 
-    // Shift only the GPR portion of the bitmap
+    // GPR portion of the bitmap (no swizzling)
     logic [NUM_PORTS-1:0] cgra_shifted_bitmap;
-    assign cgra_shifted_bitmap = shift_bitmap(wr_bitmap_i[NUM_PORTS-1:0], cgra_tid_i);
+    assign cgra_shifted_bitmap = wr_bitmap_i[NUM_PORTS-1:0];
 
     genvar i;
     generate
@@ -92,12 +93,18 @@ import dice_pkg::*;
     // LDST target decode — GPR vs special (const/pred)
     // =========================================================================
     logic ldst_gpr_valid;
+    logic ldst_const_valid;
+    logic ldst_pred_valid;
     logic ldst_special_valid;
 
     assign ldst_gpr_valid     = ldst_valid_i
                                 && (ldst_convert.outcmd_ld_dest_reg < DICE_REG_ADDR_WIDTH'(NUM_PORTS));
-    assign ldst_special_valid = ldst_valid_i
-                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS));
+    assign ldst_const_valid   = ldst_valid_i
+                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS))
+                                && (ldst_convert.outcmd_ld_dest_reg <  DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST));
+    assign ldst_pred_valid    = ldst_valid_i
+                                && (ldst_convert.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(NUM_PORTS + NUM_CONST));
+    assign ldst_special_valid = ldst_const_valid || ldst_pred_valid;
 
     generate
         for (i = 0; i < NUM_PORTS; i++) begin
@@ -140,41 +147,53 @@ import dice_pkg::*;
         for (int j = 0; j < NUM_CONST; j++) begin
             cgra_special.const_mask[j] = wr_bitmap_i[NUM_PORTS + j];
             cgra_special.const_data[j*DATA_WIDTH +: DATA_WIDTH] =
-                cgra_data_i[(NUM_PORTS + j)*DATA_WIDTH +: DATA_WIDTH];
+                cgra_data_i[NUM_PORTS*DATA_WIDTH +: DATA_WIDTH];
         end
         for (int j = 0; j < NUM_PRED; j++) begin
             cgra_special.pred_mask[j] = wr_bitmap_i[NUM_PORTS + NUM_CONST + j];
-            cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + NUM_CONST + j)*DATA_WIDTH];
+            cgra_special.pred_data[j] = cgra_data_i[(NUM_PORTS + 1 + j)*DATA_WIDTH];
         end
     end
 
     // LDST special regs command from cache response
     assign ldst_special_in = assemble_special_wr(ldst_convert);
 
-    // FIFO buffer for LDST special writes
+    // Extract TID for per-TID pred writes (single coalesced command only)
+    logic [TID_WIDTH-1:0] ldst_special_tid_in;
+
+    assign ldst_special_tid_in = ldst_pred_valid
+        ? TID_WIDTH'(ldst_convert.outcmd_base_tid + ldst_convert.outcmd_address_map[0])
+        : ldst_convert.outcmd_base_tid;
+
+    // FIFO buffer for LDST special writes (widened to include TID for pred)
+    localparam int SPECIAL_ENTRY_WIDTH = $bits(special_regs_cmd) + TID_WIDTH;
     logic special_fifo_ready, special_fifo_valid;
     logic pop_special;
-    logic [$bits(special_regs_cmd)-1:0] special_fifo_data;
+    logic [SPECIAL_ENTRY_WIDTH-1:0] special_fifo_data;
 
     bsg_fifo_1r1w_small #(
-          .width_p($bits(special_regs_cmd))
+          .width_p(SPECIAL_ENTRY_WIDTH)
         , .els_p(BUF_DEPTH)
     ) u_special_fifo (
           .clk_i   (clk_i)
         , .reset_i (reset_i)
         , .v_i     (ldst_special_valid)
         , .ready_o (special_fifo_ready)
-        , .data_i  (ldst_special_in)
+        , .data_i  ({ldst_special_in, ldst_special_tid_in})
         , .v_o     (special_fifo_valid)
         , .yumi_i  (pop_special)
         , .data_o  (special_fifo_data)
     );
 
-    assign ldst_special_wb = special_fifo_data;
+    logic [TID_WIDTH-1:0] ldst_special_wb_tid;
+    assign {ldst_special_wb, ldst_special_wb_tid} = special_fifo_data;
 
     // Arbitration: CGRA has priority over buffered LDST
     assign pop_special = !cgra_valid_i && special_fifo_valid;
     assign special_cmd = cgra_valid_i ? cgra_special : ldst_special_wb;
+
+    logic [TID_WIDTH-1:0] special_tid;
+    assign special_tid = cgra_valid_i ? cgra_tid_i : ldst_special_wb_tid;
 
     logic special_wr_valid;
     assign special_wr_valid = cgra_valid_i || special_fifo_valid;
@@ -199,7 +218,7 @@ import dice_pkg::*;
         end
     end
 
-    // Const read: wire flip-flop outputs to rd_data_o positions [NUM_PORTS .. NUM_PORTS+NUM_CONST-1]
+    // Const read: wire all const registers to rd_data_o for routability
     generate
         for (i = 0; i < NUM_CONST; i++) begin : gen_const_rd
             assign rd_data_o[(NUM_PORTS + i)*DATA_WIDTH +: DATA_WIDTH] = const_regs[i];
@@ -207,9 +226,9 @@ import dice_pkg::*;
     endgenerate
 
     // =========================================================================
-    // Predicate registers (1 bit each, shared across all threads)
+    // Predicate registers — NUM_PRED banks × NUM_TID entries (1 bit each)
     // =========================================================================
-    logic [NUM_PRED-1:0] pred_regs;
+    logic [NUM_TID-1:0][NUM_PRED-1:0] pred_regs;
 
     always_ff @(posedge clk_i) begin
         if (reset_i) begin
@@ -217,13 +236,13 @@ import dice_pkg::*;
         end else if (special_wr_valid) begin
             for (int j = 0; j < NUM_PRED; j++) begin
                 if (special_cmd.pred_mask[j])
-                    pred_regs[j] <= special_cmd.pred_data[j];
+                    pred_regs[special_tid][j] <= special_cmd.pred_data[j];
             end
         end
     end
 
-    // Predicate output — continuously driven
-    assign pred_o = pred_regs;
+    // Predicate output — selected TID only
+    assign pred_o = pred_regs[rd_tid_i];
 
     // =========================================================================
     // GPR read path — only pass GPR portion of bitmap to read_org
@@ -263,5 +282,12 @@ import dice_pkg::*;
         , .wr_addr (rf_wr_addr)
         , .wr_data (rf_wr_data)
     );
+
+    always_ff @(posedge clk_i) begin
+        if(reset_i)
+            tid_o <= '0;
+        else
+            tid_o <= rd_tid_i;
+    end
 
 endmodule

@@ -1,0 +1,194 @@
+16       
+0 bsg_defines.sv
+0 /data/eda_tools/synopsys/tools/vcs/X-2025.06/etc/systemverilog/bsg_defines.sv
+0 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/bsg_defines.sv
+0 /data/amanoj3/vortex4dice/dice_new/rtl/bsg_defines.sv
+0 /data/amanoj3/basejump_stl/bsg_dataflow/bsg_defines.sv
+0 DE_pkg.sv
+0 /data/eda_tools/synopsys/tools/vcs/X-2025.06/etc/systemverilog/DE_pkg.sv
+0 dice_define.vh
+0 /data/eda_tools/synopsys/tools/vcs/X-2025.06/etc/systemverilog/dice_define.vh
+0 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_define.vh
+0 dice_config.vh
+0 /data/eda_tools/synopsys/tools/vcs/X-2025.06/etc/systemverilog/dice_config.vh
+0 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_config.vh
+0 dice_pkg.sv
+0 /data/eda_tools/synopsys/tools/vcs/X-2025.06/etc/systemverilog/dice_pkg.sv
+0 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_pkg.sv
+62
++define+FSDB
++incdir+/data/amanoj3/basejump_stl/bsg_dataflow
++incdir+/data/amanoj3/basejump_stl/bsg_misc
++incdir+/data/amanoj3/vortex4dice/dice_new/rtl/
++incdir+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile
++itf+/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/vcsdp_lite.tab
++vcsd1
++vpi
++vpi
+-Mamsrun=
+-Masflags=
+-Mcc=gcc
+-Mcfl= -pipe -fPIC -O -I/data/eda_tools/synopsys/tools/vcs/X-2025.06/include
+-Mcplusplus=g++
+-Mcrt0=
+-Mcrtn=
+-Mcsrc=
+-Mexternalobj=
+-Mldflags= -rdynamic
+-Mobjects= /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libvirsim.so /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/liberrorinf.so /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libsnpsmalloc.so /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libvfs.so
+-Mout=simv
+-Msaverestoreobj=/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/vcs_save_restore_new.o
+-Msyslibs=/data/eda_tools/synopsys/tools/verdi/X-2025.06/share/PLI/VCS/LINUX64/pli.a -ldl
+-Mvcsaceobjs=
+-Mxcflags= -pipe -fPIC -I/data/eda_tools/synopsys/tools/vcs/X-2025.06/include
+-Mxllcflags=
+-P
+-Xfile_begin_f=filelist.f
+-Xfile_end
+-Xhdlxmropt
+-Xufe=2steps
+-debug_access+pp+all
+-fsdb
+-full64
+-gen_obj
+-kdb
+-lca
+-o simv
+-picarchive
+-sverilog
+-top
+/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/bin/vcs1fe
+dice_rf_ctrl_tb
+simv
+/data/eda_tools/synopsys/tools/verdi/X-2025.06/share/PLI/VCS/LINUX64/verdi.tab
+/data/amanoj3/basejump_stl/bsg_dataflow/bsg_fifo_tracker.sv
+/data/amanoj3/basejump_stl/bsg_misc/bsg_circular_ptr.sv
+/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.sv
+/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/reg_wr_buffer_tb.sv
+/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/DE_pkg.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/addr_swizzle.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_rd_ctrl_bank.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_read_org.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_register_file.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_rf_ctrl.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_special_reg.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_wr_ctrl_bank.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/fifo_ctrl_credit.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/reg_wr_buffer.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/reg_wr_single_entry.sv
+/data/amanoj3/vortex4dice/dice_new/rtl/dice_ram/dice_ram_1w1r.sv
+77
+which_declare=declare -f
+_LMFILES__modshare=/usr/share/Modules/modulefiles/verdi/X-2025.06:1:/usr/share/Modules/modulefiles/vcs/X-2025.06:1
+_LMFILES_=/usr/share/Modules/modulefiles/vcs/X-2025.06:/usr/share/Modules/modulefiles/verdi/X-2025.06
+XDG_SESSION_ID=750
+XDG_RUNTIME_DIR=/run/user/1312115
+XDG_DATA_DIRS=/homes/amanoj3/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+XDG_CACHE_HOME=/data/amanoj3/.cache
+VSCODE_SERVER_DIR=/data/amanoj3/.vscode-server
+VSCODE_IPC_HOOK_CLI=/run/user/1312115/vscode-ipc-7c54f6ef-f5e1-4dd9-9961-1466b47527e4.sock
+VSCODE_GIT_IPC_HANDLE=/run/user/1312115/vscode-git-bf5750bed0.sock
+VSCODE_GIT_IPC_AUTH_TOKEN=895195b445fab5e633fc4537acc7dd00f72a399c1ff4e175c635e38df9443e2e
+VSCODE_GIT_ASKPASS_NODE=/home/amanoj3/.cursor-server/cli/servers/Stable-618c607a249dd7fd2ffc662c6531143833bebd40/server/node
+VSCODE_GIT_ASKPASS_MAIN=/home/amanoj3/.cursor-server/cli/servers/Stable-618c607a249dd7fd2ffc662c6531143833bebd40/server/extensions/git/dist/askpass-main.js
+VSCODE_GIT_ASKPASS_EXTRA_ARGS=
+VSCODE_AGENT_FOLDER=/data/amanoj3/.vscode-agent
+VMR_MODE_FLAG=64
+VERDI_HOME=/data/eda_tools/synopsys/tools/verdi/X-2025.06
+VCS_PYTHON3=/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/bin/Python3/bin/python3
+VCS_PATHMAP_PRELOAD_DONE=1
+VCS_MX_HOME_INTERNAL=1
+VCS_MODE_FLAG=64
+VCS_LCAMSG_PRINT_OFF=1
+VCS_INTERNAL_CONVERTEDLIBS=
+VCS_HOME=/data/eda_tools/synopsys/tools/vcs/X-2025.06
+VCS_EXEC_DONE=1
+VCS_DEPTH=0
+VCS_ARG_ADDED_FOR_TMP=1
+VCS_ARCH=linux64
+UNAME=/bin/uname
+TOOL_HOME=/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64
+TERM_PROGRAM_VERSION=2.4.22
+TERM_PROGRAM=vscode
+TB_TOP=dice_rf_ctrl_tb
+TB=dice_rf_ctrl_tb
+S_COLORS=auto
+SSL_CERT_FILE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+SSL_CERT_DIR=/etc/pki/tls/certs
+SSH_CONNECTION=10.19.55.217 64440 128.95.141.68 22
+SSH_CLIENT=10.19.55.217 64440 22
+SSH_ASKPASS=/usr/libexec/openssh/gnome-ssh-askpass
+SNPS_VERDI_INTERNAL_LP_XML_NEW_FLOW=1
+SNPS_VCS_VHDL_WRAPPER_KDB=1
+SNPS_VCS_PYTHON3=/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/bin/Python3/bin/python3
+SNPS_VCS_CLANG_PATH=/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/clang
+SNPS_INTERNAL_VCS_LINUX_OS=linux
+SCRNAME=vcs
+SCRIPT_NAME=vcs
+PATH_modshare=/usr/bin:1:/homes/amanoj3/.local/bin:1:/homes/amanoj3/bin:1:/usr/share/Modules/bin:1:/usr/local/bin:1:/home/amanoj3/.cursor-server/cli/servers/Stable-618c607a249dd7fd2ffc662c6531143833bebd40/server/bin/remote-cli:1:/opt/dell/srvadmin/bin:1:/usr/condabin:1:/usr/lib64/ccache:1:/data/eda_tools/synopsys/tools/verdi/X-2025.06/bin:1:/usr/sbin:1:/data/eda_tools/synopsys/tools/vcs/X-2025.06/bin:1:/usr/local/sbin:1
+OVA_UUM=0
+MODULES_RUN_QUARANTINE=LD_LIBRARY_PATH LD_PRELOAD
+MODULES_CMD=/usr/share/Modules/libexec/modulecmd.tcl
+MODULESHOME=/usr/share/Modules
+MODULEPATH_modshare=/usr/share/Modules/modulefiles:2:/etc/modulefiles:2:/usr/share/modulefiles:2
+MODULEPATH=/etc/scl/modulefiles:/etc/scl/modulefiles:/etc/scl/modulefiles:/usr/share/Modules/modulefiles:/etc/modulefiles:/usr/share/modulefiles
+MFLAGS=
+MAKE_TERMOUT=/dev/pts/98
+MAKE_TERMERR=/dev/pts/98
+MAKEOVERRIDES=${-*-command-variables-*-}
+MAKELEVEL=1
+MAKEFLAGS= -- TB=dice_rf_ctrl_tb
+LOADEDMODULES_modshare=vcs/X-2025.06:1:verdi/X-2025.06:1
+LOADEDMODULES=vcs/X-2025.06:verdi/X-2025.06
+LESSOPEN=||/usr/bin/lesspipe.sh %s
+LC_ALL=C
+KRB5CCNAME=KCM:
+HISTCONTROL=ignoredups
+GIT_ASKPASS=/home/amanoj3/.cursor-server/cli/servers/Stable-618c607a249dd7fd2ffc662c6531143833bebd40/server/extensions/git/dist/askpass.sh
+DICE_HOME=/data/amanoj3/vortex4dice/dice_new
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1312115/bus
+CONDA_SHLVL=0
+COLORTERM=truecolor
+BASH_FUNC_which%%=() {  ( alias;_ eval ${which_declare} ) | /usr/bin/which --tty-only --read-alias --read-functions --show-tilde --show-dot $@_}
+BASH_FUNC_switchml%%=() {  typeset swfound=1;_ if [ "${MODULES_USE_COMPAT_VERSION:-0}" = '1' ]; then_ typeset swname='main';_ if [ -e /usr/share/Modules/libexec/modulecmd.tcl ]; then_ typeset swfound=0;_ unset MODULES_USE_COMPAT_VERSION;_ fi;_ else_ typeset swname='compatibility';_ if [ -e /usr/share/Modules/libexec/modulecmd-compat ]; then_ typeset swfound=0;_ MODULES_USE_COMPAT_VERSION=1;_ export MODULES_USE_COMPAT_VERSION;_ fi;_ fi;_ if [ $swfound -eq 0 ]; then_ echo "Switching to Modules $swname version";_ source /usr/share/Modules/init/bash;_ else_ echo "Cannot switch to Modules $swname version, command not found";_ return 1;_ fi_}
+BASH_FUNC_scl%%=() {  if [ "$1" = "load" -o "$1" = "unload" ]; then_ eval "module $@";_ else_ /usr/bin/scl "$@";_ fi_}
+BASH_FUNC_module%%=() {  _module_raw "$@" 2>&1_}
+BASH_FUNC_ml%%=() {  module ml "$@"_}
+BASH_FUNC__module_raw%%=() {  unset _mlshdbg;_ if [ "${MODULES_SILENT_SHELL_DEBUG:-0}" = '1' ]; then_ case "$-" in _ *v*x*)_ set +vx;_ _mlshdbg='vx'_ ;;_ *v*)_ set +v;_ _mlshdbg='v'_ ;;_ *x*)_ set +x;_ _mlshdbg='x'_ ;;_ *)_ _mlshdbg=''_ ;;_ esac;_ fi;_ unset _mlre _mlIFS;_ if [ -n "${IFS+x}" ]; then_ _mlIFS=$IFS;_ fi;_ IFS=' ';_ for _mlv in ${MODULES_RUN_QUARANTINE:-};_ do_ if [ "${_mlv}" = "${_mlv##*[!A-Za-z0-9_]}" -a "${_mlv}" = "${_mlv#[0-9]}" ]; then_ if [ -n "`eval 'echo ${'$_mlv'+x}'`" ]; then_ _mlre="${_mlre:-}${_mlv}_modquar='`eval 'echo ${'$_mlv'}'`' ";_ fi;_ _mlrv="MODULES_RUNENV_${_mlv}";_ _mlre="${_mlre:-}${_mlv}='`eval 'echo ${'$_mlrv':-}'`' ";_ fi;_ done;_ if [ -n "${_mlre:-}" ]; then_ eval `eval ${_mlre} /usr/bin/tclsh /usr/share/Modules/libexec/modulecmd.tcl bash '"$@"'`;_ else_ eval `/usr/bin/tclsh /usr/share/Modules/libexec/modulecmd.tcl bash "$@"`;_ fi;_ _mlstatus=$?;_ if [ -n "${_mlIFS+x}" ]; then_ IFS=$_mlIFS;_ else_ unset IFS;_ fi;_ unset _mlre _mlv _mlrv _mlIFS;_ if [ -n "${_mlshdbg:-}" ]; then_ set -$_mlshdbg;_ fi;_ unset _mlshdbg;_ return $_mlstatus_}
+0
+0
+25
+1762199953 /data/amanoj3/vortex4dice/dice_new/rtl/dice_pkg.sv
+1761897503 /data/amanoj3/vortex4dice/dice_new/rtl/dice_config.vh
+1761897503 /data/amanoj3/vortex4dice/dice_new/rtl/dice_define.vh
+1761764061 /data/amanoj3/basejump_stl/bsg_misc/bsg_defines.sv
+1748765798 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/packages/snps_msv_nettype_pkg/AN.DB
+1770068083 /data/amanoj3/vortex4dice/dice_new/rtl/dice_ram/dice_ram_1w1r.sv
+1770197623 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/reg_wr_single_entry.sv
+1770190598 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/reg_wr_buffer.sv
+1770193463 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/fifo_ctrl_credit.sv
+1770197703 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_wr_ctrl_bank.sv
+1768258435 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_special_reg.sv
+1770414775 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_rf_ctrl.sv
+1770064603 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_register_file.sv
+1770415043 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_read_org.sv
+1770190226 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/dice_rd_ctrl_bank.sv
+1770061947 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/addr_swizzle.sv
+1770194058 /data/amanoj3/vortex4dice/dice_new/rtl/cgra_core/cgra_subsystem/regfile/DE_pkg.sv
+1770415121 /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.sv
+1764312875 /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/reg_wr_buffer_tb.sv
+1770061611 /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.sv
+1761764061 /data/amanoj3/basejump_stl/bsg_misc/bsg_circular_ptr.sv
+1761764061 /data/amanoj3/basejump_stl/bsg_dataflow/bsg_fifo_tracker.sv
+1770191408 filelist.f
+1770191408 ../../../../rtl/cgra_core/cgra_subsystem/regfile/filelist.f
+1748749539 /data/eda_tools/synopsys/tools/verdi/X-2025.06/share/PLI/VCS/LINUX64/verdi.tab
+1748747165 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/vcsdp_lite.tab
+4
+1748749132 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libvirsim.so
+1748748097 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/liberrorinf.so
+1748748087 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libsnpsmalloc.so
+1748748085 /data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libvfs.so
+1770415124 simv.daidir
+-1 partitionlib
