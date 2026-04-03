@@ -26,8 +26,6 @@ module meta_fetch
     input logic flush_i
 );
 
-
-
   // FSM states
   typedef enum logic [1:0] {
     StateReady    = 2'b00,  // fetcher is ready for a new pc
@@ -43,7 +41,7 @@ module meta_fetch
 
   // 256-bit assembly buffer: 16 × 16-bit beats accumulated here
   // First received beat ends up in bits [255:240] after all 16 beats
-  logic [MetaBits-1:0] meta_buf_q;
+  logic [DICE_METADATA_WIDTH-1:0] meta_buf_q;
 
   // AXI handshake pulses
   logic ar_fire;
@@ -102,11 +100,11 @@ module meta_fetch
 
       // Accumulate 16-bit beats: shift new word into MSB, pushing earlier words down
       if (r_fire) begin
-        meta_buf_q <= {meta_resp_i.r.data, meta_buf_q[MetaBits-1:16]};
+        meta_buf_q <= {meta_resp_i.r.data, meta_buf_q[DICE_METADATA_WIDTH-1:16]};
       end
 
       if (r_fire && meta_resp_i.r.last) begin
-        outgoing_meta_q <= pgraph_meta_t'({meta_resp_i.r.data, meta_buf_q[MetaBits-1:16]});
+        outgoing_meta_q <= pgraph_meta_t'({meta_resp_i.r.data, meta_buf_q[DICE_METADATA_WIDTH-1:16]});
         meta_valid_q    <= 1'b1;
       end
 

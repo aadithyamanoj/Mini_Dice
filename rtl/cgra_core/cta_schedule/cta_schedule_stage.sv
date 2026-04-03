@@ -60,6 +60,7 @@ module cta_schedule_stage
   logic active_table_pop_ready;
   logic active_table_out_valid;
   logic active_table_out_ready;
+  logic active_table_full;
   active_cta_t active_cta_entry;
   logic [DICE_TID_WIDTH:0] active_table_add_cta_thread_count;
 
@@ -115,7 +116,8 @@ module cta_schedule_stage
       .out_cta_id_o          (out_cta_id),
       .out_valid_o           (active_table_out_valid),
       .out_ready_i           (active_table_out_ready),
-      .active_cta_entry_o    (active_cta_entry)
+      .active_cta_entry_o    (active_cta_entry),
+      .full_o                (active_table_full)
   );
 
   // ---- CTA Scheduler ----

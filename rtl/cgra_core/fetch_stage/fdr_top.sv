@@ -63,7 +63,6 @@ module fdr_top
   assign fdr_if.data.schedule_eblock_id        = schedule_data_q.schedule_eblock_id;
   assign fdr_if.data.schedule_cta_id           = schedule_data_q.schedule_cta_id;
   assign fdr_if.data.schedule_grid_size        = schedule_data_q.schedule_grid_size;
-  assign fdr_if.data.schedule_cta_thread_count = schedule_data_q.schedule_cta_thread_count;
   assign fdr_if.data.real_active_mask          = branch_mask_internal;
 
   // ---- Branch prediction output ----
