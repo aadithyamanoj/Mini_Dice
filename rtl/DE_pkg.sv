@@ -15,7 +15,7 @@ parameter int CHUNK_ADDR_WIDTH = (NUM_SCOREBOARDS == 1) ? 1 : $clog2(NUM_SCOREBO
 parameter int LANE_SIZE        = CHUNK_SIZE / NUM_LANES;
 parameter int LANE_WIDTH       = $clog2(LANE_SIZE);
 
-parameter int DICE_REG_DATA_WIDTH = 8;
+parameter int DICE_REG_DATA_WIDTH = 16;
 parameter int CACHE_LINE_SIZE = 32;
 parameter int NUMBER_OF_MAX_COALESCED_COMMANDS = CACHE_LINE_SIZE/4;
 parameter int TID_BITMAP_WIDTH = NUMBER_OF_MAX_COALESCED_COMMANDS;
