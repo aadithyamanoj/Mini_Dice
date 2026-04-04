@@ -31,17 +31,28 @@ module cta_controller
     output logic                       clear_entry_valid_o
 );
 
+  
+  logic add_cta_fire_d, add_cta_fire_q;
+
   assign cta_if_inst.dispatch_ready = add_ready_i && init_ready_i;
-  assign add_valid_o    = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready;
+  assign add_valid_o    = add_cta_fire_q;
   assign add_cta_info_o = cta_if_inst.dispatch_data;
 
   assign add_cta_thread_count_o = cta_if_inst.dispatch_data.kernel_desc.thread_count;
 
   // SIMT STACK INIT
-  assign init_valid_o            = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready;
+  assign init_valid_o            = add_cta_fire_q;
   assign init_pc_o               = cta_if_inst.dispatch_data.kernel_desc.start_pc;
   assign init_reconvergence_pc_o = '1;
   assign init_thread_count_o     = cta_if_inst.dispatch_data.kernel_desc.thread_count;
+
+
+  assign add_cta_fire_d = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready;
+
+  always_ff @(posedge clk_i) begin
+    if (rst_i) add_cta_fire_q <= 1'b0;
+    else        add_cta_fire_q <= add_cta_fire_d;
+  end
 
   // Completion Logic
   logic victim_found;
@@ -62,6 +73,10 @@ module cta_controller
   assign cta_if_inst.complete_cta_id = pop_out_cta_id_i;
 
 
+
+
+
+  
 `ifndef SYNTHESIS
   pop_only_completed_p: assert property (@(posedge clk_i) disable iff (rst_i)
     pop_valid_o |-> (cta_status_i.has_pending_eblock == 1'b0)
