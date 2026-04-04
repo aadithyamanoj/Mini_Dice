@@ -2,6 +2,7 @@
 module dice_frontend
   import dice_pkg::*;
   import dice_frontend_pkg::*;
+  import axi4_xbar_pkg::*;
 (
     input logic clk_i,
     input logic rst_i,
@@ -9,9 +10,11 @@ module dice_frontend
     // External CTA interface
     cta_if.slave cta_if_inst,
 
-    // Memory Bus Interfaces
-    dice_mem_bus_if.master metacache_mem_if,
-    dice_mem_bus_if.master bitstream_cache_mem_if,
+    // AXI4 read master ports to the fetch memory system
+    output slv_req_t  mfetch_req_o,
+    input  slv_resp_t mfetch_resp_i,
+    output slv_req_t  bsfetch_req_o,
+    input  slv_resp_t bsfetch_resp_i,
 
     // FDR output to backend
     fdr_if.master fdr_if_o,
@@ -74,8 +77,10 @@ module dice_frontend
   fdr_top u_fdr_top (
       .clk_i(clk_i),
       .rst_i(rst_i),
-      .metacache_mem_if(metacache_mem_if),
-      .bitstream_cache_mem_if(bitstream_cache_mem_if),
+      .mfetch_req_o(mfetch_req_o),
+      .mfetch_resp_i(mfetch_resp_i),
+      .bsfetch_req_o(bsfetch_req_o),
+      .bsfetch_resp_i(bsfetch_resp_i),
       .schedule_if(schedule_if),
       .fdr_if(fdr_if_o),
       .simt_status_i(simt_status),
