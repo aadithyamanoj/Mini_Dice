@@ -10,7 +10,7 @@ module tb_dice_frontend_top;
   localparam logic [DICE_ADDR_WIDTH-1:0] StartPc       = 16'h0100;
   localparam logic [DICE_ADDR_WIDTH-1:0] BitstreamAddr = 16'h0400;
 
-  logic clk = 1'b0;
+  logic clk;
   logic rst;
 
   cta_if cta_if_inst ();
@@ -21,6 +21,7 @@ module tb_dice_frontend_top;
 
   logic                            eblock_commit_valid;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id;
+  dice_cta_desc_t                  dispatch_desc;
 
   dice_frontend u_dut (
     .clk_i                 (clk),
@@ -37,22 +38,44 @@ module tb_dice_frontend_top;
     .eblock_commit_id_i    (eblock_commit_id)
   );
 
+  initial clk = 1'b0;
+
   always #(ClkPeriod/2) clk = ~clk;
 
-  int cycle_count = 0;
+  int cycle_count;
+
+  initial cycle_count = 0;
+
   always @(posedge clk) begin
-    cycle_count++;
+    cycle_count <= cycle_count + 1;
     if (cycle_count >= TimeoutCycles) begin
       $display("[%0t] TIMEOUT after %0d cycles", $time, TimeoutCycles);
       $finish;
     end
   end
 
+  // Keep the dispatch source static and permanently valid so the frontend
+  // behaves as if software is always trying to add another CTA.
+  always_comb begin
+    dispatch_desc = '0;
+    dispatch_desc.kernel_desc.grid_size.x  = 1;
+    dispatch_desc.kernel_desc.grid_size.y  = 1;
+    dispatch_desc.kernel_desc.grid_size.z  = 1;
+    dispatch_desc.kernel_desc.thread_count = 5;
+    dispatch_desc.kernel_desc.start_pc     = StartPc;
+  end
+
+  assign cta_if_inst.dispatch_data  = dispatch_desc;
+  assign cta_if_inst.dispatch_valid = 1'b1;
+  assign cta_if_inst.complete_ready = 1'b1;
+
   logic                          meta_busy;
   logic [$clog2(MetaBeats+1)-1:0] meta_beat_idx;
   logic [$bits(mfetch_req.ar.id)-1:0] meta_txn_id;
   pgraph_meta_t meta_payload;
 
+  // Minimal metadata responder: accept one read request, then stream the
+  // packed metadata payload one 16-bit beat at a time.
   always_comb begin
     meta_payload = '0;
     meta_payload.bitstream_addr = BitstreamAddr;
@@ -89,6 +112,7 @@ module tb_dice_frontend_top;
   logic [$clog2(BitstreamBeats+1)-1:0] bs_beat_idx;
   logic [$bits(bsfetch_req.ar.id)-1:0] bs_txn_id;
 
+  // Minimal bitstream responder: return the beat index as dummy payload data.
   always_comb begin
     bsfetch_resp = '0;
     bsfetch_resp.ar_ready = !bs_busy;
@@ -115,55 +139,24 @@ module tb_dice_frontend_top;
   end
 
   assign fdr_if_inst.ready = 1'b1;
-  logic fdr_seen;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] fdr_eblock_id_capture;
 
+  // Immediately commit each scheduled eblock once the frontend emits it so
+  // this bench does not need a separate backend model.
   always_ff @(posedge clk or posedge rst) begin
-    if (rst) fdr_seen <= 1'b0;
-    else if (fdr_if_inst.valid && fdr_if_inst.ready && !fdr_seen) begin
-      fdr_seen <= 1'b1;
-      fdr_eblock_id_capture <= fdr_if_inst.data.schedule_eblock_id;
+    if (rst) begin
+      eblock_commit_valid <= 1'b0;
+      eblock_commit_id    <= '0;
+    end else begin
+      eblock_commit_valid <= fdr_if_inst.valid && fdr_if_inst.ready;
+      eblock_commit_id    <= fdr_if_inst.data.schedule_eblock_id;
     end
-  endL
+  end
 
   task reset_dut();
-    rst <= 1'b1;
+    rst = 1'b1;
     repeat (5) @(posedge clk);
-    rst <= 1'b0;
+    rst = 1'b0;
     @(posedge clk);
-  endtask
-
-  task automatic dispatch_cta(input logic [DICE_ADDR_WIDTH-1:0] start_pc);
-    dice_cta_desc_t desc;
-
-    desc = '0;
-    desc.kernel_desc.grid_size.x  = 1;
-    desc.kernel_desc.grid_size.y  = 1;
-    desc.kernel_desc.grid_size.z  = 1;
-    desc.kernel_desc.thread_count = 5;
-    desc.kernel_desc.start_pc     = start_pc;
-
-    // Drive request
-    @(posedge clk);
-    cta_if_inst.dispatch_data  <= desc;
-    cta_if_inst.dispatch_valid <= 1'b1;
-
-    // Wait for an actual valid/ready handshake
-    do begin
-      @(posedge clk);
-    end while (!(cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready));
-
-    // Keep valid high for one more full cycle
-    @(posedge clk);
-    cta_if_inst.dispatch_valid <= 1'b0;
-  endtask
-
-  task commit_eblock(input logic [DICE_EBLOCK_ID_WIDTH-1:0] id);
-    @(posedge clk);
-    eblock_commit_valid <= 1'b1;
-    eblock_commit_id    <= id;
-    @(posedge clk);
-    eblock_commit_valid <= 1'b0;
   endtask
 
   task wait_cta_complete();
@@ -174,17 +167,8 @@ module tb_dice_frontend_top;
   endtask
 
   initial begin
-    cta_if_inst.dispatch_valid <= 1'b0;
-    cta_if_inst.complete_ready <= 1'b1;
-    eblock_commit_valid        <= 1'b0;
-
+    // Reset once, then wait for the frontend to report CTA completion.
     reset_dut();
-    
-    dispatch_cta(StartPc);
-
-    wait (fdr_seen);
-    repeat (2) @(posedge clk);
-    commit_eblock(fdr_eblock_id_capture);
 
     wait_cta_complete();
     
