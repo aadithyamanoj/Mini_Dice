@@ -1,293 +1,195 @@
-`timescale 1ns / 1ps
-
 module tb_dice_frontend_top;
   import dice_pkg::*;
   import dice_frontend_pkg::*;
   import axi4_xbar_pkg::*;
 
-  // =========================================================================
-  // Parameters
-  // =========================================================================
-  localparam int ClkPeriod      = 10;
-  localparam int TimeoutCycles  = 800;
-  localparam int MetaBeats      = DICE_METADATA_WIDTH / 16;
-  localparam int NumChunks      = (DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1)
-                                  / DICE_MEM_DATA_WIDTH;
-  localparam int BitstreamBeats = DICE_BITSTREAM_SIZE / 16;
+  localparam int ClkPeriod     = 10;
+  localparam int TimeoutCycles = 50;
+  localparam int MetaBeats     = DICE_METADATA_WIDTH / 16;
+  localparam int BitstreamBeats= DICE_BITSTREAM_SIZE / 16;
+  localparam logic [DICE_ADDR_WIDTH-1:0] StartPc       = 16'h0100;
+  localparam logic [DICE_ADDR_WIDTH-1:0] BitstreamAddr = 16'h0400;
 
-  localparam logic [DICE_ADDR_WIDTH-1:0] StartPc             = 16'h0100;
-  localparam logic [DICE_ADDR_WIDTH-1:0] FirstBitstreamAddr  = 16'h0400;
-  localparam logic [DICE_ADDR_WIDTH-1:0] SecondBitstreamAddr = 16'h0500;
-
-  // =========================================================================
-  // Signals & Interfaces
-  // =========================================================================
-  logic clk;
+  logic clk = 1'b0;
   logic rst;
-  int   cycle_count;
 
   cta_if cta_if_inst ();
-  slv_req_t mfetch_req;
-  slv_resp_t mfetch_resp;
-  slv_req_t bsfetch_req;
-  slv_resp_t bsfetch_resp;
+  slv_req_t  mfetch_req, bsfetch_req;
+  slv_resp_t mfetch_resp, bsfetch_resp;
+  fdr_if fdr_if_inst ();
+  cgra_cm_if cm0_if (), cm1_if ();
 
-  fdr_if     fdr_if_inst ();
-  cgra_cm_if cm0_if ();
-  cgra_cm_if cm1_if ();
+  logic                            eblock_commit_valid;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id;
 
-  logic                       eblock_commit_valid_i;
-  logic [EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i;
-  logic                       meta_rsp_active_q;
-  logic [$clog2(MetaBeats+1)-1:0] meta_rsp_idx_q;
-  logic [DICE_METADATA_WIDTH-1:0] meta_rsp_payload_q;
-  logic [$bits(mfetch_req.ar.id)-1:0] meta_rsp_id_q;
-
-  logic                       bitstream_rsp_active_q;
-  logic [$clog2(BitstreamBeats+1)-1:0] bitstream_rsp_idx_q;
-  logic [DICE_ADDR_WIDTH-1:0] bitstream_base_addr_q;
-  logic [$bits(bsfetch_req.ar.id)-1:0] bitstream_rsp_id_q;
-
-  // =========================================================================
-  // Helper Functions — metadata & bitstream generation
-  // =========================================================================
-  function automatic pgraph_meta_t metadata_for_pc(
-      input logic [DICE_ADDR_WIDTH-1:0] pc
-  );
-    pgraph_meta_t meta;
-    logic [DICE_ADDR_WIDTH-1:0] second_pc;
-
-    second_pc = StartPc + DICE_METADATA_WIDTH;
-    meta = '0;
-    meta.bitstream_length = BITSTREAM_LENGTH_WIDTH'(NumChunks);
-    meta.lat              = 8'd3;
-
-    unique case (pc)
-      StartPc: begin
-        meta.bitstream_addr       = FirstBitstreamAddr;
-        meta.in_regs_bitmap[0]    = 1'b1;
-        meta.out_regs_bitmap[1]   = 1'b1;
-      end
-      second_pc: begin
-        meta.bitstream_addr       = SecondBitstreamAddr;
-        meta.in_regs_bitmap[2]    = 1'b1;
-        meta.out_regs_bitmap[3]   = 1'b1;
-        meta.branch_meta.is_return = 1'b1;
-      end
-      default: begin
-        meta.bitstream_addr = FirstBitstreamAddr;
-      end
-    endcase
-
-    return meta;
-  endfunction
-
-  function automatic logic [15:0] bitstream_beat_for_addr(
-      input logic [DICE_ADDR_WIDTH-1:0] byte_addr
-  );
-    return byte_addr[15:0] ^ 16'hCAFE;
-  endfunction
-
-  // =========================================================================
-  // DUT
-  // =========================================================================
   dice_frontend u_dut (
-      .clk_i                 (clk),
-      .rst_i                 (rst),
-      .cta_if_inst           (cta_if_inst),
-      .mfetch_req_o          (mfetch_req),
-      .mfetch_resp_i         (mfetch_resp),
-      .bsfetch_req_o         (bsfetch_req),
-      .bsfetch_resp_i        (bsfetch_resp),
-      .fdr_if_o              (fdr_if_inst),
-      .cm0_if_o              (cm0_if),
-      .cm1_if_o              (cm1_if),
-      .eblock_commit_valid_i (eblock_commit_valid_i),
-      .eblock_commit_id_i    (eblock_commit_id_i)
+    .clk_i                 (clk),
+    .rst_i                 (rst),
+    .cta_if_inst           (cta_if_inst),
+    .mfetch_req_o          (mfetch_req),
+    .mfetch_resp_i         (mfetch_resp),
+    .bsfetch_req_o         (bsfetch_req),
+    .bsfetch_resp_i        (bsfetch_resp),
+    .fdr_if_o              (fdr_if_inst),
+    .cm0_if_o              (cm0_if),
+    .cm1_if_o              (cm1_if),
+    .eblock_commit_valid_i (eblock_commit_valid),
+    .eblock_commit_id_i    (eblock_commit_id)
   );
 
-  // =========================================================================
-  // Clock & Timeout
-  // =========================================================================
-  initial begin
-    clk = 1'b0;
-    forever #(ClkPeriod / 2) clk = ~clk;
+  always #(ClkPeriod/2) clk = ~clk;
+
+  int cycle_count = 0;
+  always @(posedge clk) begin
+    cycle_count++;
+    if (cycle_count >= TimeoutCycles) begin
+      $display("[%0t] TIMEOUT after %0d cycles", $time, TimeoutCycles);
+      $finish;
+    end
+  end
+
+  logic                          meta_busy;
+  logic [$clog2(MetaBeats+1)-1:0] meta_beat_idx;
+  logic [$bits(mfetch_req.ar.id)-1:0] meta_txn_id;
+  pgraph_meta_t meta_payload;
+
+  always_comb begin
+    meta_payload = '0;
+    meta_payload.bitstream_addr = BitstreamAddr;
+    meta_payload.bitstream_length = BITSTREAM_LENGTH_WIDTH'((DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1) / DICE_MEM_DATA_WIDTH);
+    meta_payload.lat = 8'd1;
+    meta_payload.in_regs_bitmap[0]  = 1'b1;
+    meta_payload.out_regs_bitmap[1] = 1'b1;
+
+    mfetch_resp = '0;
+    mfetch_resp.ar_ready = !meta_busy;
+    if (meta_busy) begin
+      mfetch_resp.r_valid = 1'b1;
+      mfetch_resp.r.id    = meta_txn_id;
+      mfetch_resp.r.data  = DICE_METADATA_WIDTH'(meta_payload) >> (meta_beat_idx * 16);
+      mfetch_resp.r.last  = (meta_beat_idx == MetaBeats - 1);
+    end
   end
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-      cycle_count <= 0;
-    end else begin
-      cycle_count <= cycle_count + 1;
-      if (cycle_count >= TimeoutCycles) begin
-        $error("TIMEOUT");
-        $finish;
-      end
+      meta_busy <= 1'b0;
+      meta_beat_idx <= '0;
+    end else if (!meta_busy && mfetch_req.ar_valid) begin
+      meta_busy <= 1'b1;
+      meta_beat_idx <= '0;
+      meta_txn_id <= mfetch_req.ar.id;
+    end else if (meta_busy && mfetch_req.r_ready) begin
+      if (mfetch_resp.r.last) meta_busy <= 1'b0;
+      else meta_beat_idx <= meta_beat_idx + 1'b1;
     end
   end
 
-  // =========================================================================
-  // AXI Read Response Models
-  // =========================================================================
-
-  always_comb begin
-    mfetch_resp = '0;
-    mfetch_resp.ar_ready = !meta_rsp_active_q;
-    if (meta_rsp_active_q) begin
-      mfetch_resp.r_valid = 1'b1;
-      mfetch_resp.r.id    = meta_rsp_id_q;
-      mfetch_resp.r.data  = meta_rsp_payload_q[meta_rsp_idx_q*16 +: 16];
-      mfetch_resp.r.last  = (meta_rsp_idx_q == MetaBeats - 1);
-    end
-  end
+  logic                               bs_busy;
+  logic [$clog2(BitstreamBeats+1)-1:0] bs_beat_idx;
+  logic [$bits(bsfetch_req.ar.id)-1:0] bs_txn_id;
 
   always_comb begin
     bsfetch_resp = '0;
-    bsfetch_resp.ar_ready = !bitstream_rsp_active_q;
-    if (bitstream_rsp_active_q) begin
+    bsfetch_resp.ar_ready = !bs_busy;
+    if (bs_busy) begin
       bsfetch_resp.r_valid = 1'b1;
-      bsfetch_resp.r.id    = bitstream_rsp_id_q;
-      bsfetch_resp.r.data  = bitstream_beat_for_addr(
-          bitstream_base_addr_q + DICE_ADDR_WIDTH'(bitstream_rsp_idx_q << 1)
-      );
-      bsfetch_resp.r.last  = (bitstream_rsp_idx_q == BitstreamBeats - 1);
+      bsfetch_resp.r.id    = bs_txn_id;
+      bsfetch_resp.r.data  = 16'(bs_beat_idx);
+      bsfetch_resp.r.last  = (bs_beat_idx == BitstreamBeats - 1);
     end
   end
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-      meta_rsp_active_q      <= 1'b0;
-      meta_rsp_idx_q         <= '0;
-      meta_rsp_payload_q     <= '0;
-      meta_rsp_id_q          <= '0;
-      bitstream_rsp_active_q <= 1'b0;
-      bitstream_rsp_idx_q    <= '0;
-      bitstream_base_addr_q  <= '0;
-      bitstream_rsp_id_q     <= '0;
-    end else begin
-      if (!meta_rsp_active_q && mfetch_req.ar_valid && mfetch_resp.ar_ready) begin
-        meta_rsp_active_q  <= 1'b1;
-        meta_rsp_idx_q     <= '0;
-        meta_rsp_payload_q <= DICE_METADATA_WIDTH'(metadata_for_pc(mfetch_req.ar.addr));
-        meta_rsp_id_q      <= mfetch_req.ar.id;
-      end else if (meta_rsp_active_q && mfetch_resp.r_valid && mfetch_req.r_ready) begin
-        if (mfetch_resp.r.last) begin
-          meta_rsp_active_q <= 1'b0;
-        end else begin
-          meta_rsp_idx_q <= meta_rsp_idx_q + 1'b1;
-        end
-      end
-
-      if (!bitstream_rsp_active_q && bsfetch_req.ar_valid && bsfetch_resp.ar_ready) begin
-        bitstream_rsp_active_q <= 1'b1;
-        bitstream_rsp_idx_q    <= '0;
-        bitstream_base_addr_q  <= bsfetch_req.ar.addr;
-        bitstream_rsp_id_q     <= bsfetch_req.ar.id;
-      end else if (bitstream_rsp_active_q && bsfetch_resp.r_valid && bsfetch_req.r_ready) begin
-        if (bsfetch_resp.r.last) begin
-          bitstream_rsp_active_q <= 1'b0;
-        end else begin
-          bitstream_rsp_idx_q <= bitstream_rsp_idx_q + 1'b1;
-        end
-      end
+      bs_busy <= 1'b0;
+      bs_beat_idx <= '0;
+    end else if (!bs_busy && bsfetch_req.ar_valid) begin
+      bs_busy <= 1'b1;
+      bs_beat_idx <= '0;
+      bs_txn_id <= bsfetch_req.ar.id;
+    end else if (bs_busy && bsfetch_req.r_ready) begin
+      if (bsfetch_resp.r.last) bs_busy <= 1'b0;
+      else bs_beat_idx <= bs_beat_idx + 1'b1;
     end
   end
 
-  // =========================================================================
-  // Helper Tasks
-  // =========================================================================
+  assign fdr_if_inst.ready = 1'b1;
+  logic fdr_seen;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] fdr_eblock_id_capture;
 
-  // Initializes all DUT inputs to safe defaults
-  task automatic init_inputs();
-    cta_if_inst.dispatch_valid  = 1'b0;
-    cta_if_inst.dispatch_data   = '0;
-    cta_if_inst.complete_ready  = 1'b1;
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) fdr_seen <= 1'b0;
+    else if (fdr_if_inst.valid && fdr_if_inst.ready && !fdr_seen) begin
+      fdr_seen <= 1'b1;
+      fdr_eblock_id_capture <= fdr_if_inst.data.schedule_eblock_id;
+    end
+  endL
 
-    fdr_if_inst.ready           = 1'b1;
-
-    eblock_commit_valid_i       = 1'b0;
-    eblock_commit_id_i          = '0;
-  endtask
-
-  // Resets the DUT
-  task automatic reset_dut();
-    rst = 1'b1;
+  task reset_dut();
+    rst <= 1'b1;
     repeat (5) @(posedge clk);
-    rst = 1'b0;
+    rst <= 1'b0;
     @(posedge clk);
   endtask
 
-  // Builds a simple 1x1x1 CTA descriptor with the given start PC
-  task automatic make_cta_desc(
-    input  logic [DICE_ADDR_WIDTH-1:0] start_pc,
-    output dice_cta_desc_t             desc
-  );
-    desc = '0;
-    desc.kernel_desc.grid_size.x = 1;
-    desc.kernel_desc.grid_size.y = 1;
-    desc.kernel_desc.grid_size.z = 1;
-    desc.kernel_desc.thread_count = 1;
-    desc.kernel_desc.start_pc    = start_pc;
-    desc.cta_id                  = '0;
-  endtask
-
-  // Dispatches a CTA — waits for ready, then asserts valid for one full cycle
-  task automatic dispatch_cta(input dice_cta_desc_t desc);
-    cta_if_inst.dispatch_valid = 1'b1;
-    cta_if_inst.dispatch_data  = desc;
-
-    do begin
-      @(posedge clk);
-    end while (!cta_if_inst.dispatch_ready);
-
-    cta_if_inst.dispatch_valid = 1'b0;
-  endtask
-
-  // Commits an eblock execution result
-  task automatic commit_eblock(input logic [EBLOCK_ID_WIDTH-1:0] eblock_id);
-    eblock_commit_id_i    = eblock_id;
-    eblock_commit_valid_i = 1'b1;
-    @(posedge clk);
-    eblock_commit_valid_i = 1'b0;
-    eblock_commit_id_i    = '0;
-  endtask
-
-  // Waits for a CTA completion handshake
-  task automatic wait_cta_complete();
-    do begin
-      @(posedge clk);
-    end while (!(cta_if_inst.complete_valid && cta_if_inst.complete_ready));
-    $display("[%0t] CTA complete id=(%0d,%0d,%0d)", $time,
-             cta_if_inst.complete_cta_id.x,
-             cta_if_inst.complete_cta_id.y,
-             cta_if_inst.complete_cta_id.z);
-  endtask
-
-  // =========================================================================
-  // Stimulus
-  // =========================================================================
-  initial begin
+  task automatic dispatch_cta(input logic [DICE_ADDR_WIDTH-1:0] start_pc);
     dice_cta_desc_t desc;
 
-    $display("tb_dice_frontend_top");
+    desc = '0;
+    desc.kernel_desc.grid_size.x  = 1;
+    desc.kernel_desc.grid_size.y  = 1;
+    desc.kernel_desc.grid_size.z  = 1;
+    desc.kernel_desc.thread_count = 5;
+    desc.kernel_desc.start_pc     = start_pc;
 
-    init_inputs();
+    // Drive request
+    @(posedge clk);
+    cta_if_inst.dispatch_data  <= desc;
+    cta_if_inst.dispatch_valid <= 1'b1;
+
+    // Wait for an actual valid/ready handshake
+    do begin
+      @(posedge clk);
+    end while (!(cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready));
+
+    // Keep valid high for one more full cycle
+    @(posedge clk);
+    cta_if_inst.dispatch_valid <= 1'b0;
+  endtask
+
+  task commit_eblock(input logic [DICE_EBLOCK_ID_WIDTH-1:0] id);
+    @(posedge clk);
+    eblock_commit_valid <= 1'b1;
+    eblock_commit_id    <= id;
+    @(posedge clk);
+    eblock_commit_valid <= 1'b0;
+  endtask
+
+  task wait_cta_complete();
+    forever begin
+      @(posedge clk);
+      if (cta_if_inst.complete_valid && cta_if_inst.complete_ready) break;
+    end
+  endtask
+
+  initial begin
+    cta_if_inst.dispatch_valid <= 1'b0;
+    cta_if_inst.complete_ready <= 1'b1;
+    eblock_commit_valid        <= 1'b0;
+
     reset_dut();
+    
+    dispatch_cta(StartPc);
 
-    make_cta_desc(StartPc, desc);
-    dispatch_cta(desc);
+    wait (fdr_seen);
+    repeat (2) @(posedge clk);
+    commit_eblock(fdr_eblock_id_capture);
 
-    repeat (200) @(posedge clk);
-
-    $display("TB Done");
+    wait_cta_complete();
+    
+    repeat (5) @(posedge clk);
     $finish;
   end
-
-`ifdef FSDB
-  initial begin
-    $fsdbDumpfile("tb_dice_frontend_top.fsdb");
-    $fsdbDumpvars(0, tb_dice_frontend_top, "+struct", "+mda");
-  end
-`endif
 
 endmodule

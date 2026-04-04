@@ -54,12 +54,12 @@ lint:
 	@DICE_HOME=$(DICE_HOME) verilator $(VERILATOR_FLAGS) -f filelist.f
 	@echo "Lint passed."
 
-sim: | $(BUILD_DIR)
+sim-verilator: | $(BUILD_DIR)
 	@echo "Running Verilator sim on $(TB)..."
 	@DICE_HOME=$(DICE_HOME) verilator $(VERILATOR_SIM_FLAGS) -f filelist.f
 	@./obj_dir/V$(TB)
 
-sim-vcs: | $(BUILD_DIR)
+sim: | $(BUILD_DIR)
 	@echo "Running VCS sim with TOP=$(TB)"
 	@cd $(BUILD_DIR) && TB_TOP=$(TB) DICE_HOME=$(DICE_HOME) tclsh ../run_vcs.tcl
 
