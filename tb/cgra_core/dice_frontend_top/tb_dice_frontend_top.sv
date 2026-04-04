@@ -38,19 +38,21 @@ module tb_dice_frontend_top;
     .eblock_commit_id_i    (eblock_commit_id)
   );
 
-  initial clk = 1'b0;
-
-  always #(ClkPeriod/2) clk = ~clk;
+  initial begin
+    clk = 1'b0;
+    forever #(ClkPeriod/2) clk = ~clk;
+  end
 
   int cycle_count;
 
-  initial cycle_count = 0;
-
-  always @(posedge clk) begin
-    cycle_count <= cycle_count + 1;
-    if (cycle_count >= TimeoutCycles) begin
-      $display("[%0t] TIMEOUT after %0d cycles", $time, TimeoutCycles);
-      $finish;
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) cycle_count <= 0;
+    else begin
+      cycle_count <= cycle_count + 1;
+      if (cycle_count >= TimeoutCycles) begin
+        $error("TIMEOUT");
+        $finish;
+      end
     end
   end
 
@@ -175,5 +177,12 @@ module tb_dice_frontend_top;
     repeat (5) @(posedge clk);
     $finish;
   end
+
+`ifdef FSDB
+  initial begin
+    $fsdbDumpfile("tb_dice_frontend_top.fsdb");
+    $fsdbDumpvars(0, tb_dice_frontend_top, "+struct", "+mda");
+  end
+`endif
 
 endmodule
