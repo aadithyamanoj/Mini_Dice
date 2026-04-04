@@ -29,12 +29,12 @@ module tb_dice_frontend_top;
 
   cta_if cta_if_inst ();
 
-  VX_mem_bus_if #(
+  dice_mem_bus_if #(
       .DATA_SIZE(DataSizeBytes),
       .TAG_WIDTH(TagWidth)
   ) metacache_mem_if ();
 
-  VX_mem_bus_if #(
+  dice_mem_bus_if #(
       .DATA_SIZE(DataSizeBytes),
       .TAG_WIDTH(TagWidth)
   ) bitstream_cache_mem_if ();

@@ -7,8 +7,8 @@ module dice_frontend_top
 
     cta_if.slave cta_if_inst,
 
-    VX_mem_bus_if.master metacache_mem_if,
-    VX_mem_bus_if.master bitstream_cache_mem_if,
+    dice_mem_bus_if.master metacache_mem_if,
+    dice_mem_bus_if.master bitstream_cache_mem_if,
 
     fdr_if.master fdr_if_inst,
     cgra_cm_if.master cm0_if,

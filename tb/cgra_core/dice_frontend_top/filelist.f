@@ -12,7 +12,7 @@ ${DICE_HOME}/rtl/dice_define.vh
 ${DICE_HOME}/rtl/dice_pkg.sv
 ${DICE_HOME}/rtl/dice_frontend_pkg.sv
 
-${DICE_HOME}/rtl/interfaces/VX_mem_bus_if.sv
+${DICE_HOME}/rtl/interfaces/dice_mem_bus_if.sv
 ${DICE_HOME}/rtl/interfaces/cta_if.sv
 ${DICE_HOME}/rtl/interfaces/cta_sched_if.sv
 ${DICE_HOME}/rtl/interfaces/cgra_cm_if.sv

@@ -15,6 +15,7 @@ ${DICE_HOME}/rtl/dice_frontend_pkg.sv
 ${DICE_HOME}/rtl/DE_pkg.sv
 
 // ==== DICE interfaces ====
+${DICE_HOME}/rtl/interfaces/dice_mem_bus_if.sv
 ${DICE_HOME}/rtl/interfaces/cta_if.sv
 ${DICE_HOME}/rtl/interfaces/cta_sched_if.sv
 ${DICE_HOME}/rtl/interfaces/fdr_if.sv

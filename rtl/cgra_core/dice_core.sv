@@ -10,8 +10,8 @@ module dice_core
     cta_if.slave cta_if_inst,
 
     // Memory Bus Interfaces
-    VX_mem_bus_if.master metacache_mem_if,
-    VX_mem_bus_if.master bitstream_cache_mem_if,
+    dice_mem_bus_if.master metacache_mem_if,
+    dice_mem_bus_if.master bitstream_cache_mem_if,
 
     // TMCU -> External Memory Interface
     output logic                                                                        tmcu_valid_o,

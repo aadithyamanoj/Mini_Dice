@@ -80,7 +80,7 @@ module fdr_top_syn_wrap
   output logic [EBLOCK_ID_WIDTH-1:0] eblock_flush_id_o
 );
 
-  VX_mem_bus_if #(
+  dice_mem_bus_if #(
     .DATA_SIZE(METACACHE_MEM_DATA_SIZE_P),
     .FLAGS_WIDTH(MEM_FLAGS_WIDTH_P),
     .TAG_WIDTH(TAG_WIDTH),
@@ -88,7 +88,7 @@ module fdr_top_syn_wrap
     .ADDR_WIDTH(METACACHE_MEM_REQ_ADDR_WIDTH_P)
   ) metacache_mem_if ();
 
-  VX_mem_bus_if #(
+  dice_mem_bus_if #(
     .DATA_SIZE(BITSTREAM_MEM_DATA_SIZE_P),
     .FLAGS_WIDTH(MEM_FLAGS_WIDTH_P),
     .TAG_WIDTH(TAG_WIDTH),
