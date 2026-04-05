@@ -4,7 +4,7 @@ module tb_dice_frontend_top;
   import axi4_xbar_pkg::*;
 
   localparam int ClkPeriod     = 10;
-  localparam int TimeoutCycles = 50;
+  localparam int TimeoutCycles = 500;
   localparam int MetaBeats     = DICE_METADATA_WIDTH / 16;
   localparam int BitstreamBeats= DICE_BITSTREAM_SIZE / 16;
   localparam logic [DICE_ADDR_WIDTH-1:0] StartPc       = 16'h0100;

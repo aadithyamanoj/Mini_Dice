@@ -38,8 +38,6 @@ module cta_controller
   assign add_valid_o    = add_cta_fire_q;
   assign add_cta_info_o = cta_if_inst.dispatch_data;
 
-  assign add_cta_thread_count_o = cta_if_inst.dispatch_data.kernel_desc.thread_count;
-
   // SIMT STACK INIT
   assign init_valid_o            = add_cta_fire_q;
   assign init_pc_o               = cta_if_inst.dispatch_data.kernel_desc.start_pc;
@@ -47,12 +45,13 @@ module cta_controller
   assign init_thread_count_o     = cta_if_inst.dispatch_data.kernel_desc.thread_count;
 
 
-  assign add_cta_fire_d = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready;
+  assign add_cta_fire_d = cta_if_inst.dispatch_valid && cta_if_inst.dispatch_ready && ~add_cta_fire_q;
 
   always_ff @(posedge clk_i) begin
     if (rst_i) add_cta_fire_q <= 1'b0;
     else        add_cta_fire_q <= add_cta_fire_d;
   end
+
 
   // Completion Logic
   logic victim_found;

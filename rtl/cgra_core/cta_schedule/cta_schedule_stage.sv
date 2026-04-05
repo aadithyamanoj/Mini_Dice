@@ -62,7 +62,6 @@ module cta_schedule_stage
   logic active_table_out_ready;
   logic active_table_full;
   active_cta_t active_cta_entry;
-  logic [DICE_TID_WIDTH:0] active_table_add_cta_thread_count;
 
   // ---- SIMT init and misc control ----
   logic                                         simt_init_valid;
@@ -88,7 +87,6 @@ module cta_schedule_stage
       .add_valid_o            (active_table_add_valid),
       .add_ready_i            (active_table_add_ready),
       .add_cta_info_o         (active_table_cta_desc),
-      .add_cta_thread_count_o (active_table_add_cta_thread_count),
       .pop_valid_o            (active_table_pop_valid),
       .pop_ready_i            (active_table_pop_ready),
       .active_cta_valid_i     (active_cta_entry.cta_valid),
@@ -110,7 +108,6 @@ module cta_schedule_stage
       .add_ready_o           (active_table_add_ready),
       .add_valid_i           (active_table_add_valid),
       .add_cta_info_i        (active_table_cta_desc),
-      .add_cta_thread_count_i(active_table_add_cta_thread_count),
       .pop_valid_i           (active_table_pop_valid),
       .pop_ready_o           (active_table_pop_ready),
       .out_cta_id_o          (out_cta_id),

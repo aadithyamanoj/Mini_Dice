@@ -9,7 +9,6 @@ module active_cta_table
     output logic           add_ready_o,
     input  logic           add_valid_i,
     input  dice_cta_desc_t add_cta_info_i,
-    input  logic [DICE_TID_WIDTH:0] add_cta_thread_count_i,
 
     // Pop interface
     input  logic           pop_valid_i,
@@ -79,14 +78,8 @@ module active_cta_table
         cta_entry_q.cta_valid        <= 1'b1;
         cta_entry_q.cta_id           <= add_cta_info_i.cta_id;
         cta_entry_q.grid_size        <= add_cta_info_i.kernel_desc.grid_size;
-        cta_entry_q.cta_thread_count <= add_cta_thread_count_i;
       end
     end
   end
-
-
-`ifndef SYNTHESIS
-
-`endif
 
 endmodule
