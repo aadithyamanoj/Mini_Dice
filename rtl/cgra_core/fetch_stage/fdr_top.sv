@@ -95,23 +95,31 @@ module fdr_top
   simt_stack_update_t bh_simt_update;
   assign branch_mask_valid = branch_req_valid_internal;
 
-  // ---- Internal signals: valid checker ----
-  logic clear_prefetch_internal;
+  // ---- Internal signals: branch handler outputs ----
+  logic bh_done_internal;
   logic predict_miss_internal;
 
   // ---- Branch Handler ----
-  branch_handler_no_branches u_branch_handler (
-      .clk_i                        (clk_i),
-      .rst_i                        (rst_i),
-      .branch_predict_info_o        (predict_interface_internal),
-      .branch_meta_i                (branch_meta_internal),
-      .branch_meta_valid_i          (branch_req_valid_internal),
-      .real_active_thread_mask_o    (branch_mask_internal),
-      .cs_active_mask_i             (schedule_data_q.schedule_active_mask),
-      .pc_i                         (schedule_data_q.schedule_next_pc),
-      .update_valid_o               (bh_update_valid),
-      .update_ready_i               (bh_update_ready),
-      .simt_stack_update_o          (bh_simt_update)
+  branch_handler u_branch_handler (
+      .clk_i                           (clk_i),
+      .rst_i                           (rst_i),
+      .branch_predict_info_o           (predict_interface_internal),
+      .branch_meta_i                   (branch_meta_internal),
+      .branch_meta_valid_i             (branch_req_valid_internal),
+      .real_active_thread_mask_o       (branch_mask_internal),
+      .cs_active_mask_i                (schedule_data_q.schedule_active_mask),
+      .pc_i                            (schedule_data_q.schedule_next_pc),
+      .update_valid_o                  (bh_update_valid),
+      .update_ready_i                  (bh_update_ready),
+      .simt_stack_update_o             (bh_simt_update),
+      .pred_regs_i                     (/* TODO: connect predicate registers */),
+      .has_pending_eblock_i            (cta_status_data_i.has_pending_eblock),
+      .unresolved_control_divergence_i (cta_status_data_i.unresolved_control_divergence),
+      .is_prefetch_i                   (schedule_data_q.schedule_prefetch_block),
+      .fire_eblock_i                   (fire_eblock_internal),
+      .simt_stack_pc_i                 (simt_stack_pc),
+      .bh_done_o                       (bh_done_internal),
+      .predict_miss_o                  (predict_miss_internal)
   );
 
   // SIMT stack update wiring (branch_handler → CS stage)
@@ -169,18 +177,12 @@ module fdr_top
   valid_check u_valid_check (
       .barrier_indicator_i(is_barrier_internal),
       .decode_done_i      (branch_mask_valid),
-      .eblock_pc_i        (schedule_data_q.schedule_next_pc),
-      .prefetch_block_i   (schedule_data_q.schedule_prefetch_block),
-      .simt_stack_pc_i    (simt_stack_pc),
+      .bh_done_i          (bh_done_internal),
       .bitstream_loaded_i (done_streaming_internal),
-      .unresolved_div_i   (cta_status_data_i.unresolved_control_divergence),
       .barrier_complete_i (1'b1),
-      .prefetch_cleared_i (1'b0),
       .fdr_valid_o        (fdr_if.valid),
       .ex_ready_i         (fdr_if.ready),
-      .fire_eblock_o      (fire_eblock_internal),
-      .clear_prefetch_o   (clear_prefetch_internal),
-      .predict_miss_o     (predict_miss_internal)
+      .fire_eblock_o      (fire_eblock_internal)
   );
 
   // ---- Eblock flush output (predict-miss → scheduler) ----

@@ -1,3 +1,0 @@
--f common_files.lst
-${DICE_HOME}/dice_new/rtl/cgra_core/fetch_stage/branch_handler/bh_fifo.sv
-tb_bh_fifo.sv
