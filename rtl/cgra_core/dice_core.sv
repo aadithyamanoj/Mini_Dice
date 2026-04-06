@@ -55,8 +55,12 @@ module dice_core
   logic                            bct_pop_valid;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] bct_pop_e_block_id;
   logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] frontend_pred_regs;
+  block_retire_status_t            frontend_brt_info;
+  logic                            frontend_brt_info_write_enable;
 
   assign frontend_pred_regs = '0; //CONNECT TO BACKEND
+  assign frontend_brt_info = '0;
+  assign frontend_brt_info_write_enable = 1'b0;
 
   // =========================================================================
   // Frontend — CTA scheduler + FDR
@@ -79,7 +83,9 @@ module dice_core
       .pred_regs_i          (frontend_pred_regs),
 
       .eblock_commit_valid_i(bct_pop_valid),
-      .eblock_commit_id_i   (bct_pop_e_block_id)
+      .eblock_commit_id_i   (bct_pop_e_block_id),
+      .brt_info_i           (frontend_brt_info),
+      .brt_info_write_enable_i(frontend_brt_info_write_enable)
   );
 
   // =========================================================================

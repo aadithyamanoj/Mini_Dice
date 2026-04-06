@@ -27,8 +27,10 @@ module dice_frontend
     input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
 
     // Block commit table feedback (from backend)
-    input  logic                            eblock_commit_valid_i,
-    input  logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i
+    input logic                       eblock_commit_valid_i,
+    input logic [EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i,
+    input block_retire_status_t       brt_info_i,
+    input logic                       brt_info_write_enable_i
 );
 
   // =========================================================================
@@ -66,8 +68,8 @@ module dice_frontend
       .bh_branch_predict_info_i(bh_branch_predict_info),
       .bh_branch_predict_info_we_i(bh_branch_predict_info_we),
       .cta_status_data_o       (cta_status_data),
-      .brt_info_i              (),
-      .brt_info_write_enable_i (),
+      .brt_info_i              (brt_info_i),
+      .brt_info_write_enable_i (brt_info_write_enable_i),
       .simt_update_valid_i     (simt_update_valid),
       .simt_update_ready_o     (simt_update_ready),
       .simt_update_stack_data_i(simt_update_stack_data),
