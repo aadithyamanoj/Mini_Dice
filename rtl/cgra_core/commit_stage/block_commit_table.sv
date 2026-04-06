@@ -62,13 +62,6 @@ import dice_pkg::*;
         end else begin
             // Handle insert
             if (insert_valid) begin
-                `ifndef SYNTHESIS
-                if (commit_table[insert_e_block_id].valid) begin
-                    $error("Error: Attempting to insert into occupied entry %0d at time %0t",
-                           insert_e_block_id, $time);
-                end
-                `endif
-
                 commit_table[insert_e_block_id].valid <= 1'b1;
                 commit_table[insert_e_block_id].hw_cta_id <= insert_hw_cta_id;
                 commit_table[insert_e_block_id].e_block_id <= insert_e_block_id;
@@ -80,24 +73,10 @@ import dice_pkg::*;
             if (update_valid && commit_table[update_e_block_id].valid) begin
                 if (update_is_write) begin
                     // Update pending writes
-                    `ifndef SYNTHESIS
-                    if (commit_table[update_e_block_id].pending_writes < update_reduce_count) begin
-                        $error("Error: Pending writes underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
-                               update_e_block_id, commit_table[update_e_block_id].pending_writes,
-                               update_reduce_count, $time);
-                    end
-                    `endif
                     commit_table[update_e_block_id].pending_writes <=
                         commit_table[update_e_block_id].pending_writes - update_reduce_count;
                 end else begin
                     // Update pending reads
-                    `ifndef SYNTHESIS
-                    if (commit_table[update_e_block_id].pending_reads < update_reduce_count) begin
-                        $error("Error: Pending reads underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
-                               update_e_block_id, commit_table[update_e_block_id].pending_reads,
-                               update_reduce_count, $time);
-                    end
-                    `endif
                     commit_table[update_e_block_id].pending_reads <=
                         commit_table[update_e_block_id].pending_reads - update_reduce_count;
                 end
@@ -163,24 +142,53 @@ import dice_pkg::*;
     end
 
     // Assertions for verification
-    `ifndef SYNTHESIS
-    // Check that e_block_id matches the table index
-    always_ff @(posedge clk_i) begin
-        if (!rst && insert_valid) begin
-            assert(insert_e_block_id < 2**DICE_EBLOCK_ID_WIDTH) 
-                else $error("Invalid e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d", 
-                           insert_e_block_id, 2**DICE_EBLOCK_ID_WIDTH);
-        end
-        
-        if (!rst && update_valid) begin
-            assert(update_e_block_id < 2**DICE_EBLOCK_ID_WIDTH) 
-                else $error("Invalid update e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d", 
-                           update_e_block_id, 2**DICE_EBLOCK_ID_WIDTH);
-            assert(update_reduce_count <= 4'd8)
-                else $error("Invalid reduce count %0d exceeds maximum of 8",
-                           update_reduce_count);
-        end
-    end
-    `endif
+`ifndef SYNTHESIS
+
+    // No double-insert: target slot must be empty on an insert
+    assert_no_double_insert: assert property (
+        @(posedge clk_i) disable iff (rst)
+        insert_valid |-> !commit_table[insert_e_block_id].valid
+    ) else $error("Error: Attempting to insert into occupied entry %0d at time %0t",
+                  insert_e_block_id, $time);
+
+    // Insert e_block_id must be a valid table index
+    assert_insert_id_in_range: assert property (
+        @(posedge clk_i) disable iff (rst)
+        insert_valid |-> (insert_e_block_id < 2**DICE_EBLOCK_ID_WIDTH)
+    ) else $error("Invalid e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d",
+                  insert_e_block_id, 2**DICE_EBLOCK_ID_WIDTH);
+
+    // Update e_block_id must be a valid table index
+    assert_update_id_in_range: assert property (
+        @(posedge clk_i) disable iff (rst)
+        update_valid |-> (update_e_block_id < 2**DICE_EBLOCK_ID_WIDTH)
+    ) else $error("Invalid update e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d",
+                  update_e_block_id, 2**DICE_EBLOCK_ID_WIDTH);
+
+    // Update reduce count must not exceed the maximum of 8
+    assert_reduce_count_max: assert property (
+        @(posedge clk_i) disable iff (rst)
+        update_valid |-> (update_reduce_count <= 4'd8)
+    ) else $error("Invalid reduce count %0d exceeds maximum of 8", update_reduce_count);
+
+    // Pending writes must not underflow on a write update
+    assert_no_write_underflow: assert property (
+        @(posedge clk_i) disable iff (rst)
+        (update_valid && commit_table[update_e_block_id].valid && update_is_write) |->
+        (commit_table[update_e_block_id].pending_writes >= update_reduce_count)
+    ) else $error("Error: Pending writes underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
+                  update_e_block_id, commit_table[update_e_block_id].pending_writes,
+                  update_reduce_count, $time);
+
+    // Pending reads must not underflow on a read update
+    assert_no_read_underflow: assert property (
+        @(posedge clk_i) disable iff (rst)
+        (update_valid && commit_table[update_e_block_id].valid && !update_is_write) |->
+        (commit_table[update_e_block_id].pending_reads >= update_reduce_count)
+    ) else $error("Error: Pending reads underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
+                  update_e_block_id, commit_table[update_e_block_id].pending_reads,
+                  update_reduce_count, $time);
+
+`endif // SYNTHESIS
 
 endmodule
