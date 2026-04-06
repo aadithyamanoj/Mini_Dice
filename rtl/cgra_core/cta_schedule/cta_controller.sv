@@ -34,9 +34,10 @@ module cta_controller
   
   logic add_cta_fire_d, add_cta_fire_q;
 
-  assign cta_if_inst.dispatch_ready = add_ready_i && init_ready_i;
-  assign add_valid_o    = add_cta_fire_q;
-  assign add_cta_info_o = cta_if_inst.dispatch_data;
+  assign cta_if_inst.dispatch_ready   = add_ready_i && init_ready_i;
+  assign add_valid_o                  = add_cta_fire_q;
+  assign add_cta_info_o               = cta_if_inst.dispatch_data;
+  assign add_cta_thread_count_o       = cta_if_inst.dispatch_data.kernel_desc.thread_count;
 
   // SIMT STACK INIT
   assign init_valid_o            = add_cta_fire_q;
@@ -69,7 +70,6 @@ module cta_controller
 
   // TELL DISPATCHER CTA IS RETURNED
   assign cta_if_inst.complete_valid  = pop_out_valid_i;
-  assign cta_if_inst.complete_cta_id = pop_out_cta_id_i;
 
 
 
