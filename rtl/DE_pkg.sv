@@ -7,6 +7,8 @@ package DE_pkg;
 // =========================================================
 // Dispatcher architecture constants
 // =========================================================
+parameter int NUM_CREDITS      = 24;
+
 parameter int NUM_SCOREBOARDS  = 1;
 parameter int NUM_LANES        = 1;
 parameter int NUM_MEM_PORTS    = `DICE_CGRA_MEM_PORTS;

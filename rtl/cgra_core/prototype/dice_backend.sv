@@ -49,13 +49,15 @@ module dice_backend
 
     // CGRA Scan chain / bitstream interface
     input  logic       en_i,
-    input  logic       cgra_v_i,
-    input  logic       cgra_bank_i,
-    output logic       cgra_ready_o,
-    output logic       cgra_busy_o,
-    output logic [1:0] cgra_bank_valid_o,
+    input  logic       prog_v_i,
+    input  logic       cm_bank_i,
+    output logic       prog_ready_o,
+    output logic       prog_busy_o,
+    output logic [1:0] cm_bank_valid_o,
     output logic       cgra_prog_dout_o,
     output logic       cgra_prog_we_o,
+
+    // memory interface will promote ldst axi interface
     output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_o_0,
     output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_o_0,
     output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_o_1,
@@ -83,6 +85,7 @@ module dice_backend
   logic                                            dispatch_fifo_empty;
   logic        [     NUM_LANES*DICE_TID_WIDTH-1:0] rd_tid;
   logic        [                    NUM_LANES-1:0] rd_tid_valid;
+  logic        [                    NUM_LANES-1:0] disp_tid_valid;  
   logic        [              DICE_TOTAL_REGS-1:0] full_reg_bitmap_lo;
   fdr_t                                            fdr_data_li;
 
@@ -108,6 +111,12 @@ module dice_backend
   // One-hot TID bitmap for scoreboard writeback release
   logic        [DICE_NUM_MAX_THREADS_PER_CORE-1:0] cgra_wb_tid_bitmap;
   assign cgra_wb_tid_bitmap = cgra_v_lo ? (DICE_NUM_MAX_THREADS_PER_CORE'(1'b1) << cgra_tid_lo) : '0;
+
+
+
+  //credit signals
+
+  logic cgra_credit_ready_lo;
 
   // Block Commit Table
   logic                               bct_insert_valid;
@@ -143,6 +152,7 @@ module dice_backend
   // Dispatcher
   // =========================================================================
 
+  wire disp_pop = cgra_credit_ready_lo && !prog_busy_o;
   dispatcher u_dispatcher (
       .clk_i(clk_i),
       .rst(rst_i),
@@ -152,14 +162,36 @@ module dice_backend
       .fetch_done(fdr_valid_i),
       .wb_valid(cgra_v_lo),  // CGRA writeback pulse (lat-shifted RF read valid)
       .wb_tid_bitmap(cgra_wb_tid_bitmap),  // one-hot TID that just completed
-      .dispatch_fifo_pop(rf_rd_ready_lo),  // advance FIFO when RF ctrl can accept next TID
+      .dispatch_fifo_pop(disp_pop),  // advance FIFO when we have credits
       .dispatch_fifo_empty(dispatch_fifo_empty),
       .dispatch_tid_o(rd_tid),
-      .dispatch_valid_o(rd_tid_valid),
+      .dispatch_valid_o(disp_tid_valid),
       .full_reg_bitmap_o(full_reg_bitmap_lo),
       .dispatcher_busy(dispatch_busy),
       .dispatcher_done(dispatcher_done)
   );
+
+
+  // =========================================================================
+  // Credit counter 
+  // =========================================================================
+
+    bsg_ready_to_credit_flow_converter #
+      (.credit_initial_p(NUM_CREDITS)
+      ,.credit_max_val_p(NUM_CREDITS)
+      )
+      credit_ctrl
+      (.clk_i   (clk_i)
+      ,.reset_i (reset_i)
+
+      ,.v_i     (disp_tid_valid) 
+      ,.ready_o (cgra_credit_ready_lo)
+
+      ,.v_o       (rd_tid_valid)
+      ,.credit_i  () // from ldst fifo
+      );
+
+
 
   // =========================================================================
   // Register File + CGRA Wrapper
@@ -177,11 +209,11 @@ module dice_backend
       .cm1_chunk_en_i(cgra_cm1_chunk_en_i),
 
       // Scan chain / bitstream
-      .v_i         (cgra_v_i),
-      .bank_i      (cgra_bank_i),
-      .ready_o     (cgra_ready_o),
-      .busy_o      (cgra_busy_o),
-      .bank_valid_o(cgra_bank_valid_o),
+      .v_i         (prog_v_i),
+      .bank_i      (cm_bank_i),
+      .ready_o     (prog_ready_o),
+      .busy_o      (prog_busy_o),
+      .bank_valid_o(cm_bank_valid_o),
       .prog_dout_o (cgra_prog_dout_o),
       .prog_we_o   (cgra_prog_we_o),
 
@@ -224,6 +256,12 @@ module dice_backend
       , .dbg_rf_rd_valid_o(dbg_rf_rd_valid_o)
 `endif
   );
+
+  // =========================================================================
+  // LDST FIFO
+  // =========================================================================
+
+
 
   // =========================================================================
   // Block Commit Table
