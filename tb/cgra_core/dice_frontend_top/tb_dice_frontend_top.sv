@@ -1,3 +1,15 @@
+// Test cases:
+// 1. [IMPLEMENTED] Add CTA, fetch metadata + bitstream, complete backend handshake, eblock commit
+// 2. Straight-line kernel: multiple eblocks back-to-back (no branches)
+// 3. Unconditional branch: all threads take same jump, SIMT stack stays flat
+// 4. Divergent branch: threads split, reconverge at barrier — SIMT stack push/pop
+// 5. Nested divergence: branch inside branch — full SIMT stack depth exercise
+// 6. Return (is_return): CTA complete triggers after last eblock commits
+// 7. CTA reject / back-pressure: dispatch_valid asserted when core already full
+// 8. Branch misprediction: eblock_flush causes re-fetch from corrected PC
+// 9. Bitstream back-pressure: bsfetch_resp ar_ready de-asserted mid-fetch
+// 10. Timeout/stall: verify TimeoutCycles fires if pipeline stalls permanently
+
 module tb_dice_frontend_top;
   import dice_pkg::*;
   import dice_frontend_pkg::*;
@@ -23,26 +35,30 @@ module tb_dice_frontend_top;
   logic cm_wr_valid_o;
   logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i;
 
-  logic                            eblock_commit_valid;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id;
-  dice_cta_desc_t                  dispatch_desc;
+  logic                         eblock_commit_valid;
+  logic [EBLOCK_ID_WIDTH-1:0]   eblock_commit_id;
+  block_retire_status_t         brt_info;
+  logic                         brt_info_write_enable;
+  dice_cta_desc_t               dispatch_desc;
 
   dice_frontend u_dut (
-    .clk_i                 (clk),
-    .rst_i                 (rst),
-    .cta_if_inst           (cta_if_inst),
-    .mfetch_req_o          (mfetch_req),
-    .mfetch_resp_i         (mfetch_resp),
-    .bsfetch_req_o         (bsfetch_req),
-    .bsfetch_resp_i        (bsfetch_resp),
-    .fdr_if_o              (fdr_if_inst),
-    .cm_wr_buffer_o        (cm_wr_buffer_o),
-    .cm_wr_addr_o          (cm_wr_addr_o),
-    .cm_wr_data_o          (cm_wr_data_o),
-    .cm_wr_valid_o         (cm_wr_valid_o),
-    .pred_regs_i           (pred_regs_i),
-    .eblock_commit_valid_i (eblock_commit_valid),
-    .eblock_commit_id_i    (eblock_commit_id)
+    .clk_i                    (clk),
+    .rst_i                    (rst),
+    .cta_if_inst              (cta_if_inst),
+    .mfetch_req_o             (mfetch_req),
+    .mfetch_resp_i            (mfetch_resp),
+    .bsfetch_req_o            (bsfetch_req),
+    .bsfetch_resp_i           (bsfetch_resp),
+    .fdr_if_o                 (fdr_if_inst),
+    .cm_wr_buffer_o           (cm_wr_buffer_o),
+    .cm_wr_addr_o             (cm_wr_addr_o),
+    .cm_wr_data_o             (cm_wr_data_o),
+    .cm_wr_valid_o            (cm_wr_valid_o),
+    .pred_regs_i              (pred_regs_i),
+    .eblock_commit_valid_i    (eblock_commit_valid),
+    .eblock_commit_id_i       (eblock_commit_id),
+    .brt_info_i               (brt_info),
+    .brt_info_write_enable_i  (brt_info_write_enable)
   );
 
   initial begin
@@ -90,8 +106,9 @@ module tb_dice_frontend_top;
     meta_payload.bitstream_addr = BitstreamAddr;
     meta_payload.bitstream_length = BITSTREAM_LENGTH_WIDTH'((DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1) / DICE_MEM_DATA_WIDTH);
     meta_payload.lat = 8'd1;
-    meta_payload.in_regs_bitmap[0]  = 1'b1;
-    meta_payload.out_regs_bitmap[1] = 1'b1;
+    meta_payload.in_regs_bitmap[0]   = 1'b1;
+    meta_payload.out_regs_bitmap[1]  = 1'b1;
+    meta_payload.branch_meta.is_return = 1'b1;
 
     mfetch_resp = '0;
     mfetch_resp.ar_ready = !meta_busy;
@@ -163,7 +180,9 @@ module tb_dice_frontend_top;
 
   task reset_dut();
     rst = 1'b1;
-    pred_regs_i = '0;
+    pred_regs_i           = '0;
+    brt_info              = '0;
+    brt_info_write_enable = 1'b0;
     repeat (5) @(posedge clk);
     rst = 1'b0;
     @(posedge clk);
