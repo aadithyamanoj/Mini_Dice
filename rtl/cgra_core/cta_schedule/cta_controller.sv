@@ -14,7 +14,6 @@ module cta_controller
     input  logic                       add_ready_i,
     output logic                       add_valid_o,
     output dice_cta_desc_t             add_cta_info_o,
-    output logic [DICE_TID_WIDTH:0]    add_cta_thread_count_o,
     input  logic                       active_cta_valid_i,     // Single-entry valid flag
     input  logic                       pop_out_valid_i,
     input  dice_cta_id_t               pop_out_cta_id_i,
@@ -37,7 +36,6 @@ module cta_controller
   assign cta_if_inst.dispatch_ready   = add_ready_i && init_ready_i;
   assign add_valid_o                  = add_cta_fire_q;
   assign add_cta_info_o               = cta_if_inst.dispatch_data;
-  assign add_cta_thread_count_o       = cta_if_inst.dispatch_data.kernel_desc.thread_count;
 
   // SIMT STACK INIT
   assign init_valid_o            = add_cta_fire_q;

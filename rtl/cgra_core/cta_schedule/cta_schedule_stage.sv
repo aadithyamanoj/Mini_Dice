@@ -87,7 +87,6 @@ module cta_schedule_stage
       .add_valid_o            (active_table_add_valid),
       .add_ready_i            (active_table_add_ready),
       .add_cta_info_o         (active_table_cta_desc),
-      .add_cta_thread_count_o  (simt_init_thread_count),
       .pop_valid_o            (active_table_pop_valid),
       .pop_ready_i            (active_table_pop_ready),
       .active_cta_valid_i     (active_cta_entry.cta_valid),
