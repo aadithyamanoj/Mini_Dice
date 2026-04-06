@@ -496,7 +496,7 @@ module dice_backend
   // =========================================================================
 
   block_commit_table u_block_commit_table (
-      .clk                 (clk_i),
+      .clk_i               (clk_i),
       .rst                 (rst_i),
 
       // Insert interface

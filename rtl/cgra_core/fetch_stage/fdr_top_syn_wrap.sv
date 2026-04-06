@@ -1,6 +1,7 @@
 module fdr_top_syn_wrap
   import dice_pkg::*;
   import dice_frontend_pkg::*;
+  import axi4_xbar_pkg::*;
 #(
   parameter int TAG_WIDTH                      = DICE_ADDR_WIDTH,
   parameter int BITSTREAM_SIZE                 = DICE_BITSTREAM_SIZE,
@@ -11,9 +12,7 @@ module fdr_top_syn_wrap
   parameter int METACACHE_MEM_REQ_ADDR_WIDTH_P = MEM_ADDR_WIDTH_P - $clog2(METACACHE_MEM_DATA_SIZE_P),
   parameter int BITSTREAM_MEM_DATA_SIZE_P      = DICE_MEM_DATA_WIDTH / 8,
   parameter int BITSTREAM_MEM_DATA_WIDTH_P     = BITSTREAM_MEM_DATA_SIZE_P * 8,
-  parameter int BITSTREAM_MEM_REQ_ADDR_WIDTH_P = MEM_ADDR_WIDTH_P - $clog2(BITSTREAM_MEM_DATA_SIZE_P),
-  parameter int CM_DATA_WIDTH_P                = DICE_MEM_DATA_WIDTH,
-  parameter int CM_CHUNK_COUNT_P               = (DICE_BITSTREAM_SIZE + CM_DATA_WIDTH_P - 1) / CM_DATA_WIDTH_P
+  parameter int BITSTREAM_MEM_REQ_ADDR_WIDTH_P = MEM_ADDR_WIDTH_P - $clog2(BITSTREAM_MEM_DATA_SIZE_P)
 ) (
   input logic clk_i,
   input logic rst_i,
@@ -31,6 +30,7 @@ module fdr_top_syn_wrap
   // Scheduler status/SIMT context -> FDR
   input simt_stack_status_entry_t simt_status_i,
   input dice_cta_status_t         cta_status_data_i,
+  input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
 
   // Meta cache bus (wrapper environment <-> FDR)
   input  logic                                      metacache_req_ready_i,
@@ -69,11 +69,11 @@ module fdr_top_syn_wrap
   input  logic                            simt_update_ready_i,
   output simt_stack_update_t              simt_update_stack_data_o,
 
-  // CGRA configuration memory outputs
-  output logic [CM_DATA_WIDTH_P-1:0]  cm0_data_o,
-  output logic [CM_CHUNK_COUNT_P-1:0] cm0_chunk_en_o,
-  output logic [CM_DATA_WIDTH_P-1:0]  cm1_data_o,
-  output logic [CM_CHUNK_COUNT_P-1:0] cm1_chunk_en_o,
+  // Direct write interface to configuration memory DFFs
+  output logic                              cm_wr_buffer_o,
+  output logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o,
+  output logic [AxiDataWidth-1:0]           cm_wr_data_o,
+  output logic                              cm_wr_valid_o,
 
   // Eblock flush notification
   output logic                       eblock_flush_valid_o,
@@ -98,9 +98,6 @@ module fdr_top_syn_wrap
 
   cta_sched_if         schedule_if_inst ();
   fdr_if               fdr_if_inst ();
-
-  cgra_cm_if           cm0_if_inst ();
-  cgra_cm_if           cm1_if_inst ();
 
   assign schedule_if_inst.valid = schedule_valid_i;
   assign schedule_if_inst.data  = schedule_data_i;
@@ -140,11 +137,6 @@ module fdr_top_syn_wrap
   assign bitstream_req_flags_o = bitstream_cache_mem_if.req_data.flags;
   assign bitstream_req_tag_o   = bitstream_cache_mem_if.req_data.tag.uuid;
 
-  assign cm0_data_o     = cm0_if_inst.data;
-  assign cm0_chunk_en_o = cm0_if_inst.chunk_en;
-  assign cm1_data_o     = cm1_if_inst.data;
-  assign cm1_chunk_en_o = cm1_if_inst.chunk_en;
-
   fdr_top #(
     .TAG_WIDTH(TAG_WIDTH),
     .BITSTREAM_SIZE(BITSTREAM_SIZE)
@@ -156,14 +148,17 @@ module fdr_top_syn_wrap
     .schedule_if(schedule_if_inst),
     .fdr_if(fdr_if_inst),
     .simt_status_i(simt_status_i),
+    .pred_regs_i(pred_regs_i),
     .bh_branch_predict_info_o(bh_branch_predict_info_o),
     .bh_branch_predict_info_we_o(bh_branch_predict_info_we_o),
     .cta_status_data_i(cta_status_data_i),
     .simt_update_valid_o(simt_update_valid_o),
     .simt_update_ready_i(simt_update_ready_i),
     .simt_update_stack_data_o(simt_update_stack_data_o),
-    .cm0_if(cm0_if_inst),
-    .cm1_if(cm1_if_inst),
+    .cm_wr_buffer_o(cm_wr_buffer_o),
+    .cm_wr_addr_o(cm_wr_addr_o),
+    .cm_wr_data_o(cm_wr_data_o),
+    .cm_wr_valid_o(cm_wr_valid_o),
     .eblock_flush_valid_o(eblock_flush_valid_o),
     .eblock_flush_id_o(eblock_flush_id_o)
   );

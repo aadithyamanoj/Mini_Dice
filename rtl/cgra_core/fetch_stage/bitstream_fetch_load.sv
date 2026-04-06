@@ -1,12 +1,10 @@
+// NO OPTION TO STOP IN PROGRESS LOAD
+
 module bitstream_fetch_load
   import dice_pkg::*;
   import dice_frontend_pkg::*;
   import axi4_xbar_pkg::*;
-#(
-    parameter int CHUNK_SIZE    = DICE_MEM_DATA_WIDTH,                           // 512 bits per CM chunk
-    parameter int BITSTREAM_SIZE = DICE_BITSTREAM_SIZE,  // 2048 bits max
-    parameter int NUM_CHUNKS    = (BITSTREAM_SIZE + CHUNK_SIZE - 1) / CHUNK_SIZE // 4 chunks
-) (
+(
     input logic clk_i,
     input logic rst_i,
 
@@ -17,12 +15,10 @@ module bitstream_fetch_load
     input logic                       meta_valid_i,
     input logic [DICE_ADDR_WIDTH-1:0] bitstream_addr_i,
 
-    //to cgra buffers
-    output logic [CHUNK_SIZE-1:0]  cm0_data_o,
-    output logic [NUM_CHUNKS-1:0]  cm0_chunk_en_o,
-
-    output logic [CHUNK_SIZE-1:0]  cm1_data_o,
-    output logic [NUM_CHUNKS-1:0]  cm1_chunk_en_o,
+    // Direct write interface to configuration memory DFFs
+    output logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o,
+    output logic [AxiDataWidth-1:0]           cm_wr_data_o,
+    output logic                              cm_wr_valid_o,
 
     //to valid checker
     output logic done_streaming_o,
@@ -35,11 +31,9 @@ module bitstream_fetch_load
     output logic cm_num_o
 );
 
-  localparam int CounterBits   = $clog2(NUM_CHUNKS + 1);
-  localparam int WordsPerChunk = CHUNK_SIZE / 16;                   // 32 words of 16 bits per chunk
-  localparam int TotalWords    = BITSTREAM_SIZE / 16;               // 128 words total
-  localparam int WordIdxBits   = $clog2(WordsPerChunk);
-  localparam int BurstLen      = TotalWords - 1;                    // 127 (ar_len value)
+  localparam int CmAddrWidth = $clog2(DICE_BITSTREAM_SIZE);
+  localparam int BeatCount   = DICE_BITSTREAM_SIZE / AxiDataWidth;
+  localparam int BurstLen    = BeatCount - 1;
 
   typedef enum logic [1:0] {
     StateIdle,
@@ -53,25 +47,12 @@ module bitstream_fetch_load
   logic [DICE_ADDR_WIDTH-1:0] cm0_addr_q, cm1_addr_q, cm0_addr_d, cm1_addr_d;
   logic cm_select_q, cm_select_d;  // 0 = cm0, 1 = cm1
 
-  logic [CounterBits-1:0] chunk_count_q, chunk_count_d;  // chunks streamed so far
-
-  // 512-bit assembly buffer: pack 32 × 16-bit words into one CM chunk
-  logic [CHUNK_SIZE-1:0] word_buf_q, word_buf_d;
-
-  // Index of current 16-bit word within the active chunk (0–31)
-  logic [WordIdxBits-1:0] word_idx_q, word_idx_d;
-
   logic [DICE_ADDR_WIDTH-1:0] addr_q, addr_d;
   logic cm0_valid_d, cm1_valid_d, cm0_valid_q, cm1_valid_q;
+  logic [CmAddrWidth-1:0] cm_wr_addr_q, cm_wr_addr_d;
 
   // AR transaction has been accepted; R phase is now active
   logic ar_sent_q, ar_sent_d;
-
-  logic [NUM_CHUNKS-1:0] load_chunk_en_d;
-  logic [NUM_CHUNKS-1:0] load_chunk_en_q;
-
-  // Registered chunk data snapshot written to CM on chunk boundary
-  logic [CHUNK_SIZE-1:0] cm_data_q, cm_data_d;
 
   // Byte address alias for done_streaming_o comparison
   logic [DICE_ADDR_WIDTH-1:0] bitstream_addr_dec;
@@ -83,66 +64,43 @@ module bitstream_fetch_load
   assign ar_fire = bs_req_o.ar_valid && bs_resp_i.ar_ready;
   assign r_fire  = bs_resp_i.r_valid && bs_req_o.r_ready;
 
-  // Chunk boundary: last word in a chunk, or final word of burst
-  logic chunk_done;
-  assign chunk_done = r_fire && ((word_idx_q == WordIdxBits'(WordsPerChunk - 1)) ||
-                                  bs_resp_i.r.last);
-
-  assign done_streaming_o = (cm_select_q == 1'b0 && cm0_valid_q &&
-                             cm0_addr_q == bitstream_addr_dec) ||
-                            (cm_select_q == 1'b1 && cm1_valid_q &&
-                             cm1_addr_q == bitstream_addr_dec);
+  logic cm0_hit, cm1_hit;
+  assign cm0_hit = cm0_valid_q && (cm0_addr_q == bitstream_addr_dec);
+  assign cm1_hit = cm1_valid_q && (cm1_addr_q == bitstream_addr_dec);
+  assign done_streaming_o = cm0_hit || cm1_hit;
 
   always_comb begin
-    state_d         = state_q;
-    chunk_count_d   = chunk_count_q;
-    cm_select_d     = cm_select_q;
-    cm0_addr_d      = cm0_addr_q;
-    cm1_addr_d      = cm1_addr_q;
-    word_buf_d      = word_buf_q;
-    word_idx_d      = word_idx_q;
-    addr_d          = addr_q;
-    cm0_valid_d     = cm0_valid_q;
-    cm1_valid_d     = cm1_valid_q;
-    ar_sent_d       = ar_sent_q;
-    load_chunk_en_d = '0;
-    cm_data_d       = cm_data_q;
-    cm0_chunk_en_o  = '0;
-    cm1_chunk_en_o  = '0;
-
-    // Route chunk enables to selected buffer
-    if (cm_select_q == 1'b0) begin
-      cm0_chunk_en_o = load_chunk_en_q;
-    end else begin
-      cm1_chunk_en_o = load_chunk_en_q;
-    end
+    state_d       = state_q;
+    cm_select_d   = cm_select_q;
+    cm0_addr_d    = cm0_addr_q;
+    cm1_addr_d    = cm1_addr_q;
+    addr_d        = addr_q;
+    cm0_valid_d   = cm0_valid_q;
+    cm1_valid_d   = cm1_valid_q;
+    ar_sent_d     = ar_sent_q;
+    cm_wr_addr_d  = cm_wr_addr_q;
+    cm_wr_addr_o  = cm_wr_addr_q;
+    cm_wr_data_o  = bs_resp_i.r.data;
+    cm_wr_valid_o = 1'b0;
 
     unique case (state_q)
       StateIdle: begin
         ar_sent_d   = 1'b0;
-        word_idx_d  = '0;
         if (meta_valid_i) begin
           if (!done_streaming_o) begin
-            if (cm_select_q == 1'b0 && cm1_valid_q && cm1_addr_q == bitstream_addr_dec) begin
-              cm_select_d = 1'b1;
-            end else if (cm_select_q == 1'b1 && cm0_valid_q &&
-                         cm0_addr_q == bitstream_addr_dec) begin
-              cm_select_d = 1'b0;
+            if (cm0_valid_q || cm1_valid_q) cm_select_d = ~cm_select_q;
+            else cm_select_d = 1'b0;
+
+            addr_d       = bitstream_addr_i;
+            state_d      = StateStreaming;
+            cm_wr_addr_d = '0;
+
+            if (cm_select_d == 1'b0) begin
+              cm0_addr_d  = bitstream_addr_dec;
+              cm0_valid_d = 1'b0;
             end else begin
-              if (cm0_valid_q || cm1_valid_q) cm_select_d = ~cm_select_q;
-              else cm_select_d = 1'b0;
-
-              addr_d        = bitstream_addr_i;
-              state_d       = StateStreaming;
-              chunk_count_d = '0;
-
-              if (cm_select_d == 1'b0) begin
-                cm0_addr_d  = bitstream_addr_dec;
-                cm0_valid_d = 1'b0;
-              end else begin
-                cm1_addr_d  = bitstream_addr_dec;
-                cm1_valid_d = 1'b0;
-              end
+              cm1_addr_d  = bitstream_addr_dec;
+              cm1_valid_d = 1'b0;
             end
           end
         end
@@ -150,35 +108,24 @@ module bitstream_fetch_load
 
       StateStreaming: begin
         if (flush_i) begin
-          state_d   = StateIdle;
-          ar_sent_d = 1'b0;
-          word_idx_d = '0;
-          chunk_count_d = '0;
+          state_d      = StateIdle;
+          ar_sent_d    = 1'b0;
+          cm_wr_addr_d = '0;
         end else if (!ar_sent_q) begin
           // AR phase: assert ar_valid until ar_ready
           if (ar_fire) begin
             ar_sent_d = 1'b1;
           end
         end else begin
-          // R phase: pack 16-bit beats into chunk buffer
           if (r_fire) begin
-            word_buf_d[word_idx_q*16 +: 16] = bs_resp_i.r.data;
-          end
-
-          if (chunk_done) begin
-            // Capture completed chunk and pulse chunk enable
-            cm_data_d       = word_buf_d;
-            load_chunk_en_d = ({{(NUM_CHUNKS-1){1'b0}}, 1'b1} << chunk_count_q);
-            chunk_count_d   = chunk_count_q + 1'b1;
-            word_idx_d      = '0;
-            word_buf_d      = '0;
+            cm_wr_valid_o = 1'b1;
+            cm_wr_addr_o  = cm_wr_addr_q;
+            cm_wr_addr_d  = cm_wr_addr_q + CmAddrWidth'(AxiDataWidth);
 
             if (bs_resp_i.r.last) begin
               state_d   = StateDone;
               ar_sent_d = 1'b0;
             end
-          end else if (r_fire) begin
-            word_idx_d = word_idx_q + 1'b1;
           end
         end
       end
@@ -198,33 +145,25 @@ module bitstream_fetch_load
 
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
-      state_q         <= StateIdle;
-      chunk_count_q   <= '0;
-      cm_select_q     <= 1'b0;
-      word_buf_q      <= '0;
-      word_idx_q      <= '0;
-      cm_data_q       <= '0;
-      cm0_addr_q      <= '0;
-      cm1_addr_q      <= '0;
-      addr_q          <= '0;
-      cm0_valid_q     <= 1'b0;
-      cm1_valid_q     <= 1'b0;
-      load_chunk_en_q <= '0;
-      ar_sent_q       <= 1'b0;
+      state_q       <= StateIdle;
+      cm_select_q   <= 1'b0;
+      cm0_addr_q    <= '0;
+      cm1_addr_q    <= '0;
+      addr_q        <= '0;
+      cm0_valid_q   <= 1'b0;
+      cm1_valid_q   <= 1'b0;
+      cm_wr_addr_q  <= '0;
+      ar_sent_q     <= 1'b0;
     end else begin
-      state_q         <= state_d;
-      chunk_count_q   <= chunk_count_d;
-      cm0_addr_q      <= cm0_addr_d;
-      cm1_addr_q      <= cm1_addr_d;
-      word_buf_q      <= word_buf_d;
-      word_idx_q      <= word_idx_d;
-      cm_data_q       <= cm_data_d;
-      cm_select_q     <= cm_select_d;
-      addr_q          <= addr_d;
-      cm0_valid_q     <= cm0_valid_d;
-      cm1_valid_q     <= cm1_valid_d;
-      load_chunk_en_q <= load_chunk_en_d;
-      ar_sent_q       <= ar_sent_d;
+      state_q       <= state_d;
+      cm0_addr_q    <= cm0_addr_d;
+      cm1_addr_q    <= cm1_addr_d;
+      cm_select_q   <= cm_select_d;
+      addr_q        <= addr_d;
+      cm0_valid_q   <= cm0_valid_d;
+      cm1_valid_q   <= cm1_valid_d;
+      cm_wr_addr_q  <= cm_wr_addr_d;
+      ar_sent_q     <= ar_sent_d;
     end
   end
 
@@ -254,10 +193,6 @@ module bitstream_fetch_load
     bs_req_o.b_ready  = 1'b1;
   end
 
-  // CM data outputs: use registered snapshot
-  assign cm0_data_o = cm_data_q;
-  assign cm1_data_o = cm_data_q;
-
-  assign cm_num_o = cm_select_q;
+  assign cm_num_o = cm0_hit ? 1'b0 : (cm1_hit ? 1'b1 : cm_select_q);
 
 endmodule

@@ -19,9 +19,12 @@ module dice_frontend
     // FDR output to backend
     fdr_if.master fdr_if_o,
 
-    // CGRA config memory interfaces
-    cgra_cm_if.master cm0_if_o,
-    cgra_cm_if.master cm1_if_o,
+    // Direct write interface to configuration memory DFFs
+    output logic                              cm_wr_buffer_o,
+    output logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o,
+    output logic [AxiDataWidth-1:0]           cm_wr_data_o,
+    output logic                              cm_wr_valid_o,
+    input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
 
     // Block commit table feedback (from backend)
     input  logic                            eblock_commit_valid_i,
@@ -84,14 +87,17 @@ module dice_frontend
       .schedule_if(schedule_if),
       .fdr_if(fdr_if_o),
       .simt_status_i(simt_status),
+      .pred_regs_i(pred_regs_i),
       .bh_branch_predict_info_o(bh_branch_predict_info),
       .bh_branch_predict_info_we_o(bh_branch_predict_info_we),
       .cta_status_data_i(cta_status_data),
       .simt_update_valid_o(simt_update_valid),
       .simt_update_ready_i(simt_update_ready),
       .simt_update_stack_data_o(simt_update_stack_data),
-      .cm0_if(cm0_if_o),
-      .cm1_if(cm1_if_o),
+      .cm_wr_buffer_o(cm_wr_buffer_o),
+      .cm_wr_addr_o(cm_wr_addr_o),
+      .cm_wr_data_o(cm_wr_data_o),
+      .cm_wr_valid_o(cm_wr_valid_o),
       .eblock_flush_valid_o(eblock_flush_valid),
       .eblock_flush_id_o   (eblock_flush_id)
   );

@@ -17,7 +17,11 @@ module tb_dice_frontend_top;
   slv_req_t  mfetch_req, bsfetch_req;
   slv_resp_t mfetch_resp, bsfetch_resp;
   fdr_if fdr_if_inst ();
-  cgra_cm_if cm0_if (), cm1_if ();
+  logic cm_wr_buffer_o;
+  logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o;
+  logic [AxiDataWidth-1:0] cm_wr_data_o;
+  logic cm_wr_valid_o;
+  logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i;
 
   logic                            eblock_commit_valid;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id;
@@ -32,8 +36,11 @@ module tb_dice_frontend_top;
     .bsfetch_req_o         (bsfetch_req),
     .bsfetch_resp_i        (bsfetch_resp),
     .fdr_if_o              (fdr_if_inst),
-    .cm0_if_o              (cm0_if),
-    .cm1_if_o              (cm1_if),
+    .cm_wr_buffer_o        (cm_wr_buffer_o),
+    .cm_wr_addr_o          (cm_wr_addr_o),
+    .cm_wr_data_o          (cm_wr_data_o),
+    .cm_wr_valid_o         (cm_wr_valid_o),
+    .pred_regs_i           (pred_regs_i),
     .eblock_commit_valid_i (eblock_commit_valid),
     .eblock_commit_id_i    (eblock_commit_id)
   );
@@ -156,6 +163,7 @@ module tb_dice_frontend_top;
 
   task reset_dut();
     rst = 1'b1;
+    pred_regs_i = '0;
     repeat (5) @(posedge clk);
     rst = 1'b0;
     @(posedge clk);

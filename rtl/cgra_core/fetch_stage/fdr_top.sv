@@ -20,6 +20,7 @@ module fdr_top
 
     // SIMT stack status
     input simt_stack_status_entry_t simt_status_i,
+    input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
 
     // Branch prediction outputs (to CS stage)
     output branch_predict_interface_t bh_branch_predict_info_o,
@@ -31,9 +32,11 @@ module fdr_top
     input logic                             simt_update_ready_i,
     output simt_stack_update_t              simt_update_stack_data_o,
 
-    // CGRA configuration memory interfaces
-    cgra_cm_if.master cm0_if,
-    cgra_cm_if.master cm1_if,
+    // Direct write interface to configuration memory DFFs
+    output logic                              cm_wr_buffer_o,
+    output logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o,
+    output logic [AxiDataWidth-1:0]           cm_wr_data_o,
+    output logic                              cm_wr_valid_o,
 
     // Eblock flush notification (predict-miss → scheduler)
     output logic                       eblock_flush_valid_o,
@@ -83,17 +86,20 @@ module fdr_top
   logic [BITSTREAM_LENGTH_WIDTH-1:0] bitstream_length;
   logic                              bitstream_addr_valid_internal;
   logic                              done_streaming_internal;
+  logic                              cm_num_internal;
 
   // ---- Internal signals: branch handler ----
   branch_meta_t branch_meta_internal;
   logic         branch_mask_valid;
   logic         branch_req_valid_internal;
   logic         is_barrier_internal;
+  logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] branch_handler_pred_regs;
 
   logic         bh_update_valid;
   logic         bh_update_ready;
   simt_stack_update_t bh_simt_update;
   assign branch_mask_valid = branch_req_valid_internal;
+  assign branch_handler_pred_regs = pred_regs_i;
 
   // ---- Internal signals: branch handler outputs ----
   logic bh_done_internal;
@@ -112,7 +118,7 @@ module fdr_top
       .update_valid_o                  (bh_update_valid),
       .update_ready_i                  (bh_update_ready),
       .simt_stack_update_o             (bh_simt_update),
-      .pred_regs_i                     (/* TODO: connect predicate registers */),
+      .pred_regs_i                     (branch_handler_pred_regs),
       .has_pending_eblock_i            (cta_status_data_i.has_pending_eblock),
       .unresolved_control_divergence_i (cta_status_data_i.unresolved_control_divergence),
       .is_prefetch_i                   (schedule_data_q.schedule_prefetch_block),
@@ -163,15 +169,17 @@ module fdr_top
       .flush_i         (predict_miss_internal),
       .meta_valid_i    (bitstream_addr_valid_internal),
       .bitstream_addr_i(bitstream_addr),
-      .cm0_data_o      (cm0_if.data),
-      .cm0_chunk_en_o  (cm0_if.chunk_en),
-      .cm1_data_o      (cm1_if.data),
-      .cm1_chunk_en_o  (cm1_if.chunk_en),
+      .cm_wr_addr_o    (cm_wr_addr_o),
+      .cm_wr_data_o    (cm_wr_data_o),
+      .cm_wr_valid_o   (cm_wr_valid_o),
       .done_streaming_o(done_streaming_internal),
       .bs_req_o        (bsfetch_req_o),
       .bs_resp_i       (bsfetch_resp_i),
-      .cm_num_o        (fdr_if.data.loaded_buffer)
+      .cm_num_o        (cm_num_internal)
   );
+
+  assign cm_wr_buffer_o = cm_num_internal;
+  assign fdr_if.data.loaded_buffer = cm_num_internal;
 
   // ---- Valid Checker ----
   valid_check u_valid_check (
