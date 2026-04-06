@@ -41,6 +41,7 @@ ${DICE_HOME}/rtl/cgra_core/fetch_stage/valid_check.sv
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/meta_fetch.sv
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/bitstream_fetch_load.sv
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/decode.sv
+${DICE_HOME}/rtl/cgra_core/fetch_stage/branch_handler.sv
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/branch_handler_no_branches.sv
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/fdr_top.sv
 
