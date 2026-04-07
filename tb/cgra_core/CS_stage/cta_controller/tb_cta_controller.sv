@@ -15,9 +15,8 @@ module tb_cta_controller;
   logic clk;
   logic rst;
 
-  // Interfaces
-  cta_dispatch_if dispatch_if();
-  cta_complete_if complete_if();
+  // Interface
+  cta_if cta_if_inst();
 
   // Active CTA table interface
   logic                                             pop_valid_o;
@@ -61,8 +60,7 @@ module tb_cta_controller;
   cta_controller u_dut (
       .clk_i                  (clk),
       .rst_i                  (rst),
-      .dispatch_if            (dispatch_if.slave),
-      .complete_if            (complete_if.master),
+      .cta_if_inst            (cta_if_inst),
       .pop_valid_o            (pop_valid_o),
       .pop_hw_cta_id_o        (pop_hw_cta_id_o),
       .pop_ready_i            (pop_ready_i),
@@ -93,9 +91,9 @@ module tb_cta_controller;
 
   task automatic reset_dut();
     rst                    = 1'b1;
-    dispatch_if.valid      = 1'b0;
-    dispatch_if.data       = '0;
-    complete_if.ready      = 1'b1;
+    cta_if_inst.dispatch_valid = 1'b0;
+    cta_if_inst.dispatch_data  = '0;
+    cta_if_inst.complete_ready = 1'b1;
     pop_ready_i            = 1'b1;
     add_ready_i            = 1'b1;
     next_empty_cta_index_i = '0;
@@ -129,13 +127,13 @@ module tb_cta_controller;
 
     next_empty_cta_index_i = '0;
 
-    wait (dispatch_if.ready == 1'b1);
-    dispatch_if.data  = desc;
-    dispatch_if.valid = 1'b1;
+    wait (cta_if_inst.dispatch_ready == 1'b1);
+    cta_if_inst.dispatch_data  = desc;
+    cta_if_inst.dispatch_valid = 1'b1;
     @(posedge clk);
 
-    assert (dispatch_if.ready == 1'b1)
-      else $fatal(1, "dispatch_if.ready not high");
+    assert (cta_if_inst.dispatch_ready == 1'b1)
+      else $fatal(1, "cta_if_inst.dispatch_ready not high");
     assert (add_valid_o == 1'b1)
       else $fatal(1, "add_valid_o not asserted");
     assert (init_valid_o == 1'b1)
@@ -145,7 +143,7 @@ module tb_cta_controller;
     assert (init_hw_cta_id_o == next_empty_cta_index_i)
       else $fatal(1, "init_hw_cta_id_o mismatch");
 
-    dispatch_if.valid = 1'b0;
+    cta_if_inst.dispatch_valid = 1'b0;
 
     $display("PASS: dispatch -> add/init handshake");
 `ifdef MODELSIM

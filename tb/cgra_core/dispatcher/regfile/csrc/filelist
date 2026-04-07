@@ -7,7 +7,7 @@ DOTLIBS=/data/eda_tools/synopsys/tools/vcs/X-2025.06/linux64/lib/libvirsim.so /d
 # will be overwritten the next time VCS is run
 DPI_ALLOW_MAIN_SO=
 VCS_LIBEXT=
-XTRN_OBJS=/usr/lib64/libnuma.so.1 
+XTRN_OBJS=
 
 DPI_WRAPPER_OBJS = 
 DPI_STUB_OBJS = 
@@ -29,4 +29,4 @@ SHARED_OBJ_SO=
 
 
 
-VLOG_OBJS=$(XTRN_OBJS) $(VCS_OBJS) $(CU_OBJS) $(VCS_ARC0) $(DPI_WRAPPER_OBJS) $(VCS_INCR_OBJS) $(SHARED_OBJ_SO) $(HSOPT_OBJS)    
+VLOG_OBJS= $(VCS_OBJS) $(CU_OBJS) $(VCS_ARC0) $(XTRN_OBJS) $(DPI_WRAPPER_OBJS) $(VCS_INCR_OBJS) $(SHARED_OBJ_SO) $(HSOPT_OBJS)    

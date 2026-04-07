@@ -16,10 +16,9 @@ module tb_cta_schedule_stage;
   logic rst;
 
   // Interface Instances
-  cta_dispatch_if      dispatch_if();
-  cta_complete_if      complete_if();
+  cta_if               cta_if_inst();
   cta_sched_if         schedule_if();
-  simt_stack_status_if simt_status_if();
+  simt_stack_status_entry_t simt_status;
 
   // Additional inputs (not in interfaces)
   logic                       eblock_commit_valid_i;
@@ -51,8 +50,7 @@ module tb_cta_schedule_stage;
   cta_schedule_stage u_dut (
       .clk_i                  (clk),
       .rst_i                  (rst),
-      .cta_dispatch_if        (dispatch_if),
-      .cta_complete_if        (complete_if),
+      .cta_if_inst            (cta_if_inst),
       .schedule_if            (schedule_if),
       .eblock_commit_valid_i  (eblock_commit_valid_i),
       .eblock_commit_id_i     (eblock_commit_id_i),
@@ -68,7 +66,7 @@ module tb_cta_schedule_stage;
       .simt_update_stack_data_i(simt_update_stack_data_i),
       .simt_update_hw_cta_id_i(simt_update_hw_cta_id_i),
       .simt_update_hw_cta_size_i(simt_update_hw_cta_size_i),
-      .simt_status_if         (simt_status_if)
+      .simt_status_o          (simt_status)
   );
 
   initial begin
@@ -79,10 +77,10 @@ module tb_cta_schedule_stage;
   task automatic reset_dut();
     rst = 1'b1;
 
-    dispatch_if.valid = 1'b0;
-    dispatch_if.data  = '0;
+    cta_if_inst.dispatch_valid = 1'b0;
+    cta_if_inst.dispatch_data  = '0;
 
-    complete_if.ready = 1'b1;
+    cta_if_inst.complete_ready = 1'b1;
     schedule_if.ready = 1'b0;
 
     eblock_commit_valid_i = 1'b0;
@@ -126,14 +124,14 @@ module tb_cta_schedule_stage;
     desc.cta_id.z = '0;
 
     // Dispatch a single CTA when ready
-    wait (dispatch_if.ready == 1'b1);
-    dispatch_if.data  = desc;
-    dispatch_if.valid = 1'b1;
+    wait (cta_if_inst.dispatch_ready == 1'b1);
+    cta_if_inst.dispatch_data  = desc;
+    cta_if_inst.dispatch_valid = 1'b1;
     @(posedge clk);
-    dispatch_if.valid = 1'b0;
+    cta_if_inst.dispatch_valid = 1'b0;
 
     // Wait for SIMT stack to report valid before checking schedule output
-    wait (simt_status_if.status[0].valid == 1'b1);
+    wait (simt_status.valid == 1'b1);
 
     // Wait for a scheduled eblock and check expected fields
     wait (schedule_if.valid == 1'b1);
@@ -147,18 +145,12 @@ module tb_cta_schedule_stage;
     @(posedge clk);
 
     $display("PASS: scheduled one CTA");
-`ifdef MODELSIM
-    $stop;
-`else
-    $finish;
-`endif
-  end
-
-`ifdef VCD
-  initial begin
-    $dumpfile("tb_cta_schedule_stage.vcd");
-    $dumpvars(0, tb_cta_schedule_stage);
-  end
-`endif
+ 
+ `ifdef FSDB
+    initial begin
+      $dumpfile("tb_cta_schedule_stage.fsdb");
+      $dumpvars(0, tb_cta_schedule_stage,  "+struct", "+mda");
+    end
+ `endif
 
 endmodule

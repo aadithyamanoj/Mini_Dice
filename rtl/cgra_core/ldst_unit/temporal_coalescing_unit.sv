@@ -1,7 +1,11 @@
+`include "dice_pkg.sv"
+
 module temporal_coalescing_unit
 import dice_pkg::*;
+#(parameter MAP = DICE_NUMBER_OF_MAX_COALESCED_COMMANDS * DICE_BASE_ADDRESS_OFFSET
+)
 (   
-    input logic clk,                     // Clock signal
+    input logic clk_i,                     // Clock signal
     input logic rst,                    // Active high reset signal
     
     //input memory commands
@@ -28,7 +32,7 @@ import dice_pkg::*;
     output logic [DICE_ADDR_WIDTH-1:0] outcmd_address,     // Address for the command
     output logic [1:0] outcmd_size,        // Size of the command (e.g., 00=1B, 01=2B, 10=4B, 11=8B)
     output logic [DICE_MAX_REG_WIDTH-1:0] outcmd_ld_dest_reg,  // Load destination register
-    output logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] outcmd_address_map, //map from tid bitmap to address_offset
+    output logic [MAP-1:0] outcmd_address_map, //map from tid bitmap to address_offset
    
     input logic outcmd_ready                   // Ready signal to control flow
 );
@@ -83,7 +87,7 @@ import dice_pkg::*;
     assign incmd_base_address = {incmd_address[DICE_ADDR_WIDTH-1:DICE_BASE_ADDRESS_OFFSET], {DICE_BASE_ADDRESS_OFFSET{1'b0}}};
 
     // Interval counter logic - only counts when there are active buffers
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clk_i) begin
         if (rst) begin
             interval_counter <= '0;
         end else begin
@@ -116,7 +120,7 @@ import dice_pkg::*;
     // Generate coalesce buffer instances
     // NOTE: Parameters removed as the module now imports dice_pkg directly
     memory_cmd_coalesce_buffer coalesce_buffer_inst (
-        .clk(clk),
+        .clk_i(clk_i),
         .rst(rst),
         .clear(buffer_clear),
         .update_new(buffer_update_new),
@@ -148,7 +152,7 @@ import dice_pkg::*;
         .DATA_WIDTH(total_output_cmd_width),
         .DEPTH(4)
     ) output_fifo (
-        .clk(clk),
+        .clk_i(clk_i),
         .rst(rst),
         .push(buffer_clear),
         .push_data({buffer_outcmd_block_id, 

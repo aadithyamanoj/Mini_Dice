@@ -93,6 +93,7 @@ always_comb begin
     UPDATE_STATUS: begin
         update_state_d = IDLE;
     end
+    default: update_state_d = IDLE;
   endcase
 end
 

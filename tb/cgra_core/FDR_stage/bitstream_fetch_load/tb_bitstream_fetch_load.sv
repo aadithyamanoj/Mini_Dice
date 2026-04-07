@@ -1,25 +1,35 @@
 // =============================================================================
-// Testbench: tb_bitstream_fetch_load.sv (simplified happy-path)
+// Testbench: tb_bitstream_fetch_load.sv
 // =============================================================================
 
 `timescale 1ns / 1ps
-`include "VX_define.vh"
 
 module tb_bitstream_fetch_load;
   import dice_pkg::*;
   import dice_frontend_pkg::*;
+  import axi4_xbar_pkg::*;
 
-  localparam int ClkPeriod = 10;
-  localparam int TimeoutCycles = 2000;
-  localparam int TagWidth = DICE_ADDR_WIDTH;
-  localparam int BitstreamSize = DICE_BITSTREAM_SIZE;
-  localparam int ChunkSize = VX_gpu_pkg::VX_MEM_DATA_WIDTH;
-  localparam int NumChunks = (BitstreamSize + ChunkSize - 1) / ChunkSize;
+  localparam int ClkPeriod      = 10;
+  localparam int TimeoutCycles  = 3000;
+  localparam int BeatBits       = AxiDataWidth;
+  localparam int BitstreamBeats = DICE_BITSTREAM_SIZE / BeatBits;
+  localparam int CmAddrWidth    = $clog2(DICE_BITSTREAM_SIZE);
 
   logic clk;
   logic rst;
 
   int cycle_count;
+
+  logic                            flush_i;
+  logic                            meta_valid_i;
+  logic [DICE_ADDR_WIDTH-1:0]      bitstream_addr_i;
+  logic [CmAddrWidth-1:0]          cm_wr_addr_o;
+  logic [BeatBits-1:0]             cm_wr_data_o;
+  logic                            cm_wr_valid_o;
+  logic                            done_streaming_o;
+  logic                            cm_num_o;
+  slv_req_t                        bs_req_o;
+  slv_resp_t                       bs_resp_i;
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) cycle_count <= 0;
@@ -31,36 +41,18 @@ module tb_bitstream_fetch_load;
     end
   end
 
-  // DUT Signals
-  logic                       flush_i;
-  logic                       meta_valid_i;
-  logic [DICE_ADDR_WIDTH-1:0] bitstream_addr_i;
-  logic [ChunkSize-1:0]       cm0_data_o;
-  logic [NumChunks-1:0]       cm0_chunk_en_o;
-  logic [ChunkSize-1:0]       cm1_data_o;
-  logic [NumChunks-1:0]       cm1_chunk_en_o;
-  logic                       done_streaming_o;
-  logic                       cm_num_o;
-
-  VX_mem_bus_if #(
-      .DATA_SIZE(VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8),
-      .TAG_WIDTH(TagWidth)
-  ) cache_bus_if ();
-
-  bitstream_fetch_load #(
-      .TAG_WIDTH(TagWidth)
-  ) u_dut (
+  bitstream_fetch_load u_dut (
       .clk_i           (clk),
       .rst_i           (rst),
       .flush_i         (flush_i),
       .meta_valid_i    (meta_valid_i),
       .bitstream_addr_i(bitstream_addr_i),
-      .cm0_data_o      (cm0_data_o),
-      .cm0_chunk_en_o  (cm0_chunk_en_o),
-      .cm1_data_o      (cm1_data_o),
-      .cm1_chunk_en_o  (cm1_chunk_en_o),
+      .cm_wr_addr_o    (cm_wr_addr_o),
+      .cm_wr_data_o    (cm_wr_data_o),
+      .cm_wr_valid_o   (cm_wr_valid_o),
       .done_streaming_o(done_streaming_o),
-      .cache_bus_if    (cache_bus_if),
+      .bs_req_o        (bs_req_o),
+      .bs_resp_i       (bs_resp_i),
       .cm_num_o        (cm_num_o)
   );
 
@@ -70,43 +62,135 @@ module tb_bitstream_fetch_load;
   end
 
   task automatic reset_dut();
-    rst                    = 1'b1;
-    flush_i                = 1'b0;
-    meta_valid_i           = 1'b0;
-    bitstream_addr_i       = '0;
-    cache_bus_if.req_ready = 1'b1;
-    cache_bus_if.rsp_valid = 1'b0;
-    cache_bus_if.rsp_data  = '0;
+    rst              = 1'b1;
+    flush_i          = 1'b0;
+    meta_valid_i     = 1'b0;
+    bitstream_addr_i = '0;
+    bs_resp_i        = '0;
+    bs_resp_i.ar_ready = 1'b1;
     repeat (5) @(posedge clk);
     rst = 1'b0;
     @(posedge clk);
   endtask
 
-  initial begin
-    $display("tb_bitstream_fetch_load (happy-path)");
-
-    reset_dut();
-
-    bitstream_addr_i = 32'h0000_2000;
+  task automatic issue_load(input logic [DICE_ADDR_WIDTH-1:0] addr);
+    bitstream_addr_i = addr;
     meta_valid_i     = 1'b1;
     @(posedge clk);
     meta_valid_i     = 1'b0;
+  endtask
 
-    for (int i = 0; i < NumChunks; i++) begin
-      wait (cache_bus_if.req_valid == 1'b1);
+  task automatic send_bitstream(
+    input logic expected_buffer,
+    input int   seed
+  );
+    logic [BeatBits-1:0] expected_data;
+
+    wait (bs_req_o.ar_valid);
+    for (int i = 0; i < BitstreamBeats; i++) begin
+      wait (bs_req_o.r_ready);
+      expected_data    = BeatBits'(seed + i);
+      bs_resp_i.r_valid = 1'b1;
+      bs_resp_i.r.data  = expected_data;
+      bs_resp_i.r.last  = (i == BitstreamBeats - 1);
+      #1;
+      assert (cm_wr_valid_o)
+        else $fatal(1, "cm_wr_valid_o not asserted on beat %0d", i);
+      assert (cm_num_o == expected_buffer)
+        else $fatal(1, "cm_num_o mismatch on beat %0d", i);
+      assert (cm_wr_addr_o == CmAddrWidth'(i * BeatBits))
+        else $fatal(1, "cm_wr_addr_o mismatch on beat %0d", i);
+      assert (cm_wr_data_o == expected_data)
+        else $fatal(1, "cm_wr_data_o mismatch on beat %0d", i);
       @(posedge clk);
-      cache_bus_if.rsp_valid = 1'b1;
-      cache_bus_if.rsp_data.tag  = cache_bus_if.req_data.tag;
-      cache_bus_if.rsp_data.data = '0;
+      bs_resp_i.r_valid = 1'b0;
+      bs_resp_i.r.last  = 1'b0;
+      bs_resp_i.r.data  = '0;
+    end
+  endtask
+
+  initial begin
+    logic first_buffer;
+    logic second_buffer;
+    logic restart_buffer;
+
+    $display("tb_bitstream_fetch_load");
+
+    reset_dut();
+
+    issue_load(32'h0000_2000);
+    wait (bs_req_o.ar_valid);
+    first_buffer = cm_num_o;
+    send_bitstream(first_buffer, 16'h0100);
+
+    wait (done_streaming_o);
+    assert (cm_num_o == first_buffer)
+      else $fatal(1, "resident buffer mismatch after initial load");
+
+    issue_load(32'h0000_2000);
+    repeat (3) begin
       @(posedge clk);
-      cache_bus_if.rsp_valid = 1'b0;
+      assert (!bs_req_o.ar_valid)
+        else $fatal(1, "resident hit unexpectedly re-issued a fetch");
+      assert (!cm_wr_valid_o)
+        else $fatal(1, "resident hit unexpectedly wrote CM data");
+      assert (cm_num_o == first_buffer)
+        else $fatal(1, "resident hit selected wrong buffer");
     end
 
-    wait (done_streaming_o == 1'b1);
-    assert (done_streaming_o == 1'b1)
-      else $fatal(1, "done_streaming_o not asserted");
+    issue_load(32'h0000_2400);
+    wait (bs_req_o.ar_valid);
+    second_buffer = cm_num_o;
+    assert (second_buffer != first_buffer)
+      else $fatal(1, "second bitstream did not toggle buffers");
+    send_bitstream(second_buffer, 16'h0200);
 
-    $display("PASS: bitstream loaded");
+    wait (done_streaming_o);
+    assert (cm_num_o == second_buffer)
+      else $fatal(1, "resident buffer mismatch after second load");
+
+    issue_load(32'h0000_2800);
+    wait (bs_req_o.ar_valid);
+    repeat (4) begin
+      wait (bs_req_o.r_ready);
+      bs_resp_i.r_valid = 1'b1;
+      bs_resp_i.r.data  = BeatBits'(16'h0300);
+      bs_resp_i.r.last  = 1'b0;
+      #1;
+      assert (cm_wr_valid_o)
+        else $fatal(1, "cm write missing before flush");
+      @(posedge clk);
+      bs_resp_i.r_valid = 1'b0;
+      bs_resp_i.r.data  = '0;
+    end
+
+    flush_i = 1'b1;
+    @(posedge clk);
+    flush_i = 1'b0;
+
+    repeat (2) @(posedge clk);
+    assert (!done_streaming_o)
+      else $fatal(1, "flushed transfer incorrectly reported resident");
+
+    issue_load(32'h0000_2800);
+    wait (bs_req_o.ar_valid);
+    restart_buffer = cm_num_o;
+    wait (bs_req_o.r_ready);
+    bs_resp_i.r_valid = 1'b1;
+    bs_resp_i.r.data  = BeatBits'(16'h0400);
+    bs_resp_i.r.last  = 1'b0;
+    #1;
+    assert (cm_wr_valid_o)
+      else $fatal(1, "cm write missing after restart");
+    assert (cm_wr_addr_o == '0)
+      else $fatal(1, "cm write address did not restart at zero");
+    assert (cm_num_o == restart_buffer)
+      else $fatal(1, "restart buffer changed during first beat");
+    @(posedge clk);
+    bs_resp_i.r_valid = 1'b0;
+    bs_resp_i.r.data  = '0;
+
+    $display("PASS: bitstream loader direct-write path");
 `ifdef MODELSIM
     $stop;
 `else

@@ -62,39 +62,39 @@ package dice_frontend_pkg;
 
   //stage borders
   typedef struct packed {
-    logic [DICE_HW_CTA_ID_WIDTH-1:0]             schedule_hw_cta_id;
     logic [DICE_ADDR_WIDTH-1:0]                  schedule_next_pc;
     logic [EBLOCK_ID_WIDTH-1:0]                  schedule_eblock_id;
     thread_mask_t                                schedule_active_mask;  // Initial mask from scheduler
     logic                                        schedule_prefetch_block;
     dice_cta_id_t                                schedule_cta_id;
     dice_grid_size_t                             schedule_grid_size;
+<<<<<<< HEAD
     dice_cta_size_t                              schedule_cta_size;
     logic [DICE_KERNEL_ID_WIDTH-1:0]             schedule_kernel_id;
     logic [DICE_SMEM_SIZE_WIDTH-1:0]             schedule_smem_per_cta;
-    cta_size_e                                   schedule_hw_cta_size;
     logic [DICE_TID_WIDTH:0]                     schedule_cta_thread_count;  // Exact number of threads
+=======
+>>>>>>> origin/merging
   } schedule_eblock_t;
 
 
   typedef struct packed {
+<<<<<<< HEAD
     // IDs
-    logic [DICE_HW_CTA_ID_WIDTH-1:0]          schedule_hw_cta_id;
+=======
+>>>>>>> origin/merging
     logic [EBLOCK_ID_WIDTH-1:0]               schedule_eblock_id;
     dice_cta_id_t                             schedule_cta_id;
-    logic [DICE_KERNEL_ID_WIDTH-1:0]          schedule_kernel_id;
-
-    // Geometry & resources
     dice_grid_size_t                          schedule_grid_size;
+<<<<<<< HEAD
     dice_cta_size_t                           schedule_cta_size;
-    cta_size_e                                schedule_hw_cta_size;
     logic [DICE_SMEM_SIZE_WIDTH-1:0]          schedule_smem_per_cta;
     logic [DICE_TID_WIDTH:0]                  schedule_cta_thread_count; // Exact number of threads
 
     // Execution state
+=======
+>>>>>>> origin/merging
     logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] real_active_mask;
-
-    // Metadata
     fdr_meta_t                                metadata;
     logic                                     loaded_buffer;
   } fdr_t;
@@ -105,28 +105,24 @@ package dice_frontend_pkg;
     logic                            cta_valid;
     dice_cta_id_t                    cta_id;
     dice_grid_size_t                 grid_size;
+<<<<<<< HEAD
     dice_cta_size_t                  cta_size;
     logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
     logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
-    cta_size_e                       hw_cta_size;
     logic [DICE_TID_WIDTH:0]         cta_thread_count; // Exact number of threads in this CTA
+=======
+>>>>>>> origin/merging
   } active_cta_t;
 
 
-
   typedef struct packed {
-    logic [DICE_CTA_ID_WIDTH:0] hw_cta_id;
     logic                       is_prefetch;
     logic [DICE_ADDR_WIDTH-1:0] predict_pc;
   } cta_status_t;
 
   typedef struct packed {
-    logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id;
-    cta_size_e                       hw_cta_size;             // CTA_SIZE_1/2/4
     logic                            update_with_divergence;  // 0 = no divergence, 1 = with divergence
     logic [DICE_ADDR_WIDTH-1:0]      update_next_pc;          // No divergence: next PC
-
-    // Divergence case inputs (only used when update_with_divergence = 1)
     thread_mask_t                    predicate_regs_value;
     logic [DICE_ADDR_WIDTH-1:0]      branch_not_taken_pc;
     logic [DICE_ADDR_WIDTH-1:0]      branch_reconvergence_pc;
@@ -135,7 +131,6 @@ package dice_frontend_pkg;
   typedef struct packed {
       // CTA info
       logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id;
-      cta_size_e                       cta_size;
       logic                            branch_ena;
       logic                            branch_uni;
       logic [DICE_ADDR_WIDTH-1:0]      branch_taken_pc;
@@ -166,16 +161,5 @@ package dice_frontend_pkg;
     logic                              empty;
     logic                              full;
   } simt_stack_status_entry_t;
-
-
-
-  typedef struct packed {
-    logic                            clear_divergence_valid;
-    logic [DICE_HW_CTA_ID_WIDTH-1:0] clear_divergence_cta_id;
-    logic                            clear_prefetch_valid;
-    logic [DICE_HW_CTA_ID_WIDTH-1:0] clear_prefetch_hw_cta_id;
-    logic                            predict_miss_flush;
-  } branch_control_t;
-
 
 endpackage

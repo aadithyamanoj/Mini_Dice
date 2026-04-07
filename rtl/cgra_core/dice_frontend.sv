@@ -2,6 +2,7 @@
 module dice_frontend
   import dice_pkg::*;
   import dice_frontend_pkg::*;
+  import axi4_xbar_pkg::*;
 (
     input logic clk_i,
     input logic rst_i,
@@ -9,20 +10,27 @@ module dice_frontend
     // External CTA interface
     cta_if.slave cta_if_inst,
 
-    // Memory Bus Interfaces
-    VX_mem_bus_if.master metacache_mem_if,
-    VX_mem_bus_if.master bitstream_cache_mem_if,
+    // AXI4 read master ports to the fetch memory system
+    output slv_req_t  mfetch_req_o,
+    input  slv_resp_t mfetch_resp_i,
+    output slv_req_t  bsfetch_req_o,
+    input  slv_resp_t bsfetch_resp_i,
 
     // FDR output to backend
     fdr_if.master fdr_if_o,
 
-    // CGRA config memory interfaces
-    cgra_cm_if.master cm0_if_o,
-    cgra_cm_if.master cm1_if_o,
+    // Direct write interface to configuration memory DFFs
+    output logic                              cm_wr_buffer_o,
+    output logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o,
+    output logic [AxiDataWidth-1:0]           cm_wr_data_o,
+    output logic                              cm_wr_valid_o,
+    input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
 
     // Block commit table feedback (from backend)
-    input  logic                            eblock_commit_valid_i,
-    input  logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i
+    input logic                       eblock_commit_valid_i,
+    input logic [EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i,
+    input block_retire_status_t       brt_info_i,
+    input logic                       brt_info_write_enable_i
 );
 
   // =========================================================================
@@ -60,8 +68,8 @@ module dice_frontend
       .bh_branch_predict_info_i(bh_branch_predict_info),
       .bh_branch_predict_info_we_i(bh_branch_predict_info_we),
       .cta_status_data_o       (cta_status_data),
-      .brt_info_i              (),
-      .brt_info_write_enable_i (),
+      .brt_info_i              (brt_info_i),
+      .brt_info_write_enable_i (brt_info_write_enable_i),
       .simt_update_valid_i     (simt_update_valid),
       .simt_update_ready_o     (simt_update_ready),
       .simt_update_stack_data_i(simt_update_stack_data),
@@ -74,19 +82,24 @@ module dice_frontend
   fdr_top u_fdr_top (
       .clk_i(clk_i),
       .rst_i(rst_i),
-      .metacache_mem_if(metacache_mem_if),
-      .bitstream_cache_mem_if(bitstream_cache_mem_if),
+      .mfetch_req_o(mfetch_req_o),
+      .mfetch_resp_i(mfetch_resp_i),
+      .bsfetch_req_o(bsfetch_req_o),
+      .bsfetch_resp_i(bsfetch_resp_i),
       .schedule_if(schedule_if),
       .fdr_if(fdr_if_o),
       .simt_status_i(simt_status),
+      .pred_regs_i(pred_regs_i),
       .bh_branch_predict_info_o(bh_branch_predict_info),
       .bh_branch_predict_info_we_o(bh_branch_predict_info_we),
       .cta_status_data_i(cta_status_data),
       .simt_update_valid_o(simt_update_valid),
       .simt_update_ready_i(simt_update_ready),
       .simt_update_stack_data_o(simt_update_stack_data),
-      .cm0_if(cm0_if_o),
-      .cm1_if(cm1_if_o),
+      .cm_wr_buffer_o(cm_wr_buffer_o),
+      .cm_wr_addr_o(cm_wr_addr_o),
+      .cm_wr_data_o(cm_wr_data_o),
+      .cm_wr_valid_o(cm_wr_valid_o),
       .eblock_flush_valid_o(eblock_flush_valid),
       .eblock_flush_id_o   (eblock_flush_id)
   );
