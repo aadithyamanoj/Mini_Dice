@@ -21,6 +21,7 @@ module simt_stack_controller
     input logic init_valid_i,
     input logic [DICE_ADDR_WIDTH-1:0] init_pc_i,
     input logic [DICE_ADDR_WIDTH-1:0] init_reconvergence_pc_i,
+    input logic [DICE_TID_WIDTH:0] init_thread_count_i,
     output logic init_ready_o,
 
     // ============== STACK TOP ==============
@@ -77,6 +78,7 @@ module simt_stack_controller
   // Captured input registers - from CTA controller (init)
   logic [DICE_ADDR_WIDTH-1:0] init_pc_q;
   logic [DICE_ADDR_WIDTH-1:0] init_reconvergence_pc_q;
+  logic [DICE_TID_WIDTH:0]    init_thread_count_q;
 
   // Stack control signals
   logic stack_push;
@@ -106,10 +108,6 @@ module simt_stack_controller
   // Operation control signals - registered
   logic need_pop_q, need_modify_top_q, need_push_first_q, need_push_second_q;
 
-  // Stack status signals
-  logic stack_empty_internal;
-  logic stack_full_internal;
-
   // Stack entry signals - combinational (computed in always_comb)
   stack_entry_t new_top_entry_next;
   stack_entry_t push_entry_1_next;
@@ -123,6 +121,9 @@ module simt_stack_controller
   // ===========================================================================
   // DERIVED SIGNAL ASSIGNMENTS
   // ===========================================================================
+
+  logic stack_empty_internal;
+  logic stack_full_internal;
 
   // Output status signals - direct pass-through from single stack
   assign stack_empty_o = stack_empty_internal;
@@ -390,7 +391,10 @@ module simt_stack_controller
         stack_push = 1'b1;
         stack_push_next_pc = init_pc_q;
         stack_push_reconvergence_pc = init_reconvergence_pc_q;
-        stack_push_active_mask = '1;  // All threads active
+        stack_push_active_mask = thread_mask_t'(
+            {1'b0, {SIMT_STACK_THREAD_WIDTH{1'b1}}}
+            >> (SIMT_STACK_THREAD_WIDTH - init_thread_count_q)
+        );
       end
 
       default: ;
@@ -485,8 +489,9 @@ module simt_stack_controller
       branch_reconvergence_pc_q <= '0;
 
       // Captured inputs - CTA controller
-      init_pc_q <= '0;
+      init_pc_q           <= '0;
       init_reconvergence_pc_q <= '0;
+      init_thread_count_q <= '0;
 
       // Operation control registers
       need_pop_q <= 1'b0;
@@ -505,8 +510,9 @@ module simt_stack_controller
 
       // -------- Input Capture (Init Priority) --------
       if ((current_state_q == StateIdle) && (init_valid_i == 1'b1)) begin
-        init_pc_q <= init_pc_i;
+        init_pc_q               <= init_pc_i;
         init_reconvergence_pc_q <= init_reconvergence_pc_i;
+        init_thread_count_q     <= init_thread_count_i;
 
       end else if ((current_state_q == StateIdle) && (update_valid_i == 1'b1)) begin
         update_with_divergence_q <= update_with_divergence_i;
