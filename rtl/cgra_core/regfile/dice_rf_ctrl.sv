@@ -43,6 +43,7 @@ module dice_rf_ctrl
     // Predicate outputs
     , output logic [NUM_PRED-1:0]         pred_o
     , output logic [NUM_TID*NUM_PRED-1:0] pred_all_o
+    , output logic [NUM_PORTS-1:0]        ldst_pop_o
 
     // Write Interface — CGRA
     , input logic [                          TID_WIDTH-1:0] cgra_tid_i
@@ -128,6 +129,7 @@ module dice_rf_ctrl
           , .ldst_valid_i(ldst_gpr_valid)
 
           , .stall_o(stall_o[i])
+          , .ldst_pop_o(ldst_pop_o[i])
 
           , .ws_o  (rf_wr_addr[i*ADDR_WIDTH+:ADDR_WIDTH])
           , .data_o(rf_wr_data[i*DATA_WIDTH+:DATA_WIDTH])
@@ -142,6 +144,7 @@ module dice_rf_ctrl
   // =========================================================================
   special_regs_cmd cgra_special, ldst_special_in;
   special_regs_cmd ldst_special_wb, special_cmd;
+  logic cgra_special_valid;
 
   // CGRA special regs command from bitmap
   always_comb begin
@@ -159,6 +162,7 @@ module dice_rf_ctrl
 
   // LDST special regs command from cache response
   assign ldst_special_in = assemble_special_wr(ldst_convert);
+  assign cgra_special_valid = |cgra_special.const_mask || |cgra_special.pred_mask;
 
   // Extract TID for per-TID pred writes (single coalesced command only)
   logic [TID_WIDTH-1:0] ldst_special_tid_in;
@@ -188,15 +192,15 @@ module dice_rf_ctrl
   logic [TID_WIDTH-1:0] ldst_special_wb_tid;
   assign {ldst_special_wb, ldst_special_wb_tid} = special_fifo_data;
 
-  // Arbitration: CGRA has priority over buffered LDST
-  assign pop_special = !cgra_valid_i && special_fifo_valid;
-  assign special_cmd = cgra_valid_i ? cgra_special : ldst_special_wb;
+  // Arbitration: CGRA has priority only when it actually writes a special reg.
+  assign pop_special = !cgra_special_valid && special_fifo_valid;
+  assign special_cmd = cgra_special_valid ? cgra_special : ldst_special_wb;
 
   logic [TID_WIDTH-1:0] special_tid;
-  assign special_tid = cgra_valid_i ? cgra_tid_i : ldst_special_wb_tid;
+  assign special_tid = cgra_special_valid ? cgra_tid_i : ldst_special_wb_tid;
 
   logic special_wr_valid;
-  assign special_wr_valid = cgra_valid_i || special_fifo_valid;
+  assign special_wr_valid = cgra_special_valid || special_fifo_valid;
 
   assign special_fifo_full = ~special_fifo_ready;
   assign ldst_ready_o = ~(|stall_o) & ~special_fifo_full;

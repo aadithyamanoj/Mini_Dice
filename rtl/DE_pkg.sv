@@ -143,6 +143,26 @@ function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_op
     return op_vec;
 endfunction
 
+function automatic logic [$clog2(NUM_MEM_PORTS+1)-1:0] gen_num_loads
+(
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+);
+    logic [$clog2(NUM_MEM_PORTS+1)-1:0] load_cnt;
+    logic [NUM_MEM_PORTS-1:0] valid_vec;
+    logic [NUM_MEM_PORTS-1:0] op_vec;
+
+    load_cnt = '0;
+    valid_vec = gen_mem_port_valid(ld_dest_regs, num_stores);
+    op_vec = gen_mem_port_op(ld_dest_regs, num_stores);
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+        load_cnt += valid_vec[i] & ~op_vec[i];
+    end
+
+    return load_cnt;
+endfunction
+
 
 function automatic logic [$clog2(DICE_NUM_BANKS)-1:0] bank_select
 (

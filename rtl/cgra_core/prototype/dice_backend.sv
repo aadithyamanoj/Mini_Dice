@@ -94,6 +94,7 @@ module dice_backend
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_3;
   logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_valid_lo;
   logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_op_lo;
+  logic        [             DICE_NUM_BANKS-1:0] ldst_pop_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                                     ldst_cmd;
@@ -113,6 +114,11 @@ module dice_backend
   //credit signals
 
   logic cgra_credit_ready_lo;
+  logic load_credit_fire_lo;
+  logic [$clog2(NUM_MEM_PORTS+1)-1:0] peek_num_load_lo;
+  logic [$clog2(DICE_NUM_BANKS+1)-1:0] ldst_pop_count_lo;
+  logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_up_li;
+  logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_need_li;
 
   logic mem_req_fifo_ready_lo;
   logic mem_req_fifo_pop_lo;
@@ -138,12 +144,15 @@ module dice_backend
 
   assign ldst_wr_li         = ldst_cmd;
   assign ldst_valid_li      = mem_rsp_valid_lo;
+  assign peek_num_load_lo   = gen_num_loads(fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores);
 
   // =========================================================================
   // Dispatcher
   // =========================================================================
 
-  wire disp_pop = cgra_credit_ready_lo && !prog_busy_o;
+  wire disp_pop = load_credit_fire_lo;
+  assign rd_tid_valid = disp_tid_valid & {NUM_LANES{disp_pop}};
+
   dispatcher u_dispatcher (
       .clk_i(clk_i),
       .rst(rst_i),
@@ -164,23 +173,32 @@ module dice_backend
 
 
   // =========================================================================
-  // Credit counter 
+  // Load credit counter
   // =========================================================================
 
-    bsg_ready_to_credit_flow_converter #
-      (.credit_initial_p(NUM_CREDITS)
-      ,.credit_max_val_p(NUM_CREDITS)
-      )
-      credit_ctrl
-      (.clk_i   (clk_i)
-      ,.reset_i (reset_i)
+  always_comb begin
+    ldst_pop_count_lo = '0;
+    for (int i = 0; i < DICE_NUM_BANKS; i++) begin
+      ldst_pop_count_lo += ldst_pop_lo[i];
+    end
+  end
 
-      ,.v_i     (disp_tid_valid) 
-      ,.ready_o (cgra_credit_ready_lo)
+  assign load_credit_up_li = ldst_pop_count_lo;
+  assign load_credit_need_li = {{($bits(load_credit_need_li)-$bits(peek_num_load_lo)){1'b0}}, peek_num_load_lo};
 
-      ,.v_o       (rd_tid_valid)
-      ,.credit_i  (mem_req_fifo_pop_lo)
-      );
+  dice_ready_to_credit_flow_converter #(
+      .credit_initial_p(NUM_CREDITS),
+      .credit_max_val_p(NUM_CREDITS),
+      .max_step_p(DICE_NUM_BANKS)
+  ) credit_ctrl (
+      .clk_i(clk_i),
+      .reset_i(rst_i),
+      .v_i((|disp_tid_valid) && !prog_busy_o),
+      .ready_o(cgra_credit_ready_lo),
+      .v_o(load_credit_fire_lo),
+      .credit_i(load_credit_up_li),
+      .credit_need_i(load_credit_need_li)
+  );
 
 
 
@@ -219,6 +237,7 @@ module dice_backend
       .mem_valid_o (cgra_v_lo),
       .cgra_tid_o  (cgra_tid_lo),
       .pred_all_o  (cgra_pred_all_o),
+      .ldst_pop_o  (ldst_pop_lo),
       .mem_port_valid_o(cgra_mem_port_valid_lo),
       .mem_port_op_o(cgra_mem_port_op_lo),
       .ld_dest_regs_i(fdr_data_li.metadata.ld_dest_regs),
