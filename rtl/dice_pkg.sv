@@ -13,20 +13,24 @@ package dice_pkg;
   parameter int DICE_METADATA_WIDTH           = `DICE_METADATA_WIDTH;
 
   parameter int DICE_ADDR_WIDTH               = `DICE_ADDR_WIDTH;
+  parameter int DICE_DATA_WIDTH               = `DICE_DATA_WIDTH;
   parameter int DICE_KERNEL_ID_WIDTH          = $clog2(`DICE_MAX_KERNEL_ID);
   parameter int DICE_CTA_ID_WIDTH             = $clog2(`DICE_MAX_GRID_SIZE);
   parameter int DICE_TID_WIDTH                = $clog2(`DICE_NUM_MAX_THREADS_PER_CORE);
-  parameter int DICE_HW_CTA_ID_WIDTH          = $clog2(`DICE_NUM_MAX_CTA_PER_CORE);
+  parameter int DICE_HW_CTA_ID_WIDTH          = `DICE_NUM_MAX_CTA_PER_CORE;//$clog2(`DICE_NUM_MAX_CTA_PER_CORE);
   parameter int DICE_HW_CTA_SIZE_WIDTH        = $clog2(`DICE_NUM_MAX_THREADS_PER_CORE) + 1;
   parameter int DICE_EBLOCK_ID_WIDTH          = $clog2(`DICE_NUM_RETIRE_TABLE_ENTRIES + 4);
   parameter int DICE_CLUSTER_ID_WIDTH         = $clog2(`DICE_NUM_CGRA_CLUSTERS);
   parameter int DICE_CORE_ID_WIDTH            = $clog2(`DICE_NUM_CGRA_CORES);
   parameter int DICE_SMEM_SIZE_WIDTH          = $clog2(`DICE_SMEM_SIZE_PER_CORE);
-  parameter int DICE_BITSTREAM_SIZE           = 2048;  // 256 bytes max bitstream size
+  parameter int DICE_BITSTREAM_SIZE           = 1690;  // 256 bytes max bitstream size
+  parameter int DICE_MEM_DATA_WIDTH           = 16;
+  parameter int DICE_MEM_FLAGS_WIDTH          = 1;
+  parameter int DICE_MEM_ADDR_WIDTH           = DICE_ADDR_WIDTH;
 
-  parameter int DICE_DATA_WIDTH               = 32;
+
   parameter int DICE_NUMBER_OF_MAX_COALESCED_COMMANDS = 8;
-  parameter int DICE_CACHE_LINE_SIZE          = 32;
+  parameter int DICE_CACHE_LINE_SIZE          = 8;
   parameter int DICE_BASE_ADDRESS_OFFSET      = $clog2(DICE_CACHE_LINE_SIZE);
   parameter int DICE_BASE_TID_ADDRESS_OFFSET  = $clog2(DICE_NUMBER_OF_MAX_COALESCED_COMMANDS);
   parameter int DICE_TID_BITMAP_WIDTH         = DICE_NUMBER_OF_MAX_COALESCED_COMMANDS;
@@ -60,17 +64,13 @@ package dice_pkg;
   } dice_tid_t;  // Thread ID descriptor
 
   typedef struct packed {
-    // IDs and geometry
-    logic [DICE_KERNEL_ID_WIDTH-1:0] kernel_id;
-    dice_grid_size_t                 grid_size;
-    dice_cta_size_t                  cta_size;
-    // Resources for backend to determine shared memory address for each CTA
-    logic [DICE_SMEM_SIZE_WIDTH-1:0] smem_per_cta;
+    dice_grid_size_t             grid_size;
+    logic [DICE_TID_WIDTH:0]     thread_count;  // Pre-computed CTA thread count, set by dispatcher
 
     // Initial
-    logic [DICE_ADDR_WIDTH-1:0] start_pc;
-    logic [DICE_ADDR_WIDTH-1:0] arg_ptr;   //might not need
+    logic [DICE_ADDR_WIDTH-1:0]  start_pc;
   } dice_kernel_desc_t;  // Kernel descriptor for top driver to receive kernel launch info
+
 
   typedef struct packed {
     dice_kernel_desc_t kernel_desc;
@@ -86,22 +86,13 @@ package dice_pkg;
 
   typedef struct packed {
     logic [2:0]                      valid_edits_bitmap;
-    logic [DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_id;
     logic                            unresolved_control_divergence; // [100]
     logic [DICE_ADDR_WIDTH-1:0]      predict_pc; // [010]
     logic                            is_return; // [001]
   } branch_predict_interface_t;  // Branch prediction interface descriptor
 
-  // CTA size encoding for SIMT stack allocation
-  // Represents number of stacks a CTA spans: 1, 2, or 4
-  typedef enum logic [1:0] {
-    CTA_SIZE_1  = 2'b00,  // 1 stack
-    CTA_SIZE_2  = 2'b01,  // 2 stacks
-    CTA_SIZE_4  = 2'b11   // 4 stacks
-  } cta_size_e;
-
   typedef struct packed {
-    logic [DICE_NUM_MAX_CTA_PER_CORE-1:0] hw_cta_pending;
+    logic has_pending_eblock;
   } block_retire_status_t;  // Block retire status descriptor
 
 endpackage

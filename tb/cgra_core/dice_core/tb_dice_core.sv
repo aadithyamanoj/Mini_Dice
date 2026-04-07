@@ -4,7 +4,6 @@
 module tb_dice_core;
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-  import VX_gpu_pkg::*;
 
   // =========================================================================
   // Parameters
@@ -13,8 +12,9 @@ module tb_dice_core;
   localparam int ClkPeriod     = 10;
 
   // Test vector configuration
-  localparam string TEST_VECTOR_FILE = "kernel_simple";
-  localparam int    MEM_DATA_WIDTH   = 2048; // Must match metacache_mem_if DATA_SIZE * 8
+  localparam string TEST_VECTOR_FILE      = "kernel_simple";
+  localparam int    METACACHE_DATA_SIZE   = 256;
+  localparam int    BITSTREAM_DATA_SIZE   = DICE_MEM_DATA_WIDTH / 8;
 
   // =========================================================================
   // Signals
@@ -26,16 +26,15 @@ module tb_dice_core;
   // =========================================================================
   // Interfaces
   // =========================================================================
-  cta_dispatch_if cta_dispatch_if_inst();
-  cta_complete_if cta_complete_if_inst();
+  cta_if cta_if_inst();
 
-  VX_mem_bus_if #(
-      .DATA_SIZE(256), //change
+  dice_mem_bus_if #(
+      .DATA_SIZE(METACACHE_DATA_SIZE),
       .TAG_WIDTH(DICE_ADDR_WIDTH)
   ) metacache_mem_if [1] ();
 
-  VX_mem_bus_if #(
-      .DATA_SIZE(VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8), // 512 bits = 64 bytes
+  dice_mem_bus_if #(
+      .DATA_SIZE(BITSTREAM_DATA_SIZE),
       .TAG_WIDTH(DICE_ADDR_WIDTH)
   ) bitstream_cache_mem_if [1] ();
 
@@ -44,28 +43,20 @@ module tb_dice_core;
   // =========================================================================
   // Memory Instantiation
   // =========================================================================
-  VX_local_mem #(
+  dice_local_mem #(
     .SIZE      (1 << 26),
-    .NUM_REQS  (1),
-    .NUM_BANKS (1),
-    .ADDR_WIDTH(19),
-    .WORD_SIZE (256),
-    .TAG_WIDTH (DICE_ADDR_WIDTH),
-    .OUT_BUF   (0)
+    .WORD_SIZE (METACACHE_DATA_SIZE),
+    .TAG_WIDTH (DICE_ADDR_WIDTH)
   ) u_meta_mem (
       .clk        (clk),
       .reset      (reset),
       .mem_bus_if (metacache_mem_if)
   );
 
-  VX_local_mem #(
+  dice_local_mem #(
     .SIZE      (1 << 26),
-    .NUM_REQS  (1),
-    .NUM_BANKS (1),
-    .ADDR_WIDTH(19),
-    .WORD_SIZE (VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8),
-    .TAG_WIDTH (DICE_ADDR_WIDTH),
-    .OUT_BUF   (0)
+    .WORD_SIZE (BITSTREAM_DATA_SIZE),
+    .TAG_WIDTH (DICE_ADDR_WIDTH)
   ) u_bitstream_mem (
       .clk        (clk),
       .reset      (reset),
@@ -94,74 +85,10 @@ module tb_dice_core;
   dice_core u_dut (
       .clk_i                   (clk),
       .rst_i                   (reset),
-      .cta_dispatch_if_inst    (cta_dispatch_if_inst),
-      .cta_complete_if_inst    (cta_complete_if_inst),
+      .cta_if_inst             (cta_if_inst),
       .metacache_mem_if        (metacache_mem_if[0]),
       .bitstream_cache_mem_if  (bitstream_cache_mem_if[0])
   );
-  // =========================================================================
-  // Memory/Cache Instantiation
-  // =========================================================================
-  /*
-  smem #(
-    .DATA_W(256),
-    .ADDR_W(MEM_ADDR_WIDTH),
-    .TAG_W(MEM_TAG_WIDTH)
-  ) mem_inst (
-    .clk(clk),
-    .rst(rst),
-    .mem_req_valid(mem_req_valid),
-    .mem_req_ready(mem_req_ready),
-    .mem_req_rw(mem_req_rw),
-    .mem_req_addr(mem_req_addr),
-    .mem_req_data(mem_req_data),
-    .mem_req_byteen(mem_req_byteen),
-    .mem_req_tag(mem_req_tag),
-    .mem_rsp_valid(mem_rsp_valid),
-    .mem_rsp_ready(mem_rsp_ready),
-    .mem_rsp_data(mem_rsp_data),
-    .mem_rsp_tag(mem_rsp_tag)
-  );
-
-  VX_cache_top #(
-        .NUM_REQS(1),          
-        .LINE_SIZE(CACHE_LINE_SIZE), 
-        .NUM_BANKS(1),         
-        .TAG_WIDTH(OUTCMD_TAG_WIDTH),
-        .WORD_SIZE(CACHE_LINE_SIZE), 
-        .MEM_TAG_WIDTH(MEM_TAG_WIDTH)
-    ) cache_inst (
-        .clk(clk),
-        .reset(rst),
-
-        .core_req_valid('{outcmd_valid}),
-        .core_req_rw('{outcmd_write_enable}),
-        .core_req_byteen('{~outcmd_write_mask}), 
-        .core_req_addr('{outcmd_address[DICE_ADDR_WIDTH-1 : BASE_ADDRESS_OFFSET]}),     
-        .core_req_data('{outcmd_write_data}),   
-        .core_req_tag('{core_req_tag}),
-        .core_req_ready('{core_req_ready}),
-        .core_req_flags('{default: 0}),
-
-        .core_rsp_valid('{core_rsp_valid}),
-        .core_rsp_data('{core_rsp_data}), 
-        .core_rsp_tag('{core_rsp_tag}),
-        .core_rsp_ready('{core_rsp_ready}),
-
-        .mem_req_valid('{mem_req_valid}),
-        .mem_req_rw('{mem_req_rw}),
-        .mem_req_byteen('{mem_req_byteen}),
-        .mem_req_addr('{mem_req_addr}),
-        .mem_req_data('{mem_req_data}),
-        .mem_req_tag('{mem_req_tag}),
-        .mem_req_ready('{mem_req_ready}), 
-
-        .mem_rsp_valid('{mem_rsp_valid}), 
-        .mem_rsp_data('{mem_rsp_data}),
-        .mem_rsp_tag('{mem_rsp_tag}),
-        .mem_rsp_ready('{mem_rsp_ready})
-    );
-  */
   // =========================================================================
   // Clock Generation
   // =========================================================================
@@ -176,9 +103,9 @@ module tb_dice_core;
 
   //Initializes inputs to the DUT
   task automatic init_inputs();
-    cta_dispatch_if_inst.valid = 1'b0;
-    cta_dispatch_if_inst.data  = '0;
-    cta_complete_if_inst.ready = 1'b1;
+    cta_if_inst.dispatch_valid = 1'b0;
+    cta_if_inst.dispatch_data  = '0;
+    cta_if_inst.complete_ready = 1'b1;
   endtask
 
   //Resets the DUT
@@ -190,14 +117,14 @@ module tb_dice_core;
 
   //Dispatches CTA into the core with specified description
   task automatic dispatch_cta(input dice_cta_desc_t desc);
-    cta_dispatch_if_inst.valid = 1'b1;
-    cta_dispatch_if_inst.data  = desc;
+    cta_if_inst.dispatch_valid = 1'b1;
+    cta_if_inst.dispatch_data  = desc;
 
     do begin
       @(posedge clk);
-    end while (!cta_dispatch_if_inst.ready);
+    end while (!cta_if_inst.dispatch_ready);
 
-    cta_dispatch_if_inst.valid = 1'b0;
+    cta_if_inst.dispatch_valid = 1'b0;
   endtask
 
   // Load CTA descriptor from generated .mem file (produced by gen_memfile.py)
@@ -220,16 +147,16 @@ module tb_dice_core;
   endtask
 
 
-  // Load metadata .mem file into VX_local_mem via $readmemh backdoor
+  // Load metadata .mem file into the local memory model via $readmemh backdoor
   task automatic load_metadata(string mem_file);
     $display("Loading metadata from %s", mem_file);
-    $readmemh(mem_file, u_meta_mem.g_data_store[0].lmem_store.ram);
+    $readmemh(mem_file, u_meta_mem.ram);
   endtask
 
-  // Load bitstream .mem file into VX_local_mem via $readmemh backdoor
+  // Load bitstream .mem file into the local memory model via $readmemh backdoor
   task automatic load_bitstream(string mem_file);
     $display("Loading bitstream from %s", mem_file);
-    $readmemh(mem_file, u_bitstream_mem.g_data_store[0].lmem_store.ram);
+    $readmemh(mem_file, u_bitstream_mem.ram);
   endtask
 
   // Load all .mem files from a test vector and dispatch CTA
