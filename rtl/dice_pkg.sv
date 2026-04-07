@@ -17,7 +17,11 @@ package dice_pkg;
   parameter int DICE_KERNEL_ID_WIDTH          = $clog2(`DICE_MAX_KERNEL_ID);
   parameter int DICE_CTA_ID_WIDTH             = $clog2(`DICE_MAX_GRID_SIZE);
   parameter int DICE_TID_WIDTH                = $clog2(`DICE_NUM_MAX_THREADS_PER_CORE);
+<<<<<<< HEAD
+  parameter int DICE_HW_CTA_ID_WIDTH          = (`DICE_NUM_MAX_CTA_PER_CORE <= 1) ? 1 : $clog2(`DICE_NUM_MAX_CTA_PER_CORE);
+=======
   parameter int DICE_HW_CTA_ID_WIDTH          = `DICE_NUM_MAX_CTA_PER_CORE;//$clog2(`DICE_NUM_MAX_CTA_PER_CORE);
+>>>>>>> origin/merging
   parameter int DICE_HW_CTA_SIZE_WIDTH        = $clog2(`DICE_NUM_MAX_THREADS_PER_CORE) + 1;
   parameter int DICE_EBLOCK_ID_WIDTH          = $clog2(`DICE_NUM_RETIRE_TABLE_ENTRIES + 4);
   parameter int DICE_CLUSTER_ID_WIDTH         = $clog2(`DICE_NUM_CGRA_CLUSTERS);
@@ -35,6 +39,11 @@ package dice_pkg;
   parameter int DICE_BASE_TID_ADDRESS_OFFSET  = $clog2(DICE_NUMBER_OF_MAX_COALESCED_COMMANDS);
   parameter int DICE_TID_BITMAP_WIDTH         = DICE_NUMBER_OF_MAX_COALESCED_COMMANDS;
   parameter int DICE_MAX_REG_WIDTH            = `DICE_CR_NUM;
+
+  // Memory bus parameters (for VX_mem_bus_if / cgra_cm_if)
+  parameter int DICE_MEM_DATA_WIDTH           = 512;
+  parameter int DICE_MEM_ADDR_WIDTH           = 32;
+  parameter int DICE_MEM_FLAGS_WIDTH          = 4;
 
   // =========================================================
   // Type definitions
