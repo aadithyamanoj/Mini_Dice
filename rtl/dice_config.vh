@@ -12,7 +12,7 @@
 `define DICE_CR_NUM                  8  // Constant Registers
 
 // Available CGRA memory ports
-`define DICE_CGRA_MEM_PORTS          2
+`define DICE_CGRA_MEM_PORTS          4
 
 // Architectural configurations
 `define DICE_ADDR_WIDTH              16

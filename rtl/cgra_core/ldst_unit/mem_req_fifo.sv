@@ -20,7 +20,7 @@ module mem_req_fifo
   import dice_pkg::*;
   import DE_pkg::*;
 #(
-    parameter  int DEPTH  = 16,
+    parameter int DEPTH = 16,
     localparam int ENQ_PORTS_LP = 4,
     localparam int AXI_AW = 16,
     localparam int AXI_DW = 16
@@ -35,7 +35,7 @@ module mem_req_fifo
     input  logic enq_valid_i_1,
     input  logic enq_valid_i_2,
     input  logic enq_valid_i_3,
-    output logic enq_ready_o,  // FIFO not full
+    output logic enq_ready_o,    // FIFO not full
 
     input logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] enq_tid_i,
     input logic [AXI_AW-1:0] enq_addr_i_0,  // mem_addr_o → AXI address
@@ -46,7 +46,10 @@ module mem_req_fifo
     input logic [AXI_DW-1:0] enq_data_i_1,
     input logic [AXI_DW-1:0] enq_data_i_2,
     input logic [AXI_DW-1:0] enq_data_i_3,
-    input logic enq_op_i,  // 0 == ld 1 == st
+    input logic enq_op_i_0,  // 0 == ld 1 == st
+    input logic enq_op_i_1,
+    input logic enq_op_i_2,
+    input logic enq_op_i_3,
 
     // -------------------------------------------------------------------------
     // AXI-Lite master — connect to cgra_mem_system_16bit crossbar
@@ -80,8 +83,8 @@ module mem_req_fifo
     output logic                                             pop_o,
     output logic                                             rsp_valid_o,
     output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid_o,
-    output logic [AXI_AW-1:0]                                rsp_addr_o,
-    output logic [                        DICE_REG_DATA_WIDTH-1:0] rsp_data_o
+    output logic [                               AXI_AW-1:0] rsp_addr_o,
+    output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o
 );
 
   // -------------------------------------------------------------------------
@@ -99,6 +102,7 @@ module mem_req_fifo
   logic [ENQ_PORTS_LP-1:0] enq_valid_li;
   logic [ENQ_PORTS_LP-1:0][AXI_AW-1:0] enq_addr_li;
   logic [ENQ_PORTS_LP-1:0][AXI_DW-1:0] enq_data_li;
+  logic [ENQ_PORTS_LP-1:0] enq_op_li;
   mem_req_s serial_req_lo, head_req;
   logic [$bits(mem_req_s)-1:0] serial_req_bits_lo, head_req_lo;
   logic piso_v_lo, piso_yumi_li, piso_ready_lo;
@@ -120,17 +124,22 @@ module mem_req_fifo
   assign enq_data_li[2] = enq_data_i_2;
   assign enq_data_li[3] = enq_data_i_3;
 
+  assign enq_op_li[0] = enq_op_i_0;
+  assign enq_op_li[1] = enq_op_i_1;
+  assign enq_op_li[2] = enq_op_i_2;
+  assign enq_op_li[3] = enq_op_i_3;
+
   for (genvar i = 0; i < ENQ_PORTS_LP; i++) begin : gen_enq_req
     assign enq_req_li[i].valid = enq_valid_li[i];
     assign enq_req_li[i].tid   = enq_tid_i;
     assign enq_req_li[i].addr  = enq_addr_li[i];
     assign enq_req_li[i].data  = enq_data_li[i];
-    assign enq_req_li[i].op    = enq_op_i;
+    assign enq_req_li[i].op    = enq_op_li[i];
   end
 
   bsg_parallel_in_serial_out #(
       .width_p($bits(mem_req_s)),
-      .els_p(ENQ_PORTS_LP)
+      .els_p  (ENQ_PORTS_LP)
   ) enq_serializer (
       .clk_i(clk_i),
       .reset_i(rst_i),
@@ -146,7 +155,7 @@ module mem_req_fifo
   assign head_req      = head_req_lo;
   assign enq_ready_o   = piso_ready_lo | rsp_data_ready_i;
 
-  bsg_fifo_1r1w_large #(
+  bsg_fifo_1r1w_small #(
       .width_p($bits(mem_req_s)),
       .els_p  (DEPTH)
   ) req_fifo (
@@ -229,7 +238,7 @@ module mem_req_fifo
   assign pop_o = head_yumi_li;
 
   always_comb begin
-    rsp_tid_o = h_tid;
+    rsp_tid_o  = h_tid;
     rsp_addr_o = h_addr;
     rsp_data_o = axi_rdata_i;
   end

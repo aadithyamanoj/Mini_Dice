@@ -89,6 +89,8 @@ module dice_backend
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_2;
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_3;
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_3;
+  logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_valid_lo;
+  logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_op_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                                     ldst_cmd;
@@ -203,7 +205,6 @@ module dice_backend
       .prog_dout_o (cgra_prog_dout_o),
       .prog_we_o   (cgra_prog_we_o),
 
-      // Memory outputs (TODO: connect to MSHR)
       .mem_data_o_0(cgra_mem_data_lo_0),
       .mem_addr_o_0(cgra_mem_addr_lo_0),
       .mem_data_o_1(cgra_mem_data_lo_1),
@@ -214,6 +215,10 @@ module dice_backend
       .mem_addr_o_3(cgra_mem_addr_lo_3),
       .mem_valid_o (cgra_v_lo),
       .cgra_tid_o  (cgra_tid_lo),
+      .mem_port_valid_o(cgra_mem_port_valid_lo),
+      .mem_port_op_o(cgra_mem_port_op_lo),
+      .ld_dest_regs_i(fdr_data_li.metadata.ld_dest_regs),
+      .num_stores_i (fdr_data_li.metadata.num_stores),
 
       // CGRA latency from instruction metadata
       .latency_i(fdr_data_li.metadata.lat),
@@ -251,10 +256,10 @@ module dice_backend
       .clk_i(clk_i),
       .rst_i(rst_i),
 
-      .enq_valid_i_0(1'b0),
-      .enq_valid_i_1(1'b0),
-      .enq_valid_i_2(1'b0),
-      .enq_valid_i_3(1'b0),
+      .enq_valid_i_0(cgra_mem_port_valid_lo[0]),
+      .enq_valid_i_1(cgra_mem_port_valid_lo[1]),
+      .enq_valid_i_2(cgra_mem_port_valid_lo[2]),
+      .enq_valid_i_3(cgra_mem_port_valid_lo[3]),
       .enq_ready_o(mem_req_fifo_ready_lo),
 
       .enq_tid_i(cgra_tid_lo),
@@ -266,7 +271,10 @@ module dice_backend
       .enq_data_i_1(cgra_mem_data_lo_1),
       .enq_data_i_2(cgra_mem_data_lo_2),
       .enq_data_i_3(cgra_mem_data_lo_3),
-      .enq_op_i(1'b0),
+      .enq_op_i_0(cgra_mem_port_op_lo[0]),
+      .enq_op_i_1(cgra_mem_port_op_lo[1]),
+      .enq_op_i_2(cgra_mem_port_op_lo[2]),
+      .enq_op_i_3(cgra_mem_port_op_lo[3]),
 
       .axi_awaddr_o(axi_awaddr_o),
       .axi_awvalid_o(axi_awvalid_o),

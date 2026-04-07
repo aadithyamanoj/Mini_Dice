@@ -113,6 +113,36 @@ typedef struct packed {
     logic      re;
 } reg_rd_cmd;
 
+function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_valid
+(
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+);
+    logic [NUM_MEM_PORTS-1:0] valid_vec;
+    valid_vec = '0;
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+        valid_vec[i] = (i < num_stores) || (ld_dest_regs[i] != DICE_REG_ADDR_WIDTH'(31));
+    end
+
+    return valid_vec;
+endfunction
+
+function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_op
+(
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+);
+    logic [NUM_MEM_PORTS-1:0] op_vec;
+    op_vec = '0;
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+        op_vec[i] = (i < num_stores);
+    end
+
+    return op_vec;
+endfunction
+
 
 function automatic logic [$clog2(DICE_NUM_BANKS)-1:0] bank_select
 (

@@ -28,13 +28,17 @@ module dice_rf_ctrl
     , output logic rd_tid_ready_o
 
     // , input logic                             rd_en_i
-    , input  logic [                       TID_WIDTH-1:0] rd_tid_i
-    , input  logic [                      TOTAL_REGS-1:0] rd_bitmap_i
-    , input  logic [                      TOTAL_REGS-1:0] wr_bitmap_i
-    , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] rd_data_o
-    , output logic                                        rf_rd_valid_o
-    , output logic [                       TID_WIDTH-1:0] tid_o
-    , output logic [                      TOTAL_REGS-1:0] wr_bitmap_o
+    , input  logic [                       TID_WIDTH-1:0]                          rd_tid_i
+    , input  logic [                      TOTAL_REGS-1:0]                          rd_bitmap_i
+    , input  logic [                      TOTAL_REGS-1:0]                          wr_bitmap_i
+    , input  logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i
+    , input  logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_i
+    , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0]                          rd_data_o
+    , output logic                                                                 rf_rd_valid_o
+    , output logic [                       TID_WIDTH-1:0]                          tid_o
+    , output logic [                      TOTAL_REGS-1:0]                          wr_bitmap_o
+    , output logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
+    , output logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_o
 
     // Predicate output — all TIDs, all preds, always valid
     , output logic [NUM_PRED-1:0] pred_o
@@ -64,6 +68,7 @@ module dice_rf_ctrl
   logic [NUM_PORTS-1:0] stall_o;
 
   logic special_fifo_full;
+
 
 
   // =========================================================================
@@ -294,10 +299,17 @@ module dice_rf_ctrl
     if (reset_i) begin
       tid_o <= '0;
       wr_bitmap_o <= '0;
+      ld_dest_regs_o <= '0;
+      num_stores_o <= '0;
     end else if (rd_tid_valid_i) begin
       tid_o <= rd_tid_i;
       wr_bitmap_o <= wr_bitmap_i;
+      ld_dest_regs_o <= ld_dest_regs_i;
+      num_stores_o <= num_stores_i;
     end
   end
+
+
+
 
 endmodule

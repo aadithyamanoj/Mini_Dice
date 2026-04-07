@@ -30,6 +30,10 @@ module dice_cgra_rf
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3,
     output logic                                                   mem_valid_o,
     output logic [DICE_TID_WIDTH-1:0]                              cgra_tid_o,
+    output logic [NUM_MEM_PORTS-1:0]                         mem_port_valid_o,
+    output logic [NUM_MEM_PORTS-1:0]                         mem_port_op_o,
+    input  logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
+    input  logic [$clog2(NUM_MEM_PORTS-1):0]                      num_stores_i,
     input  logic [7:0]                                             latency_i,
 
     input  logic                                                 rd_tid_valid_i,
@@ -78,6 +82,12 @@ module dice_cgra_rf
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_li;
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_lo;
   logic [TOTAL_REGS-1:0]                            wr_bitmap_reg_li;
+  logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_lo;
+  logic [$clog2(NUM_MEM_PORTS-1):0]                      num_stores_lo;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_valid_li;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_valid_lo;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_op_li;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_op_lo;
   logic                                             cgra_valid_lo;
 
   always_ff @(posedge clk_i) begin
@@ -164,6 +174,9 @@ module dice_cgra_rf
   );
 
   wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i + 1;
+  assign mem_port_valid_li = gen_mem_port_valid(ld_dest_regs_lo, num_stores_lo);
+  assign mem_port_op_li    = gen_mem_port_op(ld_dest_regs_lo, num_stores_lo);
+
   shift_reg
       #(.WIDTH          (DICE_TID_WIDTH)
        ,.MAX_PIPE_STAGE (128)
@@ -189,6 +202,30 @@ module dice_cgra_rf
       );
 
   shift_reg
+      #(.WIDTH          (NUM_MEM_PORTS)
+       ,.MAX_PIPE_STAGE (128)
+      )
+      LDST_PORT_VALID_SHIFT
+      (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+      ,.latency(cgra_lat)
+      ,.in_data(mem_port_valid_li)
+      ,.out_data(mem_port_valid_lo)
+      );
+
+  shift_reg
+      #(.WIDTH          (NUM_MEM_PORTS)
+       ,.MAX_PIPE_STAGE (128)
+      )
+      LDST_PORT_OP_SHIFT
+      (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+      ,.latency(cgra_lat)
+      ,.in_data(mem_port_op_li)
+      ,.out_data(mem_port_op_lo)
+      );
+
+  shift_reg
       #(.WIDTH          (1)
        ,.MAX_PIPE_STAGE (128)
       )
@@ -209,10 +246,14 @@ module dice_cgra_rf
       .rd_tid_i(rd_tid_i),
       .rd_bitmap_i(rd_bitmap_i),
       .wr_bitmap_i(wr_bitmap_i),
+      .ld_dest_regs_i(ld_dest_regs_i),
+      .num_stores_i(num_stores_i),
       .rd_data_o(rf_rd_data_lo),
       .rf_rd_valid_o(rf_rd_valid_lo),
       .tid_o(cgra_tid_li),
       .wr_bitmap_o(wr_bitmap_reg_li),
+      .ld_dest_regs_o(ld_dest_regs_lo),
+      .num_stores_o(num_stores_lo),
       .pred_o(pred_lo),
       .cgra_tid_i(cgra_tid_lo),
       .cgra_data_i(cgra_data_li),
@@ -224,6 +265,8 @@ module dice_cgra_rf
   );
   assign mem_valid_o = cgra_valid_lo;
   assign cgra_tid_o = cgra_tid_lo;
+  assign mem_port_valid_o = mem_port_valid_lo;
+  assign mem_port_op_o    = mem_port_op_lo;
 
 `ifdef DICE_RF_DEBUG
   assign dbg_rf_rd_data_o    = rf_rd_data_lo;
