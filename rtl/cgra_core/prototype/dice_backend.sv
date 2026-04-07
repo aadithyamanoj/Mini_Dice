@@ -150,7 +150,7 @@ module dice_backend
   // Dispatcher
   // =========================================================================
 
-  wire disp_pop = load_credit_fire_lo;
+  wire disp_pop = load_credit_fire_lo & |prog_busy_o;
   assign rd_tid_valid = disp_tid_valid & {NUM_LANES{disp_pop}};
 
   dispatcher u_dispatcher (
