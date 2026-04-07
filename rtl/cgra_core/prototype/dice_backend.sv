@@ -34,6 +34,9 @@ module dice_backend
     output logic       cgra_prog_dout_o,
     output logic       cgra_prog_we_o,
 
+    // for branch handler
+    output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] cgra_pred_all_o,
+
     // AXI-Lite master interface from LDST FIFO
     output logic [DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
     output logic                            axi_awvalid_o,
@@ -215,6 +218,7 @@ module dice_backend
       .mem_addr_o_3(cgra_mem_addr_lo_3),
       .mem_valid_o (cgra_v_lo),
       .cgra_tid_o  (cgra_tid_lo),
+      .pred_all_o  (cgra_pred_all_o),
       .mem_port_valid_o(cgra_mem_port_valid_lo),
       .mem_port_op_o(cgra_mem_port_op_lo),
       .ld_dest_regs_i(fdr_data_li.metadata.ld_dest_regs),

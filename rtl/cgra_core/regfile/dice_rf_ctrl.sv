@@ -40,8 +40,9 @@ module dice_rf_ctrl
     , output logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
     , output logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_o
 
-    // Predicate output — all TIDs, all preds, always valid
-    , output logic [NUM_PRED-1:0] pred_o
+    // Predicate outputs
+    , output logic [NUM_PRED-1:0]         pred_o
+    , output logic [NUM_TID*NUM_PRED-1:0] pred_all_o
 
     // Write Interface — CGRA
     , input logic [                          TID_WIDTH-1:0] cgra_tid_i
@@ -253,9 +254,9 @@ module dice_rf_ctrl
     else if (rd_tid_valid_i) rd_tid_r <= rd_tid_i;
   end
 
-  // Predicate output — selected TID only
-
+  // Predicate outputs. The flattened ordering is t0p0, t0p1, ..., t1p0, ...
   assign pred_o = pred_regs[rd_tid_r];
+  assign pred_all_o = pred_regs;
 
   // =========================================================================
   // GPR read path — only pass GPR portion of bitmap to read_org

@@ -153,7 +153,7 @@ module mem_req_fifo
 
   assign serial_req_lo = serial_req_bits_lo;
   assign head_req      = head_req_lo;
-  assign enq_ready_o   = piso_ready_lo | rsp_data_ready_i;
+  assign enq_ready_o   = piso_ready_lo & rsp_data_ready_i;
 
   bsg_fifo_1r1w_small #(
       .width_p($bits(mem_req_s)),
