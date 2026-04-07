@@ -1,31 +1,17 @@
--sv
--y ${DICE_HOME}/../hw/rtl/libs
-+libext+.sv
 +define+NO_SRAM
++libext+.sv
 
 +incdir+${DICE_HOME}/rtl
-+incdir+${DICE_HOME}/rtl/interfaces
-+incdir+${DICE_HOME}/../hw/rtl
-+incdir+${DICE_HOME}/../hw/rtl/mem
-+incdir+${DICE_HOME}/rtl/cgra_core/cgra_subsystem/regfile
 
-+incdir+${DICE_HOME}/rtl/dice_ram
-${DICE_HOME}/../hw/rtl/VX_define.vh
-${DICE_HOME}/../hw/rtl/VX_gpu_pkg.sv
+// ==== DICE configs and packages ====
 ${DICE_HOME}/rtl/dice_config.vh
 ${DICE_HOME}/rtl/dice_define.vh
 ${DICE_HOME}/rtl/dice_pkg.sv
 ${DICE_HOME}/rtl/dice_frontend_pkg.sv
-${DICE_HOME}/../hw/rtl/mem/VX_mem_bus_if.sv
-${DICE_HOME}/rtl/interfaces/cta_dispatch_if.sv
-${DICE_HOME}/rtl/interfaces/cta_complete_if.sv
-${DICE_HOME}/rtl/interfaces/cta_sched_if.sv
-${DICE_HOME}/rtl/interfaces/simt_stack_status_if.sv
-${DICE_HOME}/rtl/interfaces/cgra_cm_if.sv
-${DICE_HOME}/rtl/interfaces/fdr_if.sv
-${DICE_HOME}/rtl/dice_ram/dice_ram_1w1r.sv
-${DICE_HOME}/rtl/dice_ram/dice_ram_1rw.sv
+
+// ==== branch_handler dependencies ====
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/rising_edge_detector.sv
-${DICE_HOME}/rtl/cgra_core/fetch_stage/branch_handler_no_branches.sv
-${DICE_HOME}/rtl/cgra_core/cta_schedule/cta_status_table.sv
-tb_branch_handler.sv
+${DICE_HOME}/rtl/cgra_core/fetch_stage/branch_handler.sv
+
+// ==== testbench ====
+${DICE_HOME}/tb/cgra_core/FDR_stage/branch_handler/tb_branch_handler.sv

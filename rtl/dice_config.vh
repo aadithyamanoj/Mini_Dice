@@ -12,10 +12,14 @@
 `define DICE_CR_NUM                  8  // Constant Registers
 
 // Available CGRA memory ports
-`define DICE_CGRA_MEM_PORTS          4
+`define DICE_CGRA_MEM_PORTS          2
 
 // Architectural configurations
 `define DICE_ADDR_WIDTH              16
+<<<<<<< HEAD
+=======
+`define DICE_DATA_WIDTH              8
+>>>>>>> origin/merging
 `define DICE_MAX_KERNEL_ID           1
 `define DICE_MAX_GRID_SIZE           65536
 `define DICE_NUM_CGRA_CLUSTERS        1

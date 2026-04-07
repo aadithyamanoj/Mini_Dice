@@ -70,6 +70,7 @@ import dice_pkg::*;
     // ---------------------------------------------------------------
     initial begin
         clk_i = 1'b0;
+        reset_i = 1;
         forever #(CLK_PERIOD/2) clk_i = ~clk_i;
     end
 
@@ -309,6 +310,27 @@ import dice_pkg::*;
                     $error("[%s] GPR mismatch tid=%0d bank=%0d exp=0x%0h got=0x%0h",
                            tag, t, b, exp_gpr[t][b], got);
                     err_count++;
+                end
+
+                // Check pred registers for this TID (pred_o is muxed by rd_tid_i)
+                for (int p = 0; p < NUM_PRED; p++) begin
+                    if (pred_o[p] !== 1'b0) begin
+                        $error("[%0t] Pred reg not zero! TID=%0d, Pred=%0d, Val=%0b",
+                               $time, tid, p, pred_o[p]);
+                        error_count++;
+                    end
+                end
+            end
+
+            // Check const registers (shared, only need to check once)
+            for (int c = 0; c < NUM_CONST; c++) begin
+                if (rd_data_o[(NUM_PORTS+c)*DATA_WIDTH +: DATA_WIDTH] !== '0) begin
+                    $error("[%0t] Const reg not zero! Const=%0d, Data=0x%0h",
+                           $time, c, rd_data_o[(NUM_PORTS+c)*DATA_WIDTH +: DATA_WIDTH]);
+                    error_count++;
+                end else begin
+                    $display("[%0t] Const reg is zero! Const=%0d, Data=0x%0h",
+                           $time, c, rd_data_o[(NUM_PORTS+c)*DATA_WIDTH +: DATA_WIDTH]);
                 end
             end
 
