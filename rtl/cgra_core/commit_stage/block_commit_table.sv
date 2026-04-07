@@ -1,7 +1,7 @@
 module block_commit_table 
     import dice_pkg::*;
 #(
-    parameter R_W = 14
+    parameter int R_W = 14
 ) (
     input  logic                                    clk_i,
     input  logic                                    rst_i,
@@ -139,7 +139,6 @@ module block_commit_table
 
 // Assertions for verification
 `ifndef SYNTHESIS
-
     // No double-insert: target slot must be empty on an insert
     assert_no_double_insert: assert property (
         @(posedge clk_i) disable iff (rst_i)
