@@ -496,29 +496,28 @@ module dice_backend
   // =========================================================================
 
   block_commit_table u_block_commit_table (
-      .clk_i               (clk_i),
-      .rst                 (rst_i),
+      .clk_i                 (clk_i),
+      .rst_i                 (rst_i),
 
       // Insert interface
-      .insert_valid        (bct_insert_valid),
-      .insert_hw_cta_id    (bct_insert_hw_cta_id),
-      .insert_e_block_id   (bct_insert_e_block_id),
-      .insert_pending_reads(bct_insert_pending_reads),
-      .insert_pending_writes(bct_insert_pending_writes),
+      .insert_valid_i        (bct_insert_valid),
+      .insert_e_block_id_i   (bct_insert_e_block_id),
+      .insert_pending_reads_i(bct_insert_pending_reads),
+      .insert_pending_writes_i(bct_insert_pending_writes),
 
       // Update interface
-      .update_valid        (bct_update_valid),
-      .update_e_block_id   (bct_update_e_block_id),
-      .update_is_write     (bct_update_is_write),
-      .update_reduce_count (bct_update_reduce_count),
+      .update_valid_i        (bct_update_valid),
+      .update_e_block_id_i   (bct_update_e_block_id),
+      .update_is_write_i     (bct_update_is_write),
+      .update_reduce_count_i (bct_update_reduce_count),
 
       // Commit interface
-      .pop_valid           (eblock_commit_valid_o),
-      .pop_e_block_id      (eblock_commit_id_o),
-      .pop_ready           (eblock_commit_ready_i),
+      .pop_valid_o          (eblock_commit_valid_o),
+      .pop_e_block_id_o     (eblock_commit_id_o),
+      .pop_ready_i          (eblock_commit_ready_i),
 
       // Status
-      .hw_cta_pending      (hw_cta_pending_o)
+      .hw_cta_pending_o     (hw_cta_pending_o)
   );
 
 endmodule
