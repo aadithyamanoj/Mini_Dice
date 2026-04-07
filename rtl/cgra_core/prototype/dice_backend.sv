@@ -12,29 +12,6 @@ module dice_backend
     input  logic [$bits(fdr_t)-1:0] fdr_data_i,
     output logic fdr_ready_o,
 
-    // TMCU -> External Memory Interface
-    // No more TMCU
-    // output logic tmcu_valid_o,
-    // output logic [DICE_EBLOCK_ID_WIDTH-1:0] tmcu_block_id_o,
-    // output logic [DICE_TID_WIDTH-1:0] tmcu_base_tid_o,
-    // output logic [DICE_TID_BITMAP_WIDTH-1:0] tmcu_tid_bitmap_o,
-    // output logic tmcu_write_enable_o,
-    // output logic [DICE_CACHE_LINE_SIZE*8-1:0] tmcu_write_data_o,
-    // output logic [DICE_CACHE_LINE_SIZE-1:0] tmcu_write_mask_o,
-    // output logic [DICE_ADDR_WIDTH-1:0] tmcu_address_o,
-    // output logic [1:0] tmcu_size_o,
-    // output logic [DICE_MAX_REG_WIDTH-1:0] tmcu_ld_dest_reg_o,
-    // output logic [DICE_NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][DICE_BASE_ADDRESS_OFFSET-1:0] tmcu_address_map_o,
-    // input logic tmcu_ready_i,
-
-    // Memory Response Input (cache_wr_cmd fields)
-    input logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] mem_rsp_base_tid_i,
-    // input logic [TID_BITMAP_WIDTH-1:0] mem_rsp_tid_bitmap_i,
-    input logic [DICE_REG_ADDR_WIDTH-1:0] mem_rsp_ld_dest_reg_i,
-    // input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]        mem_rsp_address_map_i,
-    input logic [(CACHE_LINE_SIZE*8)-1:0] mem_rsp_data_i,
-    input logic mem_rsp_valid_i,
-
     // Block commit table outputs
     output logic                               eblock_commit_valid_o,
     output logic [   DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id_o,
@@ -57,15 +34,25 @@ module dice_backend
     output logic       cgra_prog_dout_o,
     output logic       cgra_prog_we_o,
 
-    // memory interface will promote ldst axi interface
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_o_0,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_o_0,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_o_1,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_o_1,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_o_2,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_o_2,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_o_3,
-    output logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_o_3
+    // AXI-Lite master interface from LDST FIFO
+    output logic [DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
+    output logic                            axi_awvalid_o,
+    input  logic                            axi_awready_i,
+    output logic [DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
+    output logic [1:0]                      axi_wstrb_o,
+    output logic                            axi_wvalid_o,
+    input  logic                            axi_wready_i,
+    input  logic [1:0]                      axi_bresp_i,
+    input  logic                            axi_bvalid_i,
+    output logic                            axi_bready_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
+    output logic                            axi_arvalid_o,
+    input  logic                            axi_arready_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] axi_rdata_i,
+    input  logic [1:0]                      axi_rresp_i,
+    input  logic                            axi_rvalid_i,
+    output logic                            axi_rready_o
+
 `ifdef DICE_RF_DEBUG
     , output logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_rd_data_o
     , output logic [DICE_NUM_PRED-1:0]                                        dbg_pred_o
@@ -105,8 +92,12 @@ module dice_backend
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                                     ldst_cmd;
-  logic        [          $bits(cache_wr_cmd)-1:0] ldst_wr_lo;
-  logic                                            ldst_valid_lo;
+  logic        [          $bits(cache_wr_cmd)-1:0] ldst_wr_li;
+  logic                                            ldst_valid_li;
+  logic        [               DICE_TID_WIDTH-1:0] mem_rsp_tid_lo;
+  logic        [          DICE_REG_ADDR_WIDTH-1:0] mem_rsp_addr_lo;
+  logic        [          DICE_REG_DATA_WIDTH-1:0] mem_rsp_data_lo;
+  logic                                            mem_rsp_valid_lo;
 
   // One-hot TID bitmap for scoreboard writeback release
   logic        [DICE_NUM_MAX_THREADS_PER_CORE-1:0] cgra_wb_tid_bitmap;
@@ -117,6 +108,9 @@ module dice_backend
   //credit signals
 
   logic cgra_credit_ready_lo;
+
+  logic mem_req_fifo_ready_lo;
+  logic mem_req_fifo_pop_lo;
 
   // Block Commit Table
   logic                               bct_insert_valid;
@@ -133,20 +127,12 @@ module dice_backend
   assign fdr_data_li         = fdr_data_i;
   assign fdr_ready_o        = ~dispatch_busy;
 
-  assign ldst_cmd.tid       = mem_rsp_base_tid_i;
-  assign ldst_cmd.data      = mem_rsp_data_i[DICE_REG_DATA_WIDTH-1:0];
-  assign ldst_cmd.wr_bitmap = DICE_TOTAL_REGS'(1'b1) << mem_rsp_ld_dest_reg_i;
+  assign ldst_cmd.tid       = mem_rsp_tid_lo;
+  assign ldst_cmd.data      = mem_rsp_data_lo;
+  assign ldst_cmd.wr_bitmap = DICE_TOTAL_REGS'(1'b1) << mem_rsp_addr_lo;
 
-  assign ldst_wr_lo         = ldst_cmd;
-  assign ldst_valid_lo      = mem_rsp_valid_i;
-  assign cgra_mem_data_o_0  = cgra_mem_data_lo_0;
-  assign cgra_mem_addr_o_0  = cgra_mem_addr_lo_0;
-  assign cgra_mem_data_o_1  = cgra_mem_data_lo_1;
-  assign cgra_mem_addr_o_1  = cgra_mem_addr_lo_1;
-  assign cgra_mem_data_o_2  = cgra_mem_data_lo_2;
-  assign cgra_mem_addr_o_2  = cgra_mem_addr_lo_2;
-  assign cgra_mem_data_o_3  = cgra_mem_data_lo_3;
-  assign cgra_mem_addr_o_3  = cgra_mem_addr_lo_3;
+  assign ldst_wr_li         = ldst_cmd;
+  assign ldst_valid_li      = mem_rsp_valid_lo;
 
   // =========================================================================
   // Dispatcher
@@ -188,7 +174,7 @@ module dice_backend
       ,.ready_o (cgra_credit_ready_lo)
 
       ,.v_o       (rd_tid_valid)
-      ,.credit_i  () // from ldst fifo
+      ,.credit_i  (mem_req_fifo_pop_lo)
       );
 
 
@@ -240,9 +226,9 @@ module dice_backend
       .rd_bitmap_i   (full_reg_bitmap_lo),
       .wr_bitmap_i   (fdr_data_li.metadata.out_regs_bitmap),
 
-      // LDST write interface
-      .ldst_wr_i   (ldst_wr_lo),
-      .ldst_valid_i(ldst_valid_lo),
+      // LDST write back interface
+      .ldst_wr_i   (ldst_wr_li),
+      .ldst_valid_i(ldst_valid_li),
       .ldst_ready_o(ldst_ready_lo)
 `ifdef DICE_RF_DEBUG
       , .dbg_rf_rd_data_o(dbg_rf_rd_data_o)
@@ -260,6 +246,53 @@ module dice_backend
   // =========================================================================
   // LDST FIFO
   // =========================================================================
+
+  mem_req_fifo u_mem_req_fifo (
+      .clk_i(clk_i),
+      .rst_i(rst_i),
+
+      .enq_valid_i_0(1'b0),
+      .enq_valid_i_1(1'b0),
+      .enq_valid_i_2(1'b0),
+      .enq_valid_i_3(1'b0),
+      .enq_ready_o(mem_req_fifo_ready_lo),
+
+      .enq_tid_i(cgra_tid_lo),
+      .enq_addr_i_0(cgra_mem_addr_lo_0),
+      .enq_addr_i_1(cgra_mem_addr_lo_1),
+      .enq_addr_i_2(cgra_mem_addr_lo_2),
+      .enq_addr_i_3(cgra_mem_addr_lo_3),
+      .enq_data_i_0(cgra_mem_data_lo_0),
+      .enq_data_i_1(cgra_mem_data_lo_1),
+      .enq_data_i_2(cgra_mem_data_lo_2),
+      .enq_data_i_3(cgra_mem_data_lo_3),
+      .enq_op_i(1'b0),
+
+      .axi_awaddr_o(axi_awaddr_o),
+      .axi_awvalid_o(axi_awvalid_o),
+      .axi_awready_i(axi_awready_i),
+      .axi_wdata_o(axi_wdata_o),
+      .axi_wstrb_o(axi_wstrb_o),
+      .axi_wvalid_o(axi_wvalid_o),
+      .axi_wready_i(axi_wready_i),
+      .axi_bresp_i(axi_bresp_i),
+      .axi_bvalid_i(axi_bvalid_i),
+      .axi_bready_o(axi_bready_o),
+      .axi_araddr_o(axi_araddr_o),
+      .axi_arvalid_o(axi_arvalid_o),
+      .axi_arready_i(axi_arready_i),
+      .axi_rdata_i(axi_rdata_i),
+      .axi_rresp_i(axi_rresp_i),
+      .axi_rvalid_i(axi_rvalid_i),
+      .axi_rready_o(axi_rready_o),
+
+      .rsp_data_ready_i(ldst_ready_lo),
+      .pop_o(mem_req_fifo_pop_lo),
+      .rsp_valid_o(mem_rsp_valid_lo),
+      .rsp_tid_o(mem_rsp_tid_lo),
+      .rsp_addr_o(mem_rsp_addr_lo),
+      .rsp_data_o(mem_rsp_data_lo)
+  );
 
 
 
