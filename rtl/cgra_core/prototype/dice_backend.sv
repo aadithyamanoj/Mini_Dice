@@ -81,7 +81,7 @@ module dice_backend
 
   // RF + CGRA wrapper outputs
   logic                                            rf_rd_ready_lo;
-  logic                                            ldst_ready_lo;
+  logic        [             DICE_NUM_BANKS-1:0]   ldst_ready_lo;
   logic                                            cgra_v_lo;
   logic        [               DICE_TID_WIDTH-1:0] cgra_tid_lo;
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_0;
@@ -95,6 +95,8 @@ module dice_backend
   logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_valid_lo;
   logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_op_lo;
   logic        [             DICE_NUM_BANKS-1:0] ldst_pop_lo;
+  logic                                           ldst_special_pop_lo;
+  logic                                           ldst_special_ready_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
   cache_wr_cmd                                     ldst_cmd;
@@ -181,6 +183,7 @@ module dice_backend
     for (int i = 0; i < DICE_NUM_BANKS; i++) begin
       ldst_pop_count_lo += ldst_pop_lo[i];
     end
+    ldst_pop_count_lo += ldst_special_pop_lo;
   end
 
   assign load_credit_up_li = ldst_pop_count_lo;
@@ -238,6 +241,8 @@ module dice_backend
       .cgra_tid_o  (cgra_tid_lo),
       .pred_all_o  (cgra_pred_all_o),
       .ldst_pop_o  (ldst_pop_lo),
+      .ldst_special_pop_o(ldst_special_pop_lo),
+      .ldst_special_ready_o(ldst_special_ready_lo),
       .mem_port_valid_o(cgra_mem_port_valid_lo),
       .mem_port_op_o(cgra_mem_port_op_lo),
       .ld_dest_regs_i(fdr_data_li.metadata.ld_dest_regs),
@@ -318,6 +323,7 @@ module dice_backend
       .axi_rready_o(axi_rready_o),
 
       .rsp_data_ready_i(ldst_ready_lo),
+      .rsp_special_ready_i(ldst_special_ready_lo),
       .pop_o(mem_req_fifo_pop_lo),
       .rsp_valid_o(mem_rsp_valid_lo),
       .rsp_tid_o(mem_rsp_tid_lo),

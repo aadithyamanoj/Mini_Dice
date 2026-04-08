@@ -32,6 +32,8 @@ module dice_cgra_rf
     output logic [DICE_TID_WIDTH-1:0]                              cgra_tid_o,
     output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] pred_all_o,
     output logic [DICE_NUM_BANKS-1:0]                              ldst_pop_o,
+    output logic                                                   ldst_special_pop_o,
+    output logic                                                   ldst_special_ready_o,
     output logic [NUM_MEM_PORTS-1:0]                         mem_port_valid_o,
     output logic [NUM_MEM_PORTS-1:0]                         mem_port_op_o,
     input  logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
@@ -48,7 +50,7 @@ module dice_cgra_rf
 
     input  logic [$bits(cache_wr_cmd)-1:0]                       ldst_wr_i,
     input  logic                                                 ldst_valid_i,
-    output logic                                                 ldst_ready_o
+    output logic [DICE_NUM_BANKS-1:0]                            ldst_ready_o
 
 `ifdef DICE_RF_DEBUG
     , output logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_rd_data_o
@@ -76,6 +78,9 @@ module dice_cgra_rf
   logic [NUM_PRED-1:0]                         pred_lo;
   logic [NUM_TID*NUM_PRED-1:0]                pred_all_lo;
   logic [NUM_BANKS-1:0]                       ldst_pop_lo;
+  logic                                       ldst_special_pop_lo;
+  logic [NUM_BANKS-1:0]                       ldst_ready_lo;
+  logic                                       ldst_special_ready_lo;
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_launch_data_lo;
   logic [NUM_PRED-1:0]                         pred_launch_lo;
 
@@ -261,18 +266,23 @@ module dice_cgra_rf
       .pred_o(pred_lo),
       .pred_all_o(pred_all_lo),
       .ldst_pop_o(ldst_pop_lo),
+      .ldst_special_pop_o(ldst_special_pop_lo),
+      .ldst_special_ready_o(ldst_special_ready_lo),
       .cgra_tid_i(cgra_tid_lo),
       .cgra_data_i(cgra_data_li),
       .cgra_wr_bitmap_i(cgra_wr_bitmap_li),
       .cgra_valid_i(cgra_valid_lo),
       .ldst_wr_i(ldst_wr_i),
       .ldst_valid_i(ldst_valid_i),
-      .ldst_ready_o(ldst_ready_o)
+      .ldst_ready_o(ldst_ready_lo)
   );
   assign mem_valid_o = cgra_valid_lo;
   assign cgra_tid_o = cgra_tid_lo;
   assign pred_all_o = pred_all_lo;
   assign ldst_pop_o = ldst_pop_lo;
+  assign ldst_special_pop_o = ldst_special_pop_lo;
+  assign ldst_ready_o = ldst_ready_lo;
+  assign ldst_special_ready_o = ldst_special_ready_lo;
   assign mem_port_valid_o = mem_port_valid_lo;
   assign mem_port_op_o    = mem_port_op_lo;
 
