@@ -187,7 +187,6 @@ module mem_req_fifo
   // -------------------------------------------------------------------------
   typedef enum logic [2:0] {
     ST_IDLE,
-<<<<<<< HEAD
     ST_ISSUE_W,  // asserting AW + W for a store
     ST_WAIT_B,   // waiting for BVALID (store complete)
     ST_ISSUE_R,  // asserting AR for a load
@@ -196,16 +195,6 @@ module mem_req_fifo
 
   state_e state;
   logic aw_done, w_done;  // track per-channel handshake in ST_ISSUE_W
-=======
-    ST_ISSUE_W,   // asserting AW + W for a store
-    ST_WAIT_B,    // waiting for BVALID (store complete)
-    ST_ISSUE_R,   // asserting AR for a load
-    ST_WAIT_R     // waiting for RVALID (load data arrives)
-  } state_e;
-
-  state_e state;
-  logic   aw_done, w_done;   // track per-channel handshake in ST_ISSUE_W
->>>>>>> origin/merging
 
   // -------------------------------------------------------------------------
   // AXI-Lite output drive (combinational)
@@ -214,11 +203,7 @@ module mem_req_fifo
     axi_awaddr_o  = '0;
     axi_awvalid_o = 1'b0;
     axi_wdata_o   = '0;
-<<<<<<< HEAD
     axi_wstrb_o   = 2'b01;  // byte lane 0
-=======
-    axi_wstrb_o   = 2'b01;   // byte lane 0
->>>>>>> origin/merging
     axi_wvalid_o  = 1'b0;
     axi_bready_o  = 1'b0;
     axi_araddr_o  = '0;
@@ -229,30 +214,17 @@ module mem_req_fifo
       ST_ISSUE_W: begin
         axi_awaddr_o  = AXI_AW'(h_addr);
         axi_awvalid_o = !aw_done;
-<<<<<<< HEAD
         axi_wdata_o   = h_data;
         axi_wstrb_o   = 2'b11;
         axi_wvalid_o  = !w_done;
       end
       ST_WAIT_B: axi_bready_o = 1'b1;
-=======
-        axi_wdata_o   = h_wr_data;
-        axi_wstrb_o   = 2'b11;
-        axi_wvalid_o  = !w_done;
-      end
-      ST_WAIT_B: axi_bready_o  = 1'b1;
->>>>>>> origin/merging
       ST_ISSUE_R: begin
         axi_araddr_o  = AXI_AW'(h_addr);
         axi_arvalid_o = 1'b1;
       end
-<<<<<<< HEAD
       ST_WAIT_R: axi_rready_o = 1'b1;
       default:   ;
-=======
-      ST_WAIT_R:  axi_rready_o  = 1'b1;
-      default: ;
->>>>>>> origin/merging
     endcase
   end
 
@@ -261,7 +233,6 @@ module mem_req_fifo
   // byte at the slot position derived from the stored bitmap.
   // -------------------------------------------------------------------------
   assign rsp_valid_o = (state == ST_WAIT_R) && axi_rvalid_i;
-<<<<<<< HEAD
   assign head_yumi_li = ((state == ST_WAIT_B) && axi_bvalid_i)
                      || ((state == ST_WAIT_R) && axi_rvalid_i);
   assign pop_o = head_yumi_li;
@@ -270,17 +241,6 @@ module mem_req_fifo
     rsp_tid_o  = h_tid;
     rsp_addr_o = h_addr;
     rsp_data_o = axi_rdata_i;
-=======
-
-  always_comb begin
-    rsp_base_tid_o    = h_base_tid;
-    rsp_tid_bitmap_o  = h_bitmap;
-    rsp_ld_dest_reg_o = h_dest;
-    rsp_address_map_o = h_address_map;
-
-    rsp_data_o = '0;
-    rsp_data_o[h_slot * AXI_DW +: AXI_DW] = axi_rdata_i;
->>>>>>> origin/merging
   end
 
   // -------------------------------------------------------------------------
@@ -288,69 +248,32 @@ module mem_req_fifo
   // -------------------------------------------------------------------------
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
-<<<<<<< HEAD
-=======
-      wptr    <= '0;
-      rptr    <= '0;
->>>>>>> origin/merging
       state   <= ST_IDLE;
       aw_done <= 1'b0;
       w_done  <= 1'b0;
     end else begin
 
-<<<<<<< HEAD
-=======
-      // --- Enqueue (push) ---------------------------------------------------
-      if (enq_valid_i && enq_ready_o) begin
-        fifo_base_tid   [wptr] <= enq_base_tid_i;
-        fifo_tid_bitmap [wptr] <= enq_tid_bitmap_i;
-        fifo_dest_reg   [wptr] <= enq_ld_dest_reg_i;
-        fifo_address_map[wptr] <= enq_address_map_i;
-        fifo_addr       [wptr] <= enq_addr_i;
-        fifo_wr_data    [wptr] <= enq_data_i;
-        fifo_write_en   [wptr] <= enq_write_en_i;
-        wptr <= wptr + PTR_W'(1);
-      end
-
->>>>>>> origin/merging
       // --- FSM --------------------------------------------------------------
       unique case (state)
 
         ST_IDLE: begin
           aw_done <= 1'b0;
           w_done  <= 1'b0;
-<<<<<<< HEAD
           if (head_v_lo) state <= h_op ? ST_ISSUE_W : ST_ISSUE_R;
-=======
-          if (!empty)
-            state <= h_we ? ST_ISSUE_W : ST_ISSUE_R;
->>>>>>> origin/merging
         end
 
         ST_ISSUE_W: begin
           // Track each channel's handshake independently (AXI-Lite allows
           // AW and W to be accepted in any order).
           if (!aw_done && axi_awready_i) aw_done <= 1'b1;
-<<<<<<< HEAD
           if (!w_done && axi_wready_i) w_done <= 1'b1;
 
           // Both accepted this cycle or already done → move to wait
           if ((aw_done || axi_awready_i) && (w_done || axi_wready_i)) state <= ST_WAIT_B;
-=======
-          if (!w_done  && axi_wready_i)  w_done  <= 1'b1;
-
-          // Both accepted this cycle or already done → move to wait
-          if ((aw_done || axi_awready_i) && (w_done || axi_wready_i))
-            state <= ST_WAIT_B;
->>>>>>> origin/merging
         end
 
         ST_WAIT_B: begin
           if (axi_bvalid_i) begin
-<<<<<<< HEAD
-=======
-            rptr  <= rptr + PTR_W'(1);
->>>>>>> origin/merging
             state <= ST_IDLE;
           end
         end
@@ -363,10 +286,6 @@ module mem_req_fifo
           // rsp_valid_o pulses combinatorially this same cycle.
           // Pop the entry and return to idle.
           if (axi_rvalid_i) begin
-<<<<<<< HEAD
-=======
-            rptr  <= rptr + PTR_W'(1);
->>>>>>> origin/merging
             state <= ST_IDLE;
           end
         end
