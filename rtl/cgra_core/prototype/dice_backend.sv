@@ -118,7 +118,6 @@ module dice_backend
   logic cgra_credit_ready_lo;
   logic load_credit_fire_lo;
   logic [$clog2(NUM_MEM_PORTS+1)-1:0] peek_num_load_lo;
-  logic [$clog2(DICE_NUM_BANKS+1)-1:0] ldst_pop_count_lo;
   logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_up_li;
   logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_need_li;
 
@@ -178,15 +177,7 @@ module dice_backend
   // Load credit counter
   // =========================================================================
 
-  always_comb begin
-    ldst_pop_count_lo = '0;
-    for (int i = 0; i < DICE_NUM_BANKS; i++) begin
-      ldst_pop_count_lo += ldst_pop_lo[i];
-    end
-    ldst_pop_count_lo += ldst_special_pop_lo;
-  end
-
-  assign load_credit_up_li = ldst_pop_count_lo;
+  assign load_credit_up_li = {{($bits(load_credit_up_li)-1){1'b0}}, mem_req_fifo_pop_lo};
   assign load_credit_need_li = {{($bits(load_credit_need_li)-$bits(peek_num_load_lo)){1'b0}}, peek_num_load_lo};
 
   dice_ready_to_credit_flow_converter #(
