@@ -27,6 +27,7 @@ module dice_wr_ctrl_bank
     // stall from either buffer
     , output logic stall_o
     , output logic ldst_pop_o
+    , output logic [DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_o
 
 
     // signals out to register file
@@ -62,6 +63,7 @@ module dice_wr_ctrl_bank
   assign stall_o = ldst_full;
   assign cgra_ready_o = 1'b1;
   assign ldst_pop_o = pop_ldst;
+  assign ldst_pop_e_block_id_o = ldst_wb.e_block_id;
 
   always_comb begin
     cgra_bank_write = cgra_valid_i && cgra_wr_i.mask;

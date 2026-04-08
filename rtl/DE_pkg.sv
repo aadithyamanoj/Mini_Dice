@@ -30,8 +30,10 @@ parameter int DICE_REGS_PER_BANK = `DICE_NUM_MAX_THREADS_PER_CORE;
 parameter int DICE_TOTAL_REGS = DICE_NUM_REGS + DICE_NUM_CONST + DICE_NUM_PRED;
 parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_TOTAL_REGS);
 parameter int LDST_BUF_DEPTH = 8;
+localparam int EBLOCK_ID_W = $clog2(`DICE_NUM_RETIRE_TABLE_ENTRIES + 4);
 typedef struct packed {
     logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
+    logic [EBLOCK_ID_W-1:0] e_block_id;
     logic [DICE_REG_DATA_WIDTH-1:0] data;
     logic [DICE_TOTAL_REGS-1:0] wr_bitmap;
 } cache_wr_cmd;
@@ -41,6 +43,7 @@ typedef struct packed {
     logic [(DICE_REG_DATA_WIDTH*DICE_NUM_BANKS)-1:0] data;
     logic [DICE_NUM_BANKS-1:0] mask;
     logic [($clog2(`DICE_NUM_MAX_THREADS_PER_CORE)*DICE_NUM_BANKS)-1:0] tid;
+    logic [(EBLOCK_ID_W*DICE_NUM_BANKS)-1:0] e_block_id;
 } ldst_wr_cmd;
 
 typedef struct packed {
@@ -48,10 +51,12 @@ typedef struct packed {
     logic [DICE_REG_DATA_WIDTH-1:0] data;
     logic mask;
     logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
+    logic [EBLOCK_ID_W-1:0] e_block_id;
 } reg_wr_cmd;
 
 // Const and predicate register write command (not per-bank)
 typedef struct packed {
+    logic [EBLOCK_ID_W-1:0] e_block_id;
     logic [DICE_NUM_CONST*DICE_REG_DATA_WIDTH-1:0] const_data;
     logic [DICE_NUM_CONST-1:0] const_mask;
     logic [DICE_NUM_PRED-1:0] pred_data;
@@ -68,6 +73,7 @@ function automatic reg_wr_cmd [DICE_NUM_BANKS-1:0] unpack_ldsr_wr
         wr_cmd[i].data = cmd.data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
         wr_cmd[i].mask = cmd.mask[i];
         wr_cmd[i].tid = cmd.tid[i*$clog2(`DICE_NUM_MAX_THREADS_PER_CORE) +: $clog2(`DICE_NUM_MAX_THREADS_PER_CORE)];
+        wr_cmd[i].e_block_id = cmd.e_block_id[i*EBLOCK_ID_W +: EBLOCK_ID_W];
     end
     return wr_cmd;
 endfunction
@@ -83,6 +89,7 @@ function automatic ldst_wr_cmd assemble_ldst_wr
         wr_data.data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cmd.data;
         wr_data.mask[i] = cmd.wr_bitmap[i];
         wr_data.tid[i*$clog2(`DICE_NUM_MAX_THREADS_PER_CORE) +: $clog2(`DICE_NUM_MAX_THREADS_PER_CORE)] = cmd.tid;
+        wr_data.e_block_id[i*EBLOCK_ID_W +: EBLOCK_ID_W] = cmd.e_block_id;
     end
     return wr_data;
 endfunction
@@ -93,6 +100,7 @@ function automatic special_regs_cmd assemble_special_wr
 );
     special_regs_cmd wr_data;
     wr_data = '0;
+    wr_data.e_block_id = cmd.e_block_id;
 
     for (int i = 0; i < DICE_NUM_CONST; i++) begin
         wr_data.const_mask[i] = cmd.wr_bitmap[DICE_NUM_BANKS + i];

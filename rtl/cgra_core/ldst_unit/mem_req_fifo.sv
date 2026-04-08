@@ -38,6 +38,7 @@ module mem_req_fifo
     output logic enq_ready_o,    // FIFO not full
 
     input logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] enq_tid_i,
+    input logic [                         DICE_EBLOCK_ID_WIDTH-1:0] enq_e_block_id_i,
     input logic [AXI_AW-1:0] enq_addr_i_0,  // mem_addr_o → AXI address
     input logic [AXI_AW-1:0] enq_addr_i_1,
     input logic [AXI_AW-1:0] enq_addr_i_2,
@@ -84,6 +85,7 @@ module mem_req_fifo
     output logic                                             pop_o,
     output logic                                             rsp_valid_o,
     output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid_o,
+    output logic [                         DICE_EBLOCK_ID_WIDTH-1:0] rsp_e_block_id_o,
     output logic [                               AXI_AW-1:0] rsp_addr_o,
     output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o
 );
@@ -94,6 +96,7 @@ module mem_req_fifo
   typedef struct packed {
     logic                                             valid;
     logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
+    logic [                         DICE_EBLOCK_ID_WIDTH-1:0] e_block_id;
     logic [AXI_AW-1:0]                                addr;
     logic [AXI_DW-1:0]                                data;
     logic                                             op;
@@ -133,6 +136,7 @@ module mem_req_fifo
   for (genvar i = 0; i < ENQ_PORTS_LP; i++) begin : gen_enq_req
     assign enq_req_li[i].valid = enq_valid_li[i];
     assign enq_req_li[i].tid   = enq_tid_i;
+    assign enq_req_li[i].e_block_id = enq_e_block_id_i;
     assign enq_req_li[i].addr  = enq_addr_li[i];
     assign enq_req_li[i].data  = enq_data_li[i];
     assign enq_req_li[i].op    = enq_op_li[i];
@@ -174,6 +178,7 @@ module mem_req_fifo
 
   // Head-of-FIFO convenience wires
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] h_tid;
+  logic [                         DICE_EBLOCK_ID_WIDTH-1:0] h_e_block_id;
   logic [                               AXI_AW-1:0] h_addr;
   logic [                               AXI_DW-1:0] h_data;
   logic                                             h_op;
@@ -181,6 +186,7 @@ module mem_req_fifo
   logic                                             rsp_bank_ready;
 
   assign h_tid  = head_req.tid;
+  assign h_e_block_id = head_req.e_block_id;
   assign h_addr = head_req.addr;
   assign h_data = head_req.data;
   assign h_op   = head_req.op;
@@ -246,6 +252,7 @@ module mem_req_fifo
 
   always_comb begin
     rsp_tid_o  = h_tid;
+    rsp_e_block_id_o = h_e_block_id;
     rsp_addr_o = h_addr;
     rsp_data_o = axi_rdata_i;
   end

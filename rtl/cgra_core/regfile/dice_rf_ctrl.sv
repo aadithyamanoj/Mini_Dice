@@ -36,6 +36,8 @@ module dice_rf_ctrl
     , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0]                          rd_data_o
     , output logic                                                                 rf_rd_valid_o
     , output logic [                       TID_WIDTH-1:0]                          tid_o
+    , input  logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_i
+    , output logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_o
     , output logic [                      TOTAL_REGS-1:0]                          wr_bitmap_o
     , output logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
     , output logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_o
@@ -44,7 +46,9 @@ module dice_rf_ctrl
     , output logic [        NUM_PRED-1:0] pred_o
     , output logic [NUM_TID*NUM_PRED-1:0] pred_all_o
     , output logic [       NUM_PORTS-1:0] ldst_pop_o
+    , output logic [NUM_PORTS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_o
     , output logic                        ldst_special_pop_o
+    , output logic [DICE_EBLOCK_ID_WIDTH-1:0] ldst_special_pop_e_block_id_o
     , output logic                        ldst_special_ready_o
 
     // Write Interface — CGRA
@@ -90,6 +94,7 @@ module dice_rf_ctrl
       assign cgra_wr_li[i].data = cgra_data_i[i*DATA_WIDTH+:DATA_WIDTH];
       assign cgra_wr_li[i].mask = cgra_shifted_bitmap[i];
       assign cgra_wr_li[i].tid  = cgra_tid_i;
+      assign cgra_wr_li[i].e_block_id = '0;
     end
   endgenerate
 
@@ -132,6 +137,7 @@ module dice_rf_ctrl
 
           , .stall_o(stall_o[i])
           , .ldst_pop_o(ldst_pop_o[i])
+          , .ldst_pop_e_block_id_o(ldst_pop_e_block_id_o[i])
 
           , .ws_o  (rf_wr_addr[i*ADDR_WIDTH+:ADDR_WIDTH])
           , .data_o(rf_wr_data[i*DATA_WIDTH+:DATA_WIDTH])
@@ -198,6 +204,7 @@ module dice_rf_ctrl
   assign pop_special = !cgra_special_valid && special_fifo_valid;
   assign special_cmd = cgra_special_valid ? cgra_special : ldst_special_wb;
   assign ldst_special_pop_o = pop_special;
+  assign ldst_special_pop_e_block_id_o = ldst_special_wb.e_block_id;
 
   logic [TID_WIDTH-1:0] special_tid;
   assign special_tid = cgra_special_valid ? cgra_tid_i : ldst_special_wb_tid;
@@ -307,11 +314,13 @@ module dice_rf_ctrl
   always_ff @(posedge clk_i) begin
     if (reset_i) begin
       tid_o <= '0;
+      e_block_id_o <= '0;
       wr_bitmap_o <= '0;
       ld_dest_regs_o <= '0;
       num_stores_o <= '0;
     end else if (rd_tid_valid_i) begin
       tid_o <= rd_tid_i;
+      e_block_id_o <= e_block_id_i;
       wr_bitmap_o <= wr_bitmap_i;
       ld_dest_regs_o <= ld_dest_regs_i;
       num_stores_o <= num_stores_i;

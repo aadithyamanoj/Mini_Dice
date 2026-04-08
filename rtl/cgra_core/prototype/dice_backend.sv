@@ -84,6 +84,7 @@ module dice_backend
   logic        [             DICE_NUM_BANKS-1:0]   ldst_ready_lo;
   logic                                            cgra_v_lo;
   logic        [               DICE_TID_WIDTH-1:0] cgra_tid_lo;
+  logic        [         DICE_EBLOCK_ID_WIDTH-1:0] cgra_e_block_id_lo;
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_0;
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_0;
   logic        [          DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_1;
@@ -95,7 +96,9 @@ module dice_backend
   logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_valid_lo;
   logic        [              NUM_MEM_PORTS-1:0] cgra_mem_port_op_lo;
   logic        [             DICE_NUM_BANKS-1:0] ldst_pop_lo;
+  logic [DICE_NUM_BANKS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_lo;
   logic                                           ldst_special_pop_lo;
+  logic        [         DICE_EBLOCK_ID_WIDTH-1:0] ldst_special_pop_e_block_id_lo;
   logic                                           ldst_special_ready_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
@@ -103,6 +106,7 @@ module dice_backend
   logic        [          $bits(cache_wr_cmd)-1:0] ldst_wr_li;
   logic                                            ldst_valid_li;
   logic        [               DICE_TID_WIDTH-1:0] mem_rsp_tid_lo;
+  logic        [         DICE_EBLOCK_ID_WIDTH-1:0] mem_rsp_e_block_id_lo;
   logic        [          DICE_REG_ADDR_WIDTH-1:0] mem_rsp_addr_lo;
   logic        [          DICE_REG_DATA_WIDTH-1:0] mem_rsp_data_lo;
   logic                                            mem_rsp_valid_lo;
@@ -124,6 +128,11 @@ module dice_backend
   logic mem_req_fifo_ready_lo;
   logic mem_req_fifo_pop_lo;
 
+  // Latched dispatch metadata
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
+  logic [                    13:0] dispatch_pending_reads;
+  logic [                    13:0] dispatch_pending_writes;
+
   // Block Commit Table
   logic                               bct_insert_valid;
   logic [   DICE_HW_CTA_ID_WIDTH-1:0] bct_insert_hw_cta_id;
@@ -136,16 +145,108 @@ module dice_backend
   logic                               bct_update_is_write;
   logic [2**DICE_HW_CTA_ID_WIDTH-1:0] bct_update_reduce_count;
 
+  localparam int RETIRE_EVT_W = 1 + DICE_EBLOCK_ID_WIDTH;
+  localparam int RETIRE_EVT_CNT = DICE_NUM_BANKS + 1;
+  localparam int RETIRE_BUNDLE_W = RETIRE_EVT_CNT * RETIRE_EVT_W;
+  logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_li;
+  logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_words_lo;
+  logic [RETIRE_BUNDLE_W-1:0] retire_bundle_bits_li, retire_bundle_bits_lo;
+  logic retire_bundle_valid_li, retire_bundle_v_lo, retire_bundle_yumi_li;
+  logic retire_ser_ready_lo, retire_ser_v_lo, retire_ser_yumi_li;
+  logic [RETIRE_EVT_W-1:0] retire_ser_data_lo;
+  logic retire_evt_valid_lo;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] retire_evt_e_block_id_lo;
+
   assign fdr_data_li         = fdr_data_i;
   assign fdr_ready_o        = ~dispatch_busy;
 
   assign ldst_cmd.tid       = mem_rsp_tid_lo;
+  assign ldst_cmd.e_block_id = mem_rsp_e_block_id_lo;
   assign ldst_cmd.data      = mem_rsp_data_lo;
   assign ldst_cmd.wr_bitmap = DICE_TOTAL_REGS'(1'b1) << mem_rsp_addr_lo;
 
   assign ldst_wr_li         = ldst_cmd;
   assign ldst_valid_li      = mem_rsp_valid_lo;
   assign peek_num_load_lo   = gen_num_loads(fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores);
+
+
+  // =========================================================================
+  // Dispatcher → BCT Glue
+  // =========================================================================
+  // Latch e-block metadata whenever the dispatcher accepts a new e-block.
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      dispatch_e_block_id    <= '0;
+      dispatch_pending_reads <= '0;
+      dispatch_pending_writes <= '0;
+    end else if (fdr_valid_i && ~dispatch_busy) begin
+      dispatch_e_block_id    <= DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id);
+      dispatch_pending_reads <= 14'($countones(fdr_data_li.real_active_mask) *
+                                    gen_num_loads(fdr_data_li.metadata.ld_dest_regs,
+                                                  fdr_data_li.metadata.num_stores));
+      dispatch_pending_writes <= 14'($countones(fdr_data_li.real_active_mask) *
+                                     fdr_data_li.metadata.num_stores);
+    end
+  end
+
+  // BCT insert: fires on dispatcher_done with the metadata latched above.
+  // hw_cta_id hardwired to 0 — only one CTA in current config.
+  assign bct_insert_valid          = dispatcher_done;
+  assign bct_insert_e_block_id     = dispatch_e_block_id;
+  assign bct_insert_hw_cta_id      = '0;
+  assign bct_insert_pending_reads  = dispatch_pending_reads;
+  assign bct_insert_pending_writes = dispatch_pending_writes;
+
+  always_comb begin
+    retire_bundle_li = '0;
+    for (int i = 0; i < DICE_NUM_BANKS; i++) begin
+      retire_bundle_li[i] = {ldst_pop_lo[i], ldst_pop_e_block_id_lo[i]};
+    end
+    retire_bundle_li[DICE_NUM_BANKS] = {ldst_special_pop_lo, ldst_special_pop_e_block_id_lo};
+  end
+
+  assign retire_bundle_bits_li = retire_bundle_li;
+  assign retire_bundle_words_lo = retire_bundle_bits_lo;
+  assign retire_bundle_valid_li = |ldst_pop_lo | ldst_special_pop_lo;
+
+  bsg_fifo_1r1w_small #(
+      .width_p(RETIRE_BUNDLE_W),
+      .els_p(LDST_BUF_DEPTH)
+  ) retire_bundle_fifo (
+      .clk_i(clk_i),
+      .reset_i(rst_i),
+      .v_i(retire_bundle_valid_li),
+      .ready_o(),
+      .data_i(retire_bundle_bits_li),
+      .v_o(retire_bundle_v_lo),
+      .data_o(retire_bundle_bits_lo),
+      .yumi_i(retire_bundle_yumi_li)
+  );
+
+  bsg_parallel_in_serial_out #(
+      .width_p(RETIRE_EVT_W),
+      .els_p(RETIRE_EVT_CNT)
+  ) retire_evt_serializer (
+      .clk_i(clk_i),
+      .reset_i(rst_i),
+      .valid_i(retire_bundle_v_lo),
+      .data_i(retire_bundle_words_lo),
+      .ready_and_o(retire_ser_ready_lo),
+      .valid_o(retire_ser_v_lo),
+      .data_o(retire_ser_data_lo),
+      .yumi_i(retire_ser_yumi_li)
+  );
+
+  assign retire_bundle_yumi_li = retire_bundle_v_lo & retire_ser_ready_lo;
+  assign retire_ser_yumi_li = retire_ser_v_lo;
+  assign retire_evt_valid_lo = retire_ser_v_lo & retire_ser_data_lo[RETIRE_EVT_W-1];
+  assign retire_evt_e_block_id_lo = retire_ser_data_lo[DICE_EBLOCK_ID_WIDTH-1:0];
+
+  // BCT update: fires on serialized RF retire events tagged with e_block_id.
+  assign bct_update_valid        = retire_evt_valid_lo;
+  assign bct_update_e_block_id   = retire_evt_e_block_id_lo;
+  assign bct_update_is_write     = 1'b0;
+  assign bct_update_reduce_count = (2**DICE_HW_CTA_ID_WIDTH)'(1);
 
   // =========================================================================
   // Dispatcher
@@ -230,9 +331,12 @@ module dice_backend
       .mem_addr_o_3(cgra_mem_addr_lo_3),
       .mem_valid_o (cgra_v_lo),
       .cgra_tid_o  (cgra_tid_lo),
+      .cgra_e_block_id_o(cgra_e_block_id_lo),
       .pred_all_o  (cgra_pred_all_o),
       .ldst_pop_o  (ldst_pop_lo),
+      .ldst_pop_e_block_id_o(ldst_pop_e_block_id_lo),
       .ldst_special_pop_o(ldst_special_pop_lo),
+      .ldst_special_pop_e_block_id_o(ldst_special_pop_e_block_id_lo),
       .ldst_special_ready_o(ldst_special_ready_lo),
       .mem_port_valid_o(cgra_mem_port_valid_lo),
       .mem_port_op_o(cgra_mem_port_op_lo),
@@ -247,6 +351,7 @@ module dice_backend
       .rd_tid_ready_o(rf_rd_ready_lo),
     //   .rd_en_i       (1'b1),
       .rd_tid_i      (rd_tid),
+      .e_block_id_i  (dispatch_e_block_id),
       .rd_bitmap_i   (full_reg_bitmap_lo),
       .wr_bitmap_i   (fdr_data_li.metadata.out_regs_bitmap),
 
@@ -282,6 +387,7 @@ module dice_backend
       .enq_ready_o(mem_req_fifo_ready_lo),
 
       .enq_tid_i(cgra_tid_lo),
+      .enq_e_block_id_i(cgra_e_block_id_lo),
       .enq_addr_i_0(cgra_mem_addr_lo_0),
       .enq_addr_i_1(cgra_mem_addr_lo_1),
       .enq_addr_i_2(cgra_mem_addr_lo_2),
@@ -318,6 +424,7 @@ module dice_backend
       .pop_o(mem_req_fifo_pop_lo),
       .rsp_valid_o(mem_rsp_valid_lo),
       .rsp_tid_o(mem_rsp_tid_lo),
+      .rsp_e_block_id_o(mem_rsp_e_block_id_lo),
       .rsp_addr_o(mem_rsp_addr_lo),
       .rsp_data_o(mem_rsp_data_lo)
   );
