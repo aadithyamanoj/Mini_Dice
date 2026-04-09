@@ -24,10 +24,6 @@ package dice_pkg;
   parameter int DICE_CORE_ID_WIDTH            = $clog2(`DICE_NUM_CGRA_CORES);
   parameter int DICE_SMEM_SIZE_WIDTH          = $clog2(`DICE_SMEM_SIZE_PER_CORE);
   parameter int DICE_BITSTREAM_SIZE           = 1690;  // 256 bytes max bitstream size
-  parameter int DICE_MEM_DATA_WIDTH           = 16;
-  parameter int DICE_MEM_FLAGS_WIDTH          = 1;
-  parameter int DICE_MEM_ADDR_WIDTH           = DICE_ADDR_WIDTH;
-
 
   parameter int DICE_NUMBER_OF_MAX_COALESCED_COMMANDS = 8;
   parameter int DICE_CACHE_LINE_SIZE          = 8;
