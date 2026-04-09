@@ -1,5 +1,5 @@
 // =============================================================================
-// tb_cgra_io_axi4_burst_top.sv
+// tb_cgra_io_axi4_top.sv
 //
 // Integration testbench for cgra_io_axi4_top.
 //
@@ -50,7 +50,7 @@
 // axi_test.sv must be on the include path (already in axi/src/)
 `include "axi_test.sv"
 
-module tb_cgra_io_axi4_burst_top;
+module tb_cgra_io_axi4_top;
 
   import axi4_xbar_pkg::*;
   import axi_pkg::*;
@@ -134,7 +134,7 @@ module tb_cgra_io_axi4_burst_top;
   // -------------------------------------------------------------------------
   // DUT: cgra_io_axi4_top
   // -------------------------------------------------------------------------
-  cgra_io_axi4_burst_top #(
+  cgra_io_axi4_top #(
     .ADDR_WIDTH   ( AW ),
     .DATA_WIDTH   ( DW ),
     .FLIT_WIDTH   ( 16 ),
@@ -748,4 +748,4 @@ module tb_cgra_io_axi4_burst_top;
     $finish;
   end
 
-endmodule : tb_cgra_io_axi4_burst_top
+endmodule : tb_cgra_io_axi4_top

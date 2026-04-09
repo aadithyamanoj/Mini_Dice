@@ -1,7 +1,7 @@
 // =============================================================================
 // tb_cgra_io_axi4_link_top.sv
 //
-// Testbench for the off-chip memory link path through cgra_io_axi4_burst_top.
+// Testbench for the off-chip memory link path through cgra_io_axi4_top.
 //
 // Path under test:
 //   mem_req_fifo (enq_*) → dfetch → crossbar → axi_link_tx → mem_link_tx
@@ -127,7 +127,7 @@ module tb_cgra_io_axi4_link_top;
   // -------------------------------------------------------------------------
   // DUT
   // -------------------------------------------------------------------------
-  cgra_io_axi4_burst_top #(
+  cgra_io_axi4_top #(
     .ADDR_WIDTH ( AW ),
     .DATA_WIDTH ( DW ),
     .FLIT_WIDTH ( FW )
