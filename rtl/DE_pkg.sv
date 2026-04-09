@@ -7,16 +7,17 @@ package DE_pkg;
 // =========================================================
 // Dispatcher architecture constants
 // =========================================================
+parameter int NUM_CREDITS      = 24;
+
 parameter int NUM_SCOREBOARDS  = 1;
 parameter int NUM_LANES        = 1;
-
+parameter int NUM_MEM_PORTS    = `DICE_CGRA_MEM_PORTS;
 parameter int CHUNK_SIZE       = `DICE_NUM_MAX_THREADS_PER_CORE / NUM_SCOREBOARDS;
 parameter int CHUNK_ADDR_WIDTH = (NUM_SCOREBOARDS == 1) ? 1 : $clog2(NUM_SCOREBOARDS);
 parameter int LANE_SIZE        = CHUNK_SIZE / NUM_LANES;
 parameter int LANE_WIDTH       = $clog2(LANE_SIZE);
-parameter int NUM_MEM_PORTS    = `DICE_CGRA_MEM_PORTS;
 
-parameter int DICE_REG_DATA_WIDTH = 8;
+parameter int DICE_REG_DATA_WIDTH = 16;
 parameter int CACHE_LINE_SIZE = 32;
 parameter int NUMBER_OF_MAX_COALESCED_COMMANDS = CACHE_LINE_SIZE/4;
 parameter int TID_BITMAP_WIDTH = NUMBER_OF_MAX_COALESCED_COMMANDS;
@@ -31,12 +32,9 @@ parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_TOTAL_REGS);
 parameter int LDST_BUF_DEPTH = 8;
 
 typedef struct packed {
-    logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0]  outcmd_base_tid;
-    logic [TID_BITMAP_WIDTH-1:0]                        outcmd_tid_bitmap;
-    logic [DICE_REG_ADDR_WIDTH-1:0]                     outcmd_ld_dest_reg;
-    logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0]
-          [BASE_ADDRESS_OFFSET-1:0]                     outcmd_address_map;
-    logic [(CACHE_LINE_SIZE*8)-1:0]                     core_rsp_data;
+    logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
+    logic [DICE_REG_DATA_WIDTH-1:0] data;
+    logic [DICE_TOTAL_REGS-1:0] wr_bitmap;
 } cache_wr_cmd;
 
 typedef struct packed {
@@ -70,7 +68,7 @@ function automatic reg_wr_cmd [DICE_NUM_BANKS-1:0] unpack_ldsr_wr
     for (int i = 0; i < DICE_NUM_BANKS; i++) begin
         wr_cmd[i].data = cmd.data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
         wr_cmd[i].mask = cmd.mask[i];
-        wr_cmd[i].tid = cmd.tid[i];
+        wr_cmd[i].tid = cmd.tid[i*$clog2(`DICE_NUM_MAX_THREADS_PER_CORE) +: $clog2(`DICE_NUM_MAX_THREADS_PER_CORE)];
     end
     return wr_cmd;
 endfunction
@@ -82,13 +80,10 @@ function automatic ldst_wr_cmd assemble_ldst_wr
 );
     ldst_wr_cmd wr_data;
     wr_data = '0;
-    for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
-        if (cmd.outcmd_tid_bitmap[i]) begin
-            wr_data.data[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]
-                = cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
-            wr_data.mask[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = 1'b1;
-            wr_data.tid[bank_select(cmd.outcmd_base_tid + cmd.outcmd_address_map[i], cmd.outcmd_ld_dest_reg)] = cmd.outcmd_base_tid + cmd.outcmd_address_map[i];
-        end
+    for (int i = 0; i < DICE_NUM_BANKS; i++) begin
+        wr_data.data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cmd.data;
+        wr_data.mask[i] = cmd.wr_bitmap[i];
+        wr_data.tid[i*$clog2(`DICE_NUM_MAX_THREADS_PER_CORE) +: $clog2(`DICE_NUM_MAX_THREADS_PER_CORE)] = cmd.tid;
     end
     return wr_data;
 endfunction
@@ -98,35 +93,16 @@ function automatic special_regs_cmd assemble_special_wr
     input cache_wr_cmd cmd
 );
     special_regs_cmd wr_data;
-    int idx;
-    logic found;
-
     wr_data = '0;
 
-    if (cmd.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS)
-        && cmd.outcmd_ld_dest_reg < DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS + DICE_NUM_CONST)) begin
-        // Constant register write
-        idx = int'(cmd.outcmd_ld_dest_reg) - DICE_NUM_BANKS;
-        found = 0;
-        for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
-            if (cmd.outcmd_tid_bitmap[i] && !found) begin
-                wr_data.const_data[idx*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] =
-                    cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH];
-                wr_data.const_mask[idx] = 1'b1;
-                found = 1;
-            end
-        end
-    end else if (cmd.outcmd_ld_dest_reg >= DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS + DICE_NUM_CONST)) begin
-        // Predicate register write
-        idx = int'(cmd.outcmd_ld_dest_reg) - DICE_NUM_BANKS - DICE_NUM_CONST;
-        found = 0;
-        for (int i = 0; i < NUMBER_OF_MAX_COALESCED_COMMANDS; i++) begin
-            if (cmd.outcmd_tid_bitmap[i] && !found) begin
-                wr_data.pred_data[idx] = cmd.core_rsp_data[i*DICE_REG_DATA_WIDTH];
-                wr_data.pred_mask[idx] = 1'b1;
-                found = 1;
-            end
-        end
+    for (int i = 0; i < DICE_NUM_CONST; i++) begin
+        wr_data.const_mask[i] = cmd.wr_bitmap[DICE_NUM_BANKS + i];
+        wr_data.const_data[i*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH] = cmd.data;
+    end
+
+    for (int i = 0; i < DICE_NUM_PRED; i++) begin
+        wr_data.pred_mask[i] = cmd.wr_bitmap[DICE_NUM_BANKS + DICE_NUM_CONST + i];
+        wr_data.pred_data[i] = cmd.data[0];
     end
 
     return wr_data;
@@ -137,6 +113,57 @@ typedef struct packed {
     logic[$clog2(DICE_NUM_REGS)-1:0] rs;
     logic      re;
 } reg_rd_cmd;
+
+function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_valid
+(
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+);
+    logic [NUM_MEM_PORTS-1:0] valid_vec;
+    valid_vec = '0;
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+        valid_vec[i] = (i < num_stores) || (ld_dest_regs[i] != DICE_REG_ADDR_WIDTH'(31));
+    end
+
+    return valid_vec;
+endfunction
+
+function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_op
+(
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+);
+    logic [NUM_MEM_PORTS-1:0] op_vec;
+    op_vec = '0;
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+        op_vec[i] = (i < num_stores);
+    end
+
+    return op_vec;
+endfunction
+
+function automatic logic [$clog2(NUM_MEM_PORTS+1)-1:0] gen_num_loads
+(
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
+    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+);
+    logic [$clog2(NUM_MEM_PORTS+1)-1:0] load_cnt;
+    logic [NUM_MEM_PORTS-1:0] valid_vec;
+    logic [NUM_MEM_PORTS-1:0] op_vec;
+
+    load_cnt = '0;
+    valid_vec = gen_mem_port_valid(ld_dest_regs, num_stores);
+    op_vec = gen_mem_port_op(ld_dest_regs, num_stores);
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+        load_cnt += valid_vec[i] & ~op_vec[i];
+    end
+
+    return load_cnt;
+endfunction
+
 
 function automatic logic [$clog2(DICE_NUM_BANKS)-1:0] bank_select
 (
