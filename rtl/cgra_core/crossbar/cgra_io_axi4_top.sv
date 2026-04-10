@@ -8,11 +8,11 @@
 //   bsfetch   : idle (future bitstream fetch)
 //
 // Off-chip memory path (chip → FPGA SRAM → chip):
-//   mem_req_fifo → dfetch → crossbar → axi_link_tx → mem_link_tx → [link] → FPGA SRAM
-//   FPGA SRAM → [link] → mem_link_rx → axi_link_rx → ID shim → crossbar → mem_req_fifo
+//   mem_req_fifo → [dfetch port] → crossbar → top_level_io TX → bsg_link_ddr_upstream → [DDR] → FPGA SRAM
+//   FPGA SRAM → [DDR] → bsg_link_ddr_downstream → top_level_io RX → ID shim → crossbar → mem_req_fifo
 //
-// mem_link_tx/rx are physical serial link pins. In simulation the TB acts
-// as the FPGA endpoint, decoding flits and returning flit-encoded responses.
+// Physical DDR IO pins are exposed at the module boundary.  In simulation a
+// second top_level_io instance (FPGA endpoint) is connected back-to-back.
 // =============================================================================
 
 `ifndef AXI_TYPEDEF_SVH_
@@ -28,7 +28,13 @@ module cgra_io_axi4_top
     parameter int ADDR_WIDTH    = 16,
     parameter int DATA_WIDTH    = 16,
     parameter int FLIT_WIDTH    = 16,
-    parameter int ID_FIFO_DEPTH = 4
+    parameter int ID_FIFO_DEPTH          = 4,
+    // bsg_link DDR parameters
+    parameter int LG_FIFO_DEPTH          = 6,  // bsg_link credit-FIFO depth (log2)
+    parameter int LG_CREDIT_TO_TOKEN_DEC = 3,  // bsg_link token decimation (log2)
+    parameter int BYPASS_TWOFER_FIFO     = 0,  // 1 = bypass twofer FIFO (use in sim)
+    parameter int BYPASS_GEARBOX         = 0,  // 1 = bypass PISO/SIPO gearbox (use in sim)
+    parameter int USE_HARDENED_FIFO      = 0   // 1 = use hardened FIFO cells
 )(
     input  logic clk_i,
     input  logic rst_i,
@@ -58,35 +64,49 @@ module cgra_io_axi4_top
     output logic                      fpga_axi_i_r_valid,
     input  logic                      fpga_axi_i_r_ready,
 
-    // mem_req_fifo enqueue interface (from CGRA backend)
-    input  logic                                                                   enq_valid_i,
-    output logic                                                                   enq_ready_o,
-    input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                     enq_base_tid_i,
-    input  logic [TID_BITMAP_WIDTH-1:0]                                           enq_tid_bitmap_i,
-    input  logic [DICE_REG_ADDR_WIDTH-1:0]                                        enq_ld_dest_reg_i,
-    input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]  enq_address_map_i,
-    input  logic [15:0]                                                            enq_addr_i,
-    input  logic [15:0]                                                            enq_data_i,
-    input  logic                                                                   enq_write_en_i,
+    // mem_req_fifo enqueue interface (from CGRA backend) — 4 parallel ports
+    input  logic enq_valid_i_0,
+    input  logic enq_valid_i_1,
+    input  logic enq_valid_i_2,
+    input  logic enq_valid_i_3,
+    output logic enq_ready_o,
+    input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] enq_tid_i,
+    input  logic [15:0] enq_addr_i_0,
+    input  logic [15:0] enq_addr_i_1,
+    input  logic [15:0] enq_addr_i_2,
+    input  logic [15:0] enq_addr_i_3,
+    input  logic [15:0] enq_data_i_0,
+    input  logic [15:0] enq_data_i_1,
+    input  logic [15:0] enq_data_i_2,
+    input  logic [15:0] enq_data_i_3,
+    input  logic enq_op_i_0,   // 0 = load, 1 = store
+    input  logic enq_op_i_1,
+    input  logic enq_op_i_2,
+    input  logic enq_op_i_3,
 
     // mem_req_fifo response interface (to CGRA backend)
-    output logic                                                                   rsp_valid_o,
-    output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                     rsp_base_tid_o,
-    output logic [TID_BITMAP_WIDTH-1:0]                                           rsp_tid_bitmap_o,
-    output logic [DICE_REG_ADDR_WIDTH-1:0]                                        rsp_ld_dest_reg_o,
-    output logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]  rsp_address_map_o,
-    output logic [(CACHE_LINE_SIZE*8)-1:0]                                        rsp_data_o,
+    input  logic                                              rsp_data_ready_i,
+    output logic                                              pop_o,
+    output logic                                              rsp_valid_o,
+    output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid_o,
+    output logic [15:0]                                       rsp_addr_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0]                    rsp_data_o,
 
-    // Off-chip memory link: chip → FPGA SRAM  (axi_link_tx output)
-    output logic                   mem_link_tx_v_o,
-    output logic [FLIT_WIDTH-1:0]  mem_link_tx_data_o,
-    input  logic                   mem_link_tx_ready_i,
+    // bsg_link upstream (chip → FPGA SRAM): source-synchronous DDR
+    input  logic        io_master_clk_i,            // IO master clock for upstream link
+    input  logic        upstream_io_link_reset_i,   // IO-domain reset for upstream link
+    input  logic        async_token_reset_i,         // Async token counter reset
+    input  logic        token_clk_i,                // Token credit clock from FPGA downstream
+    output logic        upstream_io_clk_r_o,         // Forwarded clock to FPGA
+    output logic [7:0]  upstream_io_data_r_o,        // DDR data to FPGA (channel_width=8)
+    output logic        upstream_io_valid_r_o,       // DDR valid to FPGA
 
-    // Off-chip memory link: FPGA SRAM → chip  (axi_link_rx input)
-    // mem_link_rx_ready_o is the yumi signal: high when the flit was consumed
-    input  logic                   mem_link_rx_v_i,
-    input  logic [FLIT_WIDTH-1:0]  mem_link_rx_data_i,
-    output logic                   mem_link_rx_ready_o,
+    // bsg_link downstream (FPGA SRAM → chip): source-synchronous DDR
+    input  logic        downstream_io_link_reset_i,  // IO-domain reset for downstream link
+    input  logic        downstream_io_clk_i,         // Forwarded clock from FPGA
+    input  logic [7:0]  downstream_io_data_i,        // DDR data from FPGA
+    input  logic        downstream_io_valid_i,       // DDR valid from FPGA
+    output logic        downstream_core_token_r_o,   // Token credit back to FPGA upstream
 
     // CSR slave port (on-chip)
     output mst_req_t  cgra_csr_req_o,
@@ -265,142 +285,155 @@ module cgra_io_axi4_top
   // mem_req_fifo (CGRA backend → dfetch crossbar port)
   // --------------------------------------------------------------------------
   mem_req_fifo u_mem_req_fifo (
-    .clk_i             ( clk_i             ),
-    .rst_i             ( rst_i             ),
-    .enq_valid_i       ( enq_valid_i       ),
-    .enq_ready_o       ( enq_ready_o       ),
-    .enq_base_tid_i    ( enq_base_tid_i    ),
-    .enq_tid_bitmap_i  ( enq_tid_bitmap_i  ),
-    .enq_ld_dest_reg_i ( enq_ld_dest_reg_i ),
-    .enq_address_map_i ( enq_address_map_i ),
-    .enq_addr_i        ( enq_addr_i        ),
-    .enq_data_i        ( enq_data_i        ),
-    .enq_write_en_i    ( enq_write_en_i    ),
-    .axi_awaddr_o      ( fifo_awaddr       ),
-    .axi_awvalid_o     ( fifo_awvalid      ),
-    .axi_awready_i     ( fifo_awready      ),
-    .axi_wdata_o       ( fifo_wdata        ),
-    .axi_wstrb_o       ( fifo_wstrb        ),
-    .axi_wvalid_o      ( fifo_wvalid       ),
-    .axi_wready_i      ( fifo_wready       ),
-    .axi_bresp_i       ( fifo_bresp        ),
-    .axi_bvalid_i      ( fifo_bvalid       ),
-    .axi_bready_o      ( fifo_bready       ),
-    .axi_araddr_o      ( fifo_araddr       ),
-    .axi_arvalid_o     ( fifo_arvalid      ),
-    .axi_arready_i     ( fifo_arready      ),
-    .axi_rdata_i       ( fifo_rdata        ),
-    .axi_rresp_i       ( fifo_rresp        ),
-    .axi_rvalid_i      ( fifo_rvalid       ),
-    .axi_rready_o      ( fifo_rready       ),
-    .rsp_valid_o       ( rsp_valid_o       ),
-    .rsp_base_tid_o    ( rsp_base_tid_o    ),
-    .rsp_tid_bitmap_o  ( rsp_tid_bitmap_o  ),
-    .rsp_ld_dest_reg_o ( rsp_ld_dest_reg_o ),
-    .rsp_address_map_o ( rsp_address_map_o ),
-    .rsp_data_o        ( rsp_data_o        )
+    .clk_i            ( clk_i            ),
+    .rst_i            ( rst_i            ),
+    .enq_valid_i_0    ( enq_valid_i_0    ),
+    .enq_valid_i_1    ( enq_valid_i_1    ),
+    .enq_valid_i_2    ( enq_valid_i_2    ),
+    .enq_valid_i_3    ( enq_valid_i_3    ),
+    .enq_ready_o      ( enq_ready_o      ),
+    .enq_tid_i        ( enq_tid_i        ),
+    .enq_addr_i_0     ( enq_addr_i_0     ),
+    .enq_addr_i_1     ( enq_addr_i_1     ),
+    .enq_addr_i_2     ( enq_addr_i_2     ),
+    .enq_addr_i_3     ( enq_addr_i_3     ),
+    .enq_data_i_0     ( enq_data_i_0     ),
+    .enq_data_i_1     ( enq_data_i_1     ),
+    .enq_data_i_2     ( enq_data_i_2     ),
+    .enq_data_i_3     ( enq_data_i_3     ),
+    .enq_op_i_0       ( enq_op_i_0       ),
+    .enq_op_i_1       ( enq_op_i_1       ),
+    .enq_op_i_2       ( enq_op_i_2       ),
+    .enq_op_i_3       ( enq_op_i_3       ),
+    .axi_awaddr_o     ( fifo_awaddr      ),
+    .axi_awvalid_o    ( fifo_awvalid     ),
+    .axi_awready_i    ( fifo_awready     ),
+    .axi_wdata_o      ( fifo_wdata       ),
+    .axi_wstrb_o      ( fifo_wstrb       ),
+    .axi_wvalid_o     ( fifo_wvalid      ),
+    .axi_wready_i     ( fifo_wready      ),
+    .axi_bresp_i      ( fifo_bresp       ),
+    .axi_bvalid_i     ( fifo_bvalid      ),
+    .axi_bready_o     ( fifo_bready      ),
+    .axi_araddr_o     ( fifo_araddr      ),
+    .axi_arvalid_o    ( fifo_arvalid     ),
+    .axi_arready_i    ( fifo_arready     ),
+    .axi_rdata_i      ( fifo_rdata       ),
+    .axi_rresp_i      ( fifo_rresp       ),
+    .axi_rvalid_i     ( fifo_rvalid      ),
+    .axi_rready_o     ( fifo_rready      ),
+    .rsp_data_ready_i ( rsp_data_ready_i ),
+    .pop_o            ( pop_o            ),
+    .rsp_valid_o      ( rsp_valid_o      ),
+    .rsp_tid_o        ( rsp_tid_o        ),
+    .rsp_addr_o       ( rsp_addr_o       ),
+    .rsp_data_o       ( rsp_data_o       )
   );
 
   // --------------------------------------------------------------------------
-  // axi_link_tx — serialize AW/W/AR from crossbar to flits going to FPGA SRAM
+  // top_level_io — bsg_link DDR physical layer + axi_link_tx/rx
+  //   TX path: crossbar AW/W/AR → axi_link_tx → bsg_link_ddr_upstream → DDR pins
+  //   RX path: DDR pins → bsg_link_ddr_downstream → axi_link_rx → R/B to crossbar
   // --------------------------------------------------------------------------
-  axi_link_tx #(
-    .flit_width_p         ( FLIT_WIDTH ),
-    .addr_width_p         ( ADDR_WIDTH ),
-    .link_fifo_els_p      ( 8          ),
-    .aw_desc_fifo_els_p   ( 2          ),
-    .ar_desc_fifo_els_p   ( 2          ),
-    .w_len_fifo_els_p     ( 4          ),
-    .w_data_fifo_els_p    ( 8          ),
-    .r_len_fifo_els_p     ( 4          ),
-    .r_data_fifo_els_p    ( 8          ),
-    .b_resp_fifo_els_p    ( 4          ),
-    .pkt_order_fifo_els_p ( 8          )
-  ) u_axi_link_tx (
-    .clk_i          ( clk_i                                ),
-    .reset_i        ( rst_i                                ),
-    // AW
-    .awvalid_i      ( xbar_mem_req.aw_valid                ),
-    .awready_o      ( tx_awready                           ),
-    .awaddr_i       ( xbar_mem_req.aw.addr[ADDR_WIDTH-1:0] ),
-    .awlen_i        ( xbar_mem_req.aw.len                  ),
-    .awsize_i       ( xbar_mem_req.aw.size                 ),
-    .awburst_i      ( xbar_mem_req.aw.burst                ),
-    // W
-    .wvalid_i       ( xbar_mem_req.w_valid                 ),
-    .wready_o       ( tx_wready                            ),
-    .wdata_i        ( xbar_mem_req.w.data[15:0]            ),
-    .wlast_i        ( xbar_mem_req.w.last                  ),
-    // AR
-    .arvalid_i      ( xbar_mem_req.ar_valid                ),
-    .arready_o      ( tx_arready                           ),
-    .araddr_i       ( xbar_mem_req.ar.addr[ADDR_WIDTH-1:0] ),
-    .arlen_i        ( xbar_mem_req.ar.len                  ),
-    .arsize_i       ( xbar_mem_req.ar.size                 ),
-    .arburst_i      ( xbar_mem_req.ar.burst                ),
-    // R/B inputs — chip does not send responses to FPGA on this link
-    .rvalid_i       ( 1'b0                                 ),
-    .rready_o       (                                      ),
-    .rdata_i        ( '0                                   ),
-    .rresp_i        ( '0                                   ),
-    .rlast_i        ( 1'b0                                 ),
-    .bvalid_i       ( 1'b0                                 ),
-    .bready_o       (                                      ),
-    .bresp_i        ( '0                                   ),
-    // Flit link output → off-chip
-    .link_tx_v_o    ( mem_link_tx_v_o                      ),
-    .link_tx_data_o ( mem_link_tx_data_o                   ),
-    .link_tx_ready_i( mem_link_tx_ready_i                  )
-  );
-
-  // --------------------------------------------------------------------------
-  // axi_link_rx — deserialize FPGA SRAM response flits into AXI R/B
-  // --------------------------------------------------------------------------
-  axi_link_rx #(
-    .flit_width_p       ( FLIT_WIDTH ),
-    .addr_width_p       ( ADDR_WIDTH ),
-    .link_fifo_els_p    ( 8          ),
-    .aw_desc_fifo_els_p ( 2          ),
-    .ar_desc_fifo_els_p ( 2          ),
-    .w_len_fifo_els_p   ( 4          ),
-    .w_data_fifo_els_p  ( 8          ),
-    .r_len_fifo_els_p   ( 4          ),
-    .r_data_fifo_els_p  ( 8          ),
-    .b_resp_fifo_els_p  ( 4          )
-  ) u_axi_link_rx (
-    .clk_i          ( clk_i                      ),
-    .reset_i        ( rst_i                      ),
-    // Flit link input ← off-chip; yumi = flit consumed
-    .link_rx_v_i    ( mem_link_rx_v_i            ),
-    .link_rx_data_i ( mem_link_rx_data_i         ),
-    .link_rx_yumi_o ( mem_link_rx_ready_o        ),
-    // AW/W/AR outputs ignored (FPGA does not issue requests on this link)
-    .awvalid_o      (                            ),
-    .awready_i      ( 1'b0                       ),
-    .awaddr_o       (                            ),
-    .awlen_o        (                            ),
-    .awsize_o       (                            ),
-    .awburst_o      (                            ),
-    .wvalid_o       (                            ),
-    .wready_i       ( 1'b0                       ),
-    .wdata_o        (                            ),
-    .wlast_o        (                            ),
-    .arvalid_o      (                            ),
-    .arready_i      ( 1'b0                       ),
-    .araddr_o       (                            ),
-    .arlen_o        (                            ),
-    .arsize_o       (                            ),
-    .arburst_o      (                            ),
-    // R → crossbar (ID stamped by shim)
-    .rvalid_o       ( rx_rvalid                  ),
-    .rready_i       ( xbar_mem_req.r_ready       ),
-    .rdata_o        ( rx_rdata                   ),
-    .rresp_o        ( rx_rresp                   ),
-    .rlast_o        ( rx_rlast                   ),
-    // B → crossbar (ID stamped by shim)
-    .bvalid_o       ( rx_bvalid                  ),
-    .bready_i       ( xbar_mem_req.b_ready       ),
-    .bresp_o        ( rx_bresp                   )
+  top_level_io #(
+    .flit_width_p                    ( FLIT_WIDTH             ),
+    .addr_width_p                    ( ADDR_WIDTH             ),
+    .channel_width_p                 ( 8                      ),
+    .num_channels_p                  ( 1                      ),
+    .lg_fifo_depth_p                 ( LG_FIFO_DEPTH          ),
+    .lg_credit_to_token_decimation_p ( LG_CREDIT_TO_TOKEN_DEC ),
+    .bypass_twofer_fifo_p            ( BYPASS_TWOFER_FIFO     ),
+    .bypass_gearbox_p                ( BYPASS_GEARBOX         ),
+    .use_hardened_fifo_p             ( USE_HARDENED_FIFO      ),
+    // RX FIFO sizes
+    .rx_link_fifo_els_p              ( 8  ),
+    .rx_aw_desc_fifo_els_p           ( 2  ),
+    .rx_ar_desc_fifo_els_p           ( 2  ),
+    .rx_w_len_fifo_els_p             ( 4  ),
+    .rx_w_data_fifo_els_p            ( 8  ),
+    .rx_r_len_fifo_els_p             ( 4  ),
+    .rx_r_data_fifo_els_p            ( 8  ),
+    .rx_b_resp_fifo_els_p            ( 4  ),
+    // TX FIFO sizes
+    .tx_link_fifo_els_p              ( 8  ),
+    .tx_aw_desc_fifo_els_p           ( 2  ),
+    .tx_ar_desc_fifo_els_p           ( 2  ),
+    .tx_w_len_fifo_els_p             ( 4  ),
+    .tx_w_data_fifo_els_p            ( 8  ),
+    .tx_r_len_fifo_els_p             ( 4  ),
+    .tx_r_data_fifo_els_p            ( 8  ),
+    .tx_b_resp_fifo_els_p            ( 4  ),
+    .tx_pkt_order_fifo_els_p         ( 8  )
+  ) u_top_level_io (
+    .core_clk_i                 ( clk_i                      ),
+    .reset_i                    ( rst_i                      ),
+    // bsg_link upstream control
+    .io_master_clk_i            ( io_master_clk_i            ),
+    .upstream_io_link_reset_i   ( upstream_io_link_reset_i   ),
+    .async_token_reset_i        ( async_token_reset_i        ),
+    .token_clk_i                ( token_clk_i                ),
+    // bsg_link downstream control
+    .downstream_io_link_reset_i ( downstream_io_link_reset_i ),
+    .downstream_io_clk_i        ( downstream_io_clk_i       ),
+    .downstream_io_data_i       ( downstream_io_data_i      ),
+    .downstream_io_valid_i      ( downstream_io_valid_i     ),
+    // DDR physical outputs
+    .upstream_io_clk_r_o        ( upstream_io_clk_r_o       ),
+    .upstream_io_data_r_o       ( upstream_io_data_r_o      ),
+    .upstream_io_valid_r_o      ( upstream_io_valid_r_o     ),
+    .downstream_core_token_r_o  ( downstream_core_token_r_o ),
+    // TX: chip → FPGA SRAM (AW/W/AR requests)
+    .tx_awvalid_i   ( xbar_mem_req.aw_valid                ),
+    .tx_awready_o   ( tx_awready                           ),
+    .tx_awaddr_i    ( xbar_mem_req.aw.addr[ADDR_WIDTH-1:0] ),
+    .tx_awlen_i     ( xbar_mem_req.aw.len                  ),
+    .tx_awsize_i    ( xbar_mem_req.aw.size                 ),
+    .tx_awburst_i   ( xbar_mem_req.aw.burst                ),
+    .tx_wvalid_i    ( xbar_mem_req.w_valid                 ),
+    .tx_wready_o    ( tx_wready                            ),
+    .tx_wdata_i     ( xbar_mem_req.w.data[15:0]            ),
+    .tx_wlast_i     ( xbar_mem_req.w.last                  ),
+    .tx_arvalid_i   ( xbar_mem_req.ar_valid                ),
+    .tx_arready_o   ( tx_arready                           ),
+    .tx_araddr_i    ( xbar_mem_req.ar.addr[ADDR_WIDTH-1:0] ),
+    .tx_arlen_i     ( xbar_mem_req.ar.len                  ),
+    .tx_arsize_i    ( xbar_mem_req.ar.size                 ),
+    .tx_arburst_i   ( xbar_mem_req.ar.burst                ),
+    // TX: chip does NOT send R/B responses back to FPGA
+    .tx_rvalid_i    ( 1'b0 ),
+    .tx_rready_o    (      ),
+    .tx_rdata_i     ( '0   ),
+    .tx_rresp_i     ( '0   ),
+    .tx_rlast_i     ( 1'b0 ),
+    .tx_bvalid_i    ( 1'b0 ),
+    .tx_bready_o    (      ),
+    .tx_bresp_i     ( '0   ),
+    // RX: R/B responses FPGA SRAM → crossbar (ID stamped by shim)
+    .rx_rvalid_o    ( rx_rvalid                  ),
+    .rx_rready_i    ( xbar_mem_req.r_ready       ),
+    .rx_rdata_o     ( rx_rdata                   ),
+    .rx_rresp_o     ( rx_rresp                   ),
+    .rx_rlast_o     ( rx_rlast                   ),
+    .rx_bvalid_o    ( rx_bvalid                  ),
+    .rx_bready_i    ( xbar_mem_req.b_ready       ),
+    .rx_bresp_o     ( rx_bresp                   ),
+    // RX: AW/W/AR ignored (FPGA does not initiate requests to chip)
+    .rx_awvalid_o   (      ),
+    .rx_awready_i   ( 1'b0 ),
+    .rx_awaddr_o    (      ),
+    .rx_awlen_o     (      ),
+    .rx_awsize_o    (      ),
+    .rx_awburst_o   (      ),
+    .rx_wvalid_o    (      ),
+    .rx_wready_i    ( 1'b0 ),
+    .rx_wdata_o     (      ),
+    .rx_wlast_o     (      ),
+    .rx_arvalid_o   (      ),
+    .rx_arready_i   ( 1'b0 ),
+    .rx_araddr_o    (      ),
+    .rx_arlen_o     (      ),
+    .rx_arsize_o    (      ),
+    .rx_arburst_o   (      )
   );
 
   // --------------------------------------------------------------------------

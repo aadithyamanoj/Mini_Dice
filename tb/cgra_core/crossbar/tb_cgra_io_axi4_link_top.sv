@@ -4,25 +4,20 @@
 // Testbench for the off-chip memory link path through cgra_io_axi4_top.
 //
 // Path under test:
-//   mem_req_fifo (enq_*) → dfetch → crossbar → axi_link_tx → mem_link_tx
-//   mem_link_rx → axi_link_rx → ID shim → crossbar → mem_req_fifo (rsp_*)
+//   mem_req_fifo (enq_*) → [dfetch port] → crossbar → top_level_io TX
+//   → bsg_link_ddr_upstream → [DDR pins] → FPGA endpoint (second top_level_io)
+//   FPGA endpoint → [DDR pins] → bsg_link_ddr_downstream → top_level_io RX
+//   → ID shim → crossbar → mem_req_fifo (rsp_*)
 //
-// The TB acts as the FPGA SRAM endpoint:
-//   - Receives flit packets on mem_link_tx (READ_REQ / WRITE_REQ)
-//   - Looks up / writes a local 16-bit memory model
-//   - Sends flit-encoded responses on mem_link_rx (READ_RESP / WRITE_RESP)
-//
-// Flit protocol (axi_link_tx / axi_link_rx):
-//   READ_REQ   : {3'b001, beats[12:0]}  + addr_flit
-//   WRITE_REQ  : {3'b000, beats[12:0]}  + addr_flit + beats×data_flits
-//   READ_RESP  : {3'b010, beats[12:0]}  + beats×data_flits + rresp_flit
-//   WRITE_RESP : {3'b011, 13'd1}        + bresp_flit
+// The TB acts as the FPGA SRAM endpoint via a second top_level_io instance
+// connected back-to-back on the DDR physical pins.  The FPGA memory model
+// drives the endpoint's flat AXI TX ports (R/B responses) and reads its
+// RX ports (AW/W/AR requests decoded from chip flits).
 //
 // Test plan:
-//   T1 : Single load  — enqueue AR, receive READ_REQ flit, respond READ_RESP,
+//   T1 : Single load  — enqueue AR, FPGA endpoint returns READ_RESP,
 //                        check rsp_data_o and rsp_tid_bitmap_o
-//   T2 : Single store — enqueue AW+W, receive WRITE_REQ flit, respond
-//                        WRITE_RESP (no rsp_valid expected)
+//   T2 : Single store — enqueue AW+W, FPGA endpoint returns WRITE_RESP
 //   T3 : Back-to-back — 4 consecutive loads, each response verified
 // =============================================================================
 
@@ -44,32 +39,24 @@ module tb_cgra_io_axi4_link_top;
   // -------------------------------------------------------------------------
   // Parameters
   // -------------------------------------------------------------------------
-  localparam int AW           = 16;
-  localparam int DW           = 16;
-  localparam int FW           = 16;
-  localparam int CLK_HALF_NS  = 5;    // 100 MHz
+  localparam int AW          = 16;
+  localparam int DW          = 16;
+  localparam int FW          = 16;
+  localparam int CLK_HALF_NS = 5;   // 100 MHz core clock
 
-  localparam logic [AW-1:0] MEM_BASE = 16'h0800;
+  localparam logic [AW-1:0] MEM_BASE  = 16'h0800;
   localparam int             MEM_WORDS = 1024;
 
-  // Flit opcodes (must match axi_link_tx/rx)
-  localparam logic [2:0] OP_WRITE_REQ  = 3'b000;
-  localparam logic [2:0] OP_READ_REQ   = 3'b001;
-  localparam logic [2:0] OP_READ_RESP  = 3'b010;
-  localparam logic [2:0] OP_WRITE_RESP = 3'b011;
-
   // -------------------------------------------------------------------------
-  // Clock / reset
+  // Clocks — single clock used for core and IO in simulation
   // -------------------------------------------------------------------------
   bit   clk_i;
   logic rst_i = 1'b1;
   initial forever #(CLK_HALF_NS * 1ns) clk_i = ~clk_i;
 
   // -------------------------------------------------------------------------
-  // DUT signals
+  // FPGA AXI-Lite flat pins (fpga_mst port — tied off)
   // -------------------------------------------------------------------------
-
-  // FPGA AXI-Lite flat pins (fpga_mst port — tied off in this TB)
   logic [AW-1:0] fpga_aw_addr  = '0;
   logic [2:0]    fpga_aw_prot  = '0;
   logic          fpga_aw_valid = '0;
@@ -90,106 +77,324 @@ module tb_cgra_io_axi4_link_top;
   logic          fpga_r_valid;
   logic          fpga_r_ready  = 1'b1;
 
-  // mem_req_fifo enqueue interface
-  logic                                                              enq_valid;
-  logic                                                              enq_ready;
-  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                enq_base_tid;
-  logic [TID_BITMAP_WIDTH-1:0]                                      enq_tid_bitmap;
-  logic [DICE_REG_ADDR_WIDTH-1:0]                                   enq_ld_dest_reg;
-  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] enq_address_map;
-  logic [15:0]                                                       enq_addr;
-  logic [15:0]                                                       enq_data;
-  logic                                                              enq_write_en;
+  // -------------------------------------------------------------------------
+  // mem_req_fifo enqueue interface — 4 parallel ports; TB uses only port 0
+  // -------------------------------------------------------------------------
+  logic        enq_valid_0 = 1'b0;
+  logic        enq_ready;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] enq_tid = '0;
+  logic [15:0] enq_addr_0 = '0;
+  logic [15:0] enq_data_0 = '0;
+  logic        enq_op_0   = 1'b0;   // 0 = load, 1 = store
 
+  // -------------------------------------------------------------------------
   // mem_req_fifo response interface
-  logic                                                              rsp_valid;
-  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                rsp_base_tid;
-  logic [TID_BITMAP_WIDTH-1:0]                                      rsp_tid_bitmap;
-  logic [DICE_REG_ADDR_WIDTH-1:0]                                   rsp_ld_dest_reg;
-  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0] rsp_address_map;
-  logic [(CACHE_LINE_SIZE*8)-1:0]                                   rsp_data;
+  // -------------------------------------------------------------------------
+  logic        rsp_data_ready = 1'b1;
+  logic        pop_out;
+  logic        rsp_valid;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid;
+  logic [15:0] rsp_addr;
+  logic [15:0] rsp_data;
 
-  // Off-chip memory link (chip → FPGA)
-  logic          mem_tx_v;
-  logic [FW-1:0] mem_tx_data;
-  logic          mem_tx_ready;
-
-  // Off-chip memory link (FPGA → chip)
-  logic          mem_rx_v;
-  logic [FW-1:0] mem_rx_data;
-  logic          mem_rx_ready;
-
-  // CSR slave (tied off — not under test here)
+  // -------------------------------------------------------------------------
+  // CSR slave (tied off)
+  // -------------------------------------------------------------------------
   mst_req_t  csr_req;
   mst_resp_t csr_resp;
   assign csr_resp = '0;
 
   // -------------------------------------------------------------------------
-  // DUT
+  // bsg_link reset/control for DUT
   // -------------------------------------------------------------------------
+  logic dut_upstream_io_link_reset   = 1'b1;
+  logic dut_async_token_reset        = 1'b0;
+  logic dut_downstream_io_link_reset = 1'b1;
+
+  // -------------------------------------------------------------------------
+  // DDR physical pins: DUT upstream output → FPGA endpoint downstream input
+  // -------------------------------------------------------------------------
+  logic       dut_up_clk_r;
+  logic [7:0] dut_up_data_r;
+  logic       dut_up_valid_r;
+  logic       dut_dn_token_r;   // DUT downstream token → FPGA ep token_clk_i
+
+  // -------------------------------------------------------------------------
+  // DDR physical pins: FPGA endpoint upstream output → DUT downstream input
+  // -------------------------------------------------------------------------
+  logic       ep_up_clk_r;
+  logic [7:0] ep_up_data_r;
+  logic       ep_up_valid_r;
+  logic       ep_dn_token_r;    // FPGA ep downstream token → DUT token_clk_i
+
+  // -------------------------------------------------------------------------
+  // bsg_link reset/control for FPGA endpoint
+  // -------------------------------------------------------------------------
+  logic ep_upstream_io_link_reset   = 1'b1;
+  logic ep_async_token_reset        = 1'b0;
+  logic ep_downstream_io_link_reset = 1'b1;
+
+  // =========================================================================
+  // DUT: cgra_io_axi4_top
+  // =========================================================================
   cgra_io_axi4_top #(
-    .ADDR_WIDTH ( AW ),
-    .DATA_WIDTH ( DW ),
-    .FLIT_WIDTH ( FW )
+    .ADDR_WIDTH          ( AW ),
+    .DATA_WIDTH          ( DW ),
+    .FLIT_WIDTH          ( FW ),
+    .BYPASS_GEARBOX      ( 1  ),
+    .BYPASS_TWOFER_FIFO  ( 1  )
   ) dut (
-    .clk_i                   ( clk_i          ),
-    .rst_i                   ( rst_i          ),
+    .clk_i                      ( clk_i                    ),
+    .rst_i                      ( rst_i                    ),
 
-    .fpga_axi_i_aw_addr      ( fpga_aw_addr   ),
-    .fpga_axi_i_aw_prot      ( fpga_aw_prot   ),
-    .fpga_axi_i_aw_valid     ( fpga_aw_valid  ),
-    .fpga_axi_i_aw_ready     ( fpga_aw_ready  ),
-    .fpga_axi_i_w_data       ( fpga_w_data    ),
-    .fpga_axi_i_w_strb       ( fpga_w_strb    ),
-    .fpga_axi_i_w_valid      ( fpga_w_valid   ),
-    .fpga_axi_i_w_ready      ( fpga_w_ready   ),
-    .fpga_axi_i_b_resp       ( fpga_b_resp    ),
-    .fpga_axi_i_b_valid      ( fpga_b_valid   ),
-    .fpga_axi_i_b_ready      ( fpga_b_ready   ),
-    .fpga_axi_i_ar_addr      ( fpga_ar_addr   ),
-    .fpga_axi_i_ar_prot      ( fpga_ar_prot   ),
-    .fpga_axi_i_ar_valid     ( fpga_ar_valid  ),
-    .fpga_axi_i_ar_ready     ( fpga_ar_ready  ),
-    .fpga_axi_i_r_data       ( fpga_r_data    ),
-    .fpga_axi_i_r_resp       ( fpga_r_resp    ),
-    .fpga_axi_i_r_valid      ( fpga_r_valid   ),
-    .fpga_axi_i_r_ready      ( fpga_r_ready   ),
+    .fpga_axi_i_aw_addr         ( fpga_aw_addr             ),
+    .fpga_axi_i_aw_prot         ( fpga_aw_prot             ),
+    .fpga_axi_i_aw_valid        ( fpga_aw_valid            ),
+    .fpga_axi_i_aw_ready        ( fpga_aw_ready            ),
+    .fpga_axi_i_w_data          ( fpga_w_data              ),
+    .fpga_axi_i_w_strb          ( fpga_w_strb              ),
+    .fpga_axi_i_w_valid         ( fpga_w_valid             ),
+    .fpga_axi_i_w_ready         ( fpga_w_ready             ),
+    .fpga_axi_i_b_resp          ( fpga_b_resp              ),
+    .fpga_axi_i_b_valid         ( fpga_b_valid             ),
+    .fpga_axi_i_b_ready         ( fpga_b_ready             ),
+    .fpga_axi_i_ar_addr         ( fpga_ar_addr             ),
+    .fpga_axi_i_ar_prot         ( fpga_ar_prot             ),
+    .fpga_axi_i_ar_valid        ( fpga_ar_valid            ),
+    .fpga_axi_i_ar_ready        ( fpga_ar_ready            ),
+    .fpga_axi_i_r_data          ( fpga_r_data              ),
+    .fpga_axi_i_r_resp          ( fpga_r_resp              ),
+    .fpga_axi_i_r_valid         ( fpga_r_valid             ),
+    .fpga_axi_i_r_ready         ( fpga_r_ready             ),
 
-    .enq_valid_i             ( enq_valid       ),
-    .enq_ready_o             ( enq_ready       ),
-    .enq_base_tid_i          ( enq_base_tid    ),
-    .enq_tid_bitmap_i        ( enq_tid_bitmap  ),
-    .enq_ld_dest_reg_i       ( enq_ld_dest_reg ),
-    .enq_address_map_i       ( enq_address_map ),
-    .enq_addr_i              ( enq_addr        ),
-    .enq_data_i              ( enq_data        ),
-    .enq_write_en_i          ( enq_write_en    ),
+    .enq_valid_i_0              ( enq_valid_0              ),
+    .enq_valid_i_1              ( 1'b0                     ),
+    .enq_valid_i_2              ( 1'b0                     ),
+    .enq_valid_i_3              ( 1'b0                     ),
+    .enq_ready_o                ( enq_ready                ),
+    .enq_tid_i                  ( enq_tid                  ),
+    .enq_addr_i_0               ( enq_addr_0               ),
+    .enq_addr_i_1               ( '0                       ),
+    .enq_addr_i_2               ( '0                       ),
+    .enq_addr_i_3               ( '0                       ),
+    .enq_data_i_0               ( enq_data_0               ),
+    .enq_data_i_1               ( '0                       ),
+    .enq_data_i_2               ( '0                       ),
+    .enq_data_i_3               ( '0                       ),
+    .enq_op_i_0                 ( enq_op_0                 ),
+    .enq_op_i_1                 ( 1'b0                     ),
+    .enq_op_i_2                 ( 1'b0                     ),
+    .enq_op_i_3                 ( 1'b0                     ),
 
-    .rsp_valid_o             ( rsp_valid       ),
-    .rsp_base_tid_o          ( rsp_base_tid    ),
-    .rsp_tid_bitmap_o        ( rsp_tid_bitmap  ),
-    .rsp_ld_dest_reg_o       ( rsp_ld_dest_reg ),
-    .rsp_address_map_o       ( rsp_address_map ),
-    .rsp_data_o              ( rsp_data        ),
+    .rsp_data_ready_i           ( rsp_data_ready           ),
+    .pop_o                      ( pop_out                  ),
+    .rsp_valid_o                ( rsp_valid                ),
+    .rsp_tid_o                  ( rsp_tid                  ),
+    .rsp_addr_o                 ( rsp_addr                 ),
+    .rsp_data_o                 ( rsp_data                 ),
 
-    .mem_link_tx_v_o         ( mem_tx_v        ),
-    .mem_link_tx_data_o      ( mem_tx_data     ),
-    .mem_link_tx_ready_i     ( mem_tx_ready    ),
+    // bsg_link upstream (DUT → FPGA endpoint)
+    .io_master_clk_i            ( clk_i                    ),
+    .upstream_io_link_reset_i   ( dut_upstream_io_link_reset ),
+    .async_token_reset_i        ( dut_async_token_reset    ),
+    .token_clk_i                ( ep_dn_token_r            ),  // FPGA ep downstream token
+    .upstream_io_clk_r_o        ( dut_up_clk_r             ),
+    .upstream_io_data_r_o       ( dut_up_data_r            ),
+    .upstream_io_valid_r_o      ( dut_up_valid_r           ),
 
-    .mem_link_rx_v_i         ( mem_rx_v        ),
-    .mem_link_rx_data_i      ( mem_rx_data     ),
-    .mem_link_rx_ready_o     ( mem_rx_ready    ),
+    // bsg_link downstream (FPGA endpoint → DUT)
+    .downstream_io_link_reset_i ( dut_downstream_io_link_reset ),
+    .downstream_io_clk_i        ( ep_up_clk_r              ),  // FPGA ep upstream clk
+    .downstream_io_data_i       ( ep_up_data_r             ),  // FPGA ep upstream data
+    .downstream_io_valid_i      ( ep_up_valid_r            ),  // FPGA ep upstream valid
+    .downstream_core_token_r_o  ( dut_dn_token_r           ),  // → FPGA ep token_clk_i
 
-    .cgra_csr_req_o          ( csr_req         ),
-    .cgra_csr_resp_i         ( csr_resp        )
+    .cgra_csr_req_o             ( csr_req                  ),
+    .cgra_csr_resp_i            ( csr_resp                 )
   );
 
   // =========================================================================
-  // TB FPGA memory model
+  // FPGA endpoint: second top_level_io, back-to-back with DUT
+  //
+  // Physical connections (mirrored):
+  //   DUT upstream out  →  FPGA ep downstream in
+  //   FPGA ep upstream out  →  DUT downstream in
+  //   DUT downstream token  →  FPGA ep token_clk_i
+  //   FPGA ep downstream token  →  DUT token_clk_i
+  // =========================================================================
+
+  // FPGA endpoint AXI signals driven by memory model
+  logic        ep_tx_rvalid  = 1'b0;
+  logic [DW-1:0] ep_tx_rdata  = '0;
+  logic        ep_tx_rlast   = 1'b0;
+  logic [1:0]  ep_tx_rresp   = '0;
+  logic        ep_tx_rready;          // from top_level_io (link can accept R)
+
+  logic        ep_tx_bvalid  = 1'b0;
+  logic [1:0]  ep_tx_bresp   = '0;
+  logic        ep_tx_bready;          // from top_level_io (link can accept B)
+
+  // FPGA endpoint AXI RX outputs (decoded requests from chip)
+  logic        ep_rx_arvalid;
+  logic [AW-1:0] ep_rx_araddr;
+  logic        ep_rx_awvalid;
+  logic [AW-1:0] ep_rx_awaddr;
+  logic        ep_rx_wvalid;
+  logic [DW-1:0] ep_rx_wdata;
+
+  top_level_io #(
+    .flit_width_p                    ( FW ),
+    .addr_width_p                    ( AW ),
+    .channel_width_p                 ( 8  ),
+    .num_channels_p                  ( 1  ),
+    .bypass_gearbox_p                ( 1  ),
+    .bypass_twofer_fifo_p            ( 1  ),
+    .rx_link_fifo_els_p              ( 8  ),
+    .rx_aw_desc_fifo_els_p           ( 2  ),
+    .rx_ar_desc_fifo_els_p           ( 2  ),
+    .rx_w_len_fifo_els_p             ( 4  ),
+    .rx_w_data_fifo_els_p            ( 8  ),
+    .rx_r_len_fifo_els_p             ( 4  ),
+    .rx_r_data_fifo_els_p            ( 8  ),
+    .rx_b_resp_fifo_els_p            ( 4  ),
+    .tx_link_fifo_els_p              ( 8  ),
+    .tx_aw_desc_fifo_els_p           ( 2  ),
+    .tx_ar_desc_fifo_els_p           ( 2  ),
+    .tx_w_len_fifo_els_p             ( 4  ),
+    .tx_w_data_fifo_els_p            ( 8  ),
+    .tx_r_len_fifo_els_p             ( 4  ),
+    .tx_r_data_fifo_els_p            ( 8  ),
+    .tx_b_resp_fifo_els_p            ( 4  ),
+    .tx_pkt_order_fifo_els_p         ( 8  )
+  ) u_fpga_ep (
+    .core_clk_i                 ( clk_i                    ),
+    .reset_i                    ( rst_i                    ),
+
+    // bsg_link upstream (FPGA ep → DUT downstream)
+    .io_master_clk_i            ( clk_i                    ),
+    .upstream_io_link_reset_i   ( ep_upstream_io_link_reset ),
+    .async_token_reset_i        ( ep_async_token_reset     ),
+    .token_clk_i                ( dut_dn_token_r           ),  // DUT downstream token
+    .upstream_io_clk_r_o        ( ep_up_clk_r              ),
+    .upstream_io_data_r_o       ( ep_up_data_r             ),
+    .upstream_io_valid_r_o      ( ep_up_valid_r            ),
+
+    // bsg_link downstream (DUT upstream → FPGA ep)
+    .downstream_io_link_reset_i ( ep_downstream_io_link_reset ),
+    .downstream_io_clk_i        ( dut_up_clk_r             ),  // DUT upstream clk
+    .downstream_io_data_i       ( dut_up_data_r            ),  // DUT upstream data
+    .downstream_io_valid_i      ( dut_up_valid_r           ),  // DUT upstream valid
+    .downstream_core_token_r_o  ( ep_dn_token_r            ),  // → DUT token_clk_i
+
+    // TX: FPGA ep sends R/B responses back to chip
+    .tx_awvalid_i   ( 1'b0         ),
+    .tx_awready_o   (              ),
+    .tx_awaddr_i    ( '0           ),
+    .tx_awlen_i     ( '0           ),
+    .tx_awsize_i    ( '0           ),
+    .tx_awburst_i   ( '0           ),
+    .tx_wvalid_i    ( 1'b0         ),
+    .tx_wready_o    (              ),
+    .tx_wdata_i     ( '0           ),
+    .tx_wlast_i     ( 1'b0         ),
+    .tx_arvalid_i   ( 1'b0         ),
+    .tx_arready_o   (              ),
+    .tx_araddr_i    ( '0           ),
+    .tx_arlen_i     ( '0           ),
+    .tx_arsize_i    ( '0           ),
+    .tx_arburst_i   ( '0           ),
+    .tx_rvalid_i    ( ep_tx_rvalid ),
+    .tx_rready_o    ( ep_tx_rready ),
+    .tx_rdata_i     ( ep_tx_rdata  ),
+    .tx_rresp_i     ( ep_tx_rresp  ),
+    .tx_rlast_i     ( ep_tx_rlast  ),
+    .tx_bvalid_i    ( ep_tx_bvalid ),
+    .tx_bready_o    ( ep_tx_bready ),
+    .tx_bresp_i     ( ep_tx_bresp  ),
+
+    // RX: FPGA ep receives AW/W/AR decoded from chip flits
+    .rx_awvalid_o   ( ep_rx_awvalid ),
+    .rx_awready_i   ( 1'b1          ),
+    .rx_awaddr_o    ( ep_rx_awaddr  ),
+    .rx_awlen_o     (               ),
+    .rx_awsize_o    (               ),
+    .rx_awburst_o   (               ),
+    .rx_wvalid_o    ( ep_rx_wvalid  ),
+    .rx_wready_i    ( 1'b1          ),
+    .rx_wdata_o     ( ep_rx_wdata   ),
+    .rx_wlast_o     (               ),
+    .rx_arvalid_o   ( ep_rx_arvalid ),
+    .rx_arready_i   ( 1'b1          ),
+    .rx_araddr_o    ( ep_rx_araddr  ),
+    .rx_arlen_o     (               ),
+    .rx_arsize_o    (               ),
+    .rx_arburst_o   (               ),
+    // chip does not send R/B to FPGA — ignore
+    .rx_rvalid_o    (               ),
+    .rx_rready_i    ( 1'b0          ),
+    .rx_rdata_o     (               ),
+    .rx_rresp_o     (               ),
+    .rx_rlast_o     (               ),
+    .rx_bvalid_o    (               ),
+    .rx_bready_i    ( 1'b0          ),
+    .rx_bresp_o     (               )
+  );
+
+  // =========================================================================
+  // FPGA memory model
   // =========================================================================
   logic [15:0] fpga_sram [0:MEM_WORDS-1];
 
-  initial foreach (fpga_sram[i]) fpga_sram[i] = 16'(i + 16'hA000);
+  // =========================================================================
+  // FPGA AXI slave — drives ep_tx_* in response to ep_rx_*
+  // Single-outstanding, so no overlap between transactions.
+  // =========================================================================
+  logic        ep_aw_pending = 1'b0;
+  logic [AW-1:0] ep_aw_addr_lat = '0;
+
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      ep_tx_rvalid  <= 1'b0;
+      ep_tx_bvalid  <= 1'b0;
+      ep_aw_pending <= 1'b0;
+      foreach (fpga_sram[i]) fpga_sram[i] <= 16'(i + 16'hA000);
+    end else begin
+      // Deassert when link accepts the beat
+      if (ep_tx_rvalid && ep_tx_rready) ep_tx_rvalid <= 1'b0;
+      if (ep_tx_bvalid && ep_tx_bready) ep_tx_bvalid <= 1'b0;
+
+      // Service read: AR visible → capture addr and queue R response
+      if (ep_rx_arvalid && !ep_tx_rvalid) begin
+        begin : rd_blk
+          int idx;
+          idx = int'((ep_rx_araddr - AW'(MEM_BASE)) >> 1);
+          ep_tx_rdata  <= (idx >= 0 && idx < MEM_WORDS) ? fpga_sram[idx] : 16'hDEAD;
+        end
+        ep_tx_rlast  <= 1'b1;
+        ep_tx_rresp  <= 2'b00;
+        ep_tx_rvalid <= 1'b1;
+      end
+
+      // Latch write address
+      if (ep_rx_awvalid && !ep_aw_pending) begin
+        ep_aw_addr_lat <= ep_rx_awaddr;
+        ep_aw_pending  <= 1'b1;
+      end
+
+      // Service write: W arrives after AW latched → write mem + send B
+      if (ep_rx_wvalid && ep_aw_pending && !ep_tx_bvalid) begin
+        begin : wr_blk
+          int idx;
+          idx = int'((ep_aw_addr_lat - AW'(MEM_BASE)) >> 1);
+          if (idx >= 0 && idx < MEM_WORDS)
+            fpga_sram[idx] <= ep_rx_wdata[15:0];
+        end
+        ep_aw_pending  <= 1'b0;
+        ep_tx_bresp    <= 2'b00;
+        ep_tx_bvalid   <= 1'b1;
+      end
+    end
+  end
 
   // =========================================================================
   // Scoreboard
@@ -211,194 +416,112 @@ module tb_cgra_io_axi4_link_top;
   endtask
 
   // =========================================================================
-  // Link helpers
-  // =========================================================================
-
-  // Send one flit on mem_link_rx (TB → DUT)
-  task automatic send_rx_flit(input logic [FW-1:0] flit);
-    @(posedge clk_i); #1;
-    mem_rx_v    = 1'b1;
-    mem_rx_data = flit;
-    // mem_rx_ready (yumi) goes high when DUT consumed it
-    @(posedge clk_i);
-    while (!mem_rx_ready) @(posedge clk_i);
-    #1;
-    mem_rx_v    = 1'b0;
-    mem_rx_data = '0;
-  endtask
-
-  // Receive one flit from mem_link_tx (DUT → TB)
-  task automatic recv_tx_flit(output logic [FW-1:0] flit);
-    mem_tx_ready = 1'b1;
-    @(posedge clk_i);
-    while (!mem_tx_v) @(posedge clk_i);
-    flit = mem_tx_data;
-    @(posedge clk_i); #1;
-    mem_tx_ready = 1'b0;
-  endtask
-
-  // =========================================================================
-  // FPGA endpoint: receive request, service it, send response
-  // Runs in a background always block
-  // =========================================================================
-  logic [2:0]  rx_opcode;
-  logic [12:0] rx_beats;
-  logic [15:0] rx_addr;
-  logic [FW-1:0] flit_buf;
-
-  always begin
-    // Wait for a flit from DUT
-    mem_tx_ready = 1'b0;
-    @(posedge clk_i);
-    while (!mem_tx_v) @(posedge clk_i);
-
-    // Capture header
-    mem_tx_ready = 1'b1;
-    flit_buf     = mem_tx_data;
-    @(posedge clk_i); #1;
-    mem_tx_ready = 1'b0;
-
-    rx_opcode = flit_buf[15:13];
-    rx_beats  = flit_buf[12:0];
-
-    case (rx_opcode)
-
-      OP_READ_REQ: begin
-        // Next flit = address
-        recv_tx_flit(flit_buf);
-        rx_addr = flit_buf;
-        // Send READ_RESP: header + rx_beats data flits + rresp flit
-        send_rx_flit({OP_READ_RESP, rx_beats});
-        for (int b = 0; b < int'(rx_beats); b++) begin
-          automatic int idx = int'((rx_addr - MEM_BASE) >> 1) + b;
-          send_rx_flit((idx >= 0 && idx < MEM_WORDS) ? fpga_sram[idx] : 16'hDEAD);
-        end
-        send_rx_flit(16'h0000); // RRESP = OKAY
-      end
-
-      OP_WRITE_REQ: begin
-        // Next flit = address, then rx_beats data flits
-        recv_tx_flit(flit_buf);
-        rx_addr = flit_buf;
-        for (int b = 0; b < int'(rx_beats); b++) begin
-          automatic int idx = int'((rx_addr - MEM_BASE) >> 1) + b;
-          recv_tx_flit(flit_buf);
-          if (idx >= 0 && idx < MEM_WORDS)
-            fpga_sram[idx] = flit_buf;
-        end
-        // Send WRITE_RESP
-        send_rx_flit({OP_WRITE_RESP, 13'd1});
-        send_rx_flit(16'h0000); // BRESP = OKAY
-      end
-
-      default: begin
-        $error("TB FPGA endpoint: unexpected opcode 0x%0x", rx_opcode);
-      end
-
-    endcase
-  end
-
-  // =========================================================================
   // Stimulus helpers
   // =========================================================================
-
-  // Enqueue a load request and wait for FIFO accept
-  task automatic cgra_load(
-    input logic [15:0]             addr,
-    input logic [TID_BITMAP_WIDTH-1:0] bitmap
-  );
+  task automatic cgra_load(input logic [15:0] addr);
     @(posedge clk_i); #1;
-    enq_valid      = 1'b1;
-    enq_addr       = addr;
-    enq_data       = '0;
-    enq_write_en   = 1'b0;
-    enq_tid_bitmap = bitmap;
-    enq_base_tid   = '0;
-    enq_ld_dest_reg = '0;
-    enq_address_map = '0;
+    enq_valid_0 = 1'b1;
+    enq_addr_0  = addr;
+    enq_data_0  = '0;
+    enq_op_0    = 1'b0;
     while (!enq_ready) @(posedge clk_i);
     @(posedge clk_i); #1;
-    enq_valid = 1'b0;
+    enq_valid_0 = 1'b0;
   endtask
 
-  // Enqueue a store request and wait for FIFO accept
-  task automatic cgra_store(
-    input logic [15:0] addr,
-    input logic [15:0] data,
-    input logic [TID_BITMAP_WIDTH-1:0] bitmap
-  );
+  task automatic cgra_store(input logic [15:0] addr, input logic [15:0] data);
     @(posedge clk_i); #1;
-    enq_valid      = 1'b1;
-    enq_addr       = addr;
-    enq_data       = data;
-    enq_write_en   = 1'b1;
-    enq_tid_bitmap = bitmap;
-    enq_base_tid   = '0;
-    enq_ld_dest_reg = '0;
-    enq_address_map = '0;
+    enq_valid_0 = 1'b1;
+    enq_addr_0  = addr;
+    enq_data_0  = data;
+    enq_op_0    = 1'b1;
     while (!enq_ready) @(posedge clk_i);
     @(posedge clk_i); #1;
-    enq_valid = 1'b0;
+    enq_valid_0 = 1'b0;
   endtask
 
-  // Wait for rsp_valid and return rsp_data[15:0]
-  task automatic wait_rsp(output logic [15:0] data, output logic [TID_BITMAP_WIDTH-1:0] bitmap);
+  task automatic wait_rsp(output logic [15:0] data);
     @(posedge clk_i);
     while (!rsp_valid) @(posedge clk_i);
-    data   = rsp_data[15:0];
-    bitmap = rsp_tid_bitmap;
+    data = rsp_data;
     @(posedge clk_i);
   endtask
 
   // =========================================================================
-  // Stimulus
+  // Stimulus + bsg_link reset sequence
   // =========================================================================
   initial begin
-    enq_valid      = 1'b0;
-    enq_addr       = '0;
-    enq_data       = '0;
-    enq_write_en   = 1'b0;
-    enq_tid_bitmap = '0;
-    enq_base_tid   = '0;
-    enq_ld_dest_reg = '0;
-    enq_address_map = '0;
-    mem_rx_v       = 1'b0;
-    mem_rx_data    = '0;
-    mem_tx_ready   = 1'b0;
-    pass_cnt       = 0;
-    fail_cnt       = 0;
+    enq_valid_0 = 1'b0;
+    enq_addr_0  = '0;
+    enq_data_0  = '0;
+    enq_op_0    = 1'b0;
+    enq_tid     = '0;
+    pass_cnt    = 0;
+    fail_cnt    = 0;
 
-    rst_i = 1'b1;
-    repeat(5) @(posedge clk_i);
+    // -- bsg_link reset sequence --
+    // Step 1: assert all resets
+    rst_i                        = 1'b1;
+    dut_upstream_io_link_reset   = 1'b1;
+    dut_downstream_io_link_reset = 1'b1;
+    ep_upstream_io_link_reset    = 1'b1;
+    ep_downstream_io_link_reset  = 1'b1;
+    dut_async_token_reset        = 1'b0;
+    ep_async_token_reset         = 1'b0;
+    repeat(4) @(posedge clk_i);
+
+    // Step 2: toggle async_token_reset while io_link_resets are still high
+    @(posedge clk_i); #1;
+    dut_async_token_reset = 1'b1;
+    ep_async_token_reset  = 1'b1;
+    @(posedge clk_i); #1;
+    dut_async_token_reset = 1'b0;
+    ep_async_token_reset  = 1'b0;
+
+    // Step 3: let core clock run (io_clk = core_clk for master side)
+    repeat(8) @(posedge clk_i);
+
+    // Step 4a: deassert UPSTREAM io_link_resets — starts ODDR clock outputs
+    //          (dut_up_clk_r and ep_up_clk_r begin toggling)
+    @(posedge clk_i); #1;
+    dut_upstream_io_link_reset = 1'b0;
+    ep_upstream_io_link_reset  = 1'b0;
+
+    // Step 4b: wait for ODDR clock outputs to stabilize (~4 cycles through PHY pipeline)
+    repeat(8) @(posedge clk_i);
+
+    // Step 4c: deassert DOWNSTREAM io_link_resets — now downstream io_clk_i is valid
+    @(posedge clk_i); #1;
+    dut_downstream_io_link_reset = 1'b0;
+    ep_downstream_io_link_reset  = 1'b0;
+
+    // Step 5: deassert core reset
+    repeat(4) @(posedge clk_i);
     @(posedge clk_i); #1;
     rst_i = 1'b0;
-    repeat(3) @(posedge clk_i);
+    repeat(10) @(posedge clk_i);
 
     // -----------------------------------------------------------------------
-    $display("\n--- T1: Single load via off-chip link ---");
+    $display("\n--- T1: Single load via off-chip DDR link ---");
     begin
-      logic [15:0]             got_data;
-      logic [TID_BITMAP_WIDTH-1:0] got_bitmap;
+      logic [15:0] got_data;
       // SRAM[0] pre-initialized to 0xA000
-      cgra_load(MEM_BASE, 8'b0000_0001);   // thread slot 0
-      wait_rsp(got_data, got_bitmap);
-      check16(got_data,   16'hA000, "T1: load data from FPGA SRAM[0]");
-      check16({{(16-TID_BITMAP_WIDTH){1'b0}}, got_bitmap}, 16'h0001, "T1: tid_bitmap passthrough");
+      cgra_load(MEM_BASE);
+      wait_rsp(got_data);
+      check16(got_data, 16'hA000, "T1: load data from FPGA SRAM[0]");
     end
 
     // -----------------------------------------------------------------------
-    $display("\n--- T2: Single store via off-chip link ---");
+    $display("\n--- T2: Single store via off-chip DDR link ---");
     begin
       // Store 0xBEEF into SRAM[1] (addr = MEM_BASE + 2)
-      cgra_store(MEM_BASE + 16'h0002, 16'hBEEF, 8'b0000_0010);
-      // No rsp_valid for stores — wait enough cycles for WRITE_RESP to complete
-      repeat(50) @(posedge clk_i);
+      cgra_store(MEM_BASE + 16'h0002, 16'hBEEF);
+      repeat(100) @(posedge clk_i);
       // Verify by loading back
-      cgra_load(MEM_BASE + 16'h0002, 8'b0000_0001);
+      cgra_load(MEM_BASE + 16'h0002);
       begin
         logic [15:0] got_data;
-        logic [TID_BITMAP_WIDTH-1:0] got_bitmap;
-        wait_rsp(got_data, got_bitmap);
+        wait_rsp(got_data);
         check16(got_data, 16'hBEEF, "T2: store then load round-trip");
       end
     end
@@ -407,10 +530,9 @@ module tb_cgra_io_axi4_link_top;
     $display("\n--- T3: Back-to-back loads ---");
     begin
       logic [15:0] got_data;
-      logic [TID_BITMAP_WIDTH-1:0] got_bitmap;
       for (int i = 0; i < 4; i++) begin
-        cgra_load(MEM_BASE + 16'(i * 2), 8'(1 << i));
-        wait_rsp(got_data, got_bitmap);
+        cgra_load(MEM_BASE + 16'(i * 2));
+        wait_rsp(got_data);
         check16(got_data, fpga_sram[i],
                 $sformatf("T3: back-to-back load SRAM[%0d]", i));
       end
@@ -427,23 +549,23 @@ module tb_cgra_io_axi4_link_top;
     $finish;
   end
 
-  // Debug monitor — print key signals every 50 cycles
+  // Debug monitor
   initial begin
     forever begin
       repeat(50) @(posedge clk_i);
-      $display("[DBG t=%0t] enq_v=%b enq_rdy=%b enq_we=%b | rsp_v=%b | tx_v=%b tx_rdy=%b | rx_v=%b rx_rdy=%b | mem_rx_v=%b mem_rx_rdy=%b",
-               $time, enq_valid, enq_ready, enq_write_en,
+      $display("[DBG t=%0t] enq_v=%b rdy=%b op=%b | rsp_v=%b | ep_rx_ar=%b ep_rx_aw=%b ep_rx_w=%b | ep_tx_r=%b ep_tx_b=%b",
+               $time,
+               enq_valid_0, enq_ready, enq_op_0,
                rsp_valid,
-               mem_tx_v, mem_tx_ready,
-               mem_rx_v, mem_rx_ready,
-               mem_rx_v, mem_rx_ready);
+               ep_rx_arvalid, ep_rx_awvalid, ep_rx_wvalid,
+               ep_tx_rvalid,  ep_tx_bvalid);
     end
   end
 
-  // Watchdog
+  // Watchdog — extended to allow for bsg_link DDR latency
   initial begin
-    #10_000_000;
-    $error("TIMEOUT: simulation exceeded 10 us");
+    #50_000_000;
+    $error("TIMEOUT: simulation exceeded 50 us");
     $finish;
   end
 
