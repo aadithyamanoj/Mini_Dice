@@ -34,6 +34,16 @@ module dice_backend
     output logic       cgra_prog_dout_o,
     output logic       cgra_prog_we_o,
 
+    // Input-only CSR sources exposed to the CGRA input crossbar
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX3_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX4_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i,
+
     // for branch handler
     output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] cgra_pred_all_o,
 
@@ -320,6 +330,15 @@ module dice_backend
       .bank_valid_o(cm_bank_valid_o),
       .prog_dout_o (cgra_prog_dout_o),
       .prog_we_o   (cgra_prog_we_o),
+
+      .csrX0_i      (csrX0_i),
+      .csrX1_i      (csrX1_i),
+      .csrX2_i      (csrX2_i),
+      .csrX3_i      (csrX3_i),
+      .csrX4_i      (csrX4_i),
+      .csrX5_i      (csrX5_i),
+      .csrX6_i      (csrX6_i),
+      .csrX7_i      (csrX7_i),
 
       .mem_data_o_0(cgra_mem_data_lo_0),
       .mem_addr_o_0(cgra_mem_addr_lo_0),
