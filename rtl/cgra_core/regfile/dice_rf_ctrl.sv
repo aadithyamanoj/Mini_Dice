@@ -28,16 +28,28 @@ module dice_rf_ctrl
     , output logic rd_tid_ready_o
 
     // , input logic                             rd_en_i
-    , input  logic [                       TID_WIDTH-1:0] rd_tid_i
-    , input  logic [                      TOTAL_REGS-1:0] rd_bitmap_i
-    , input  logic [                      TOTAL_REGS-1:0] wr_bitmap_i
-    , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0] rd_data_o
-    , output logic                                        rf_rd_valid_o
-    , output logic [                       TID_WIDTH-1:0] tid_o
-    , output logic [                      TOTAL_REGS-1:0] wr_bitmap_o
+    , input  logic [                       TID_WIDTH-1:0]                          rd_tid_i
+    , input  logic [                      TOTAL_REGS-1:0]                          rd_bitmap_i
+    , input  logic [                      TOTAL_REGS-1:0]                          wr_bitmap_i
+    , input  logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i
+    , input  logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_i
+    , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0]                          rd_data_o
+    , output logic                                                                 rf_rd_valid_o
+    , output logic [                       TID_WIDTH-1:0]                          tid_o
+    , input  logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_i
+    , output logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_o
+    , output logic [                      TOTAL_REGS-1:0]                          wr_bitmap_o
+    , output logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
+    , output logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_o
 
-    // Predicate output — all TIDs, all preds, always valid
-    , output logic [NUM_PRED-1:0] pred_o
+    // Predicate outputs
+    , output logic [        NUM_PRED-1:0] pred_o
+    , output logic [NUM_TID*NUM_PRED-1:0] pred_all_o
+    , output logic [       NUM_PORTS-1:0] ldst_pop_o
+    , output logic [NUM_PORTS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_o
+    , output logic                        ldst_special_pop_o
+    , output logic [DICE_EBLOCK_ID_WIDTH-1:0] ldst_special_pop_e_block_id_o
+    , output logic                        ldst_special_ready_o
 
     // Write Interface — CGRA
     , input logic [                          TID_WIDTH-1:0] cgra_tid_i
@@ -48,7 +60,7 @@ module dice_rf_ctrl
     // Write Interface — LDST
     , input  logic [$bits(cache_wr_cmd)-1:0] ldst_wr_i
     , input  logic                           ldst_valid_i
-    , output logic                           ldst_ready_o
+    , output logic [NUM_PORTS-1:0]          ldst_ready_o
 );
 
   // =========================================================================
@@ -66,6 +78,7 @@ module dice_rf_ctrl
   logic special_fifo_full;
 
 
+
   // =========================================================================
   // GPR write path (regs 0 .. NUM_PORTS-1)
   // =========================================================================
@@ -81,6 +94,7 @@ module dice_rf_ctrl
       assign cgra_wr_li[i].data = cgra_data_i[i*DATA_WIDTH+:DATA_WIDTH];
       assign cgra_wr_li[i].mask = cgra_shifted_bitmap[i];
       assign cgra_wr_li[i].tid  = cgra_tid_i;
+      assign cgra_wr_li[i].e_block_id = '0;
     end
   endgenerate
 
@@ -122,6 +136,8 @@ module dice_rf_ctrl
           , .ldst_valid_i(ldst_gpr_valid)
 
           , .stall_o(stall_o[i])
+          , .ldst_pop_o(ldst_pop_o[i])
+          , .ldst_pop_e_block_id_o(ldst_pop_e_block_id_o[i])
 
           , .ws_o  (rf_wr_addr[i*ADDR_WIDTH+:ADDR_WIDTH])
           , .data_o(rf_wr_data[i*DATA_WIDTH+:DATA_WIDTH])
@@ -136,6 +152,7 @@ module dice_rf_ctrl
   // =========================================================================
   special_regs_cmd cgra_special, ldst_special_in;
   special_regs_cmd ldst_special_wb, special_cmd;
+  logic cgra_special_valid;
 
   // CGRA special regs command from bitmap
   always_comb begin
@@ -153,6 +170,7 @@ module dice_rf_ctrl
 
   // LDST special regs command from cache response
   assign ldst_special_in = assemble_special_wr(ldst_convert);
+  assign cgra_special_valid = |cgra_special.const_mask || |cgra_special.pred_mask;
 
   // Extract TID for per-TID pred writes (single coalesced command only)
   logic [TID_WIDTH-1:0] ldst_special_tid_in;
@@ -182,18 +200,21 @@ module dice_rf_ctrl
   logic [TID_WIDTH-1:0] ldst_special_wb_tid;
   assign {ldst_special_wb, ldst_special_wb_tid} = special_fifo_data;
 
-  // Arbitration: CGRA has priority over buffered LDST
-  assign pop_special = !cgra_valid_i && special_fifo_valid;
-  assign special_cmd = cgra_valid_i ? cgra_special : ldst_special_wb;
+  // Arbitration: CGRA has priority only when it actually writes a special reg.
+  assign pop_special = !cgra_special_valid && special_fifo_valid;
+  assign special_cmd = cgra_special_valid ? cgra_special : ldst_special_wb;
+  assign ldst_special_pop_o = pop_special;
+  assign ldst_special_pop_e_block_id_o = ldst_special_wb.e_block_id;
 
   logic [TID_WIDTH-1:0] special_tid;
-  assign special_tid = cgra_valid_i ? cgra_tid_i : ldst_special_wb_tid;
+  assign special_tid = cgra_special_valid ? cgra_tid_i : ldst_special_wb_tid;
 
   logic special_wr_valid;
-  assign special_wr_valid = cgra_valid_i || special_fifo_valid;
+  assign special_wr_valid = cgra_special_valid || special_fifo_valid;
 
   assign special_fifo_full = ~special_fifo_ready;
-  assign ldst_ready_o = ~(|stall_o) & ~special_fifo_full;
+  assign ldst_special_ready_o = ~special_fifo_full;
+  assign ldst_ready_o = ~stall_o & {NUM_PORTS{~special_fifo_full}};
 
   // =========================================================================
   // Constant registers (regs NUM_PORTS .. NUM_PORTS+NUM_CONST-1)
@@ -248,9 +269,9 @@ module dice_rf_ctrl
     else if (rd_tid_valid_i) rd_tid_r <= rd_tid_i;
   end
 
-  // Predicate output — selected TID only
-
+  // Predicate outputs. The flattened ordering is t0p0, t0p1, ..., t1p0, ...
   assign pred_o = pred_regs[rd_tid_r];
+  assign pred_all_o = pred_regs;
 
   // =========================================================================
   // GPR read path — only pass GPR portion of bitmap to read_org
@@ -293,11 +314,20 @@ module dice_rf_ctrl
   always_ff @(posedge clk_i) begin
     if (reset_i) begin
       tid_o <= '0;
+      e_block_id_o <= '0;
       wr_bitmap_o <= '0;
+      ld_dest_regs_o <= '0;
+      num_stores_o <= '0;
     end else if (rd_tid_valid_i) begin
       tid_o <= rd_tid_i;
+      e_block_id_o <= e_block_id_i;
       wr_bitmap_o <= wr_bitmap_i;
+      ld_dest_regs_o <= ld_dest_regs_i;
+      num_stores_o <= num_stores_i;
     end
   end
+
+
+
 
 endmodule

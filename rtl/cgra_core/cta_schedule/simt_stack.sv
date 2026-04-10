@@ -1,4 +1,3 @@
-`define NO_SRAM
 module simt_stack
   import dice_pkg::*;
   import dice_frontend_pkg::*;

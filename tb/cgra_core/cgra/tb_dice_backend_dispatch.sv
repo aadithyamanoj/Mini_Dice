@@ -106,15 +106,25 @@ module tb_dice_backend_dispatch;
   logic [1:0]                      bank_valid_o;
   logic                            prog_dout_o;
   logic                            prog_we_o;
-  logic [DICE_REG_DATA_WIDTH-1:0]  mem_data_o_0, mem_addr_o_0;
-  logic [DICE_REG_DATA_WIDTH-1:0]  mem_data_o_1, mem_addr_o_1;
-  logic [DICE_REG_DATA_WIDTH-1:0]  mem_data_o_2, mem_addr_o_2;
-  logic [DICE_REG_DATA_WIDTH-1:0]  mem_data_o_3, mem_addr_o_3;
-
-  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                     mem_rsp_base_tid_i;
-  logic [DICE_REG_ADDR_WIDTH-1:0]                                       mem_rsp_ld_dest_reg_i;
-  logic [(CACHE_LINE_SIZE*8)-1:0]                                       mem_rsp_data_i;
-  logic                                                                 mem_rsp_valid_i;
+  logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] cgra_pred_all;
+  // AXI-Lite master interface (DUT outputs / TB slave)
+  logic [DICE_REG_DATA_WIDTH-1:0] axi_awaddr;
+  logic                           axi_awvalid;
+  logic                           axi_awready;
+  logic [DICE_REG_DATA_WIDTH-1:0] axi_wdata;
+  logic [1:0]                     axi_wstrb;
+  logic                           axi_wvalid;
+  logic                           axi_wready;
+  logic [1:0]                     axi_bresp;
+  logic                           axi_bvalid;
+  logic                           axi_bready;
+  logic [DICE_REG_DATA_WIDTH-1:0] axi_araddr;
+  logic                           axi_arvalid;
+  logic                           axi_arready;
+  logic [DICE_REG_DATA_WIDTH-1:0] axi_rdata;
+  logic [1:0]                     axi_rresp;
+  logic                           axi_rvalid;
+  logic                           axi_rready;
   logic                                                                 eblock_commit_valid_o;
   logic [DICE_EBLOCK_ID_WIDTH-1:0]                                      eblock_commit_id_o;
   logic                                                                 eblock_commit_ready_i;
@@ -149,10 +159,6 @@ module tb_dice_backend_dispatch;
       .fdr_valid_i           (fdr_if_i.valid),
       .fdr_data_i            (fdr_if_i.data),
       .fdr_ready_o           (fdr_if_i.ready),
-      .mem_rsp_base_tid_i    (mem_rsp_base_tid_i),
-      .mem_rsp_ld_dest_reg_i (mem_rsp_ld_dest_reg_i),
-      .mem_rsp_data_i        (mem_rsp_data_i),
-      .mem_rsp_valid_i       (mem_rsp_valid_i),
       .eblock_commit_valid_o (eblock_commit_valid_o),
       .eblock_commit_id_o    (eblock_commit_id_o),
       .eblock_commit_ready_i (eblock_commit_ready_i),
@@ -162,21 +168,31 @@ module tb_dice_backend_dispatch;
       .cgra_cm1_data_i       (cm1_data_i),
       .cgra_cm1_chunk_en_i   (cm1_chunk_en_i),
       .en_i                  (en_i),
-      .cgra_v_i              (v_i),
-      .cgra_bank_i           (bank_i),
-      .cgra_ready_o          (ready_o),
-      .cgra_busy_o           (busy_o),
-      .cgra_bank_valid_o     (bank_valid_o),
+      .prog_v_i              (v_i),
+      .cm_bank_i             (bank_i),
+      .prog_ready_o          (ready_o),
+      .prog_busy_o           (busy_o),
+      .cm_bank_valid_o       (bank_valid_o),
       .cgra_prog_dout_o      (prog_dout_o),
       .cgra_prog_we_o        (prog_we_o),
-      .cgra_mem_data_o_0     (mem_data_o_0),
-      .cgra_mem_addr_o_0     (mem_addr_o_0),
-      .cgra_mem_data_o_1     (mem_data_o_1),
-      .cgra_mem_addr_o_1     (mem_addr_o_1),
-      .cgra_mem_data_o_2     (mem_data_o_2),
-      .cgra_mem_addr_o_2     (mem_addr_o_2),
-      .cgra_mem_data_o_3     (mem_data_o_3),
-      .cgra_mem_addr_o_3     (mem_addr_o_3)
+      .cgra_pred_all_o       (cgra_pred_all),
+      .axi_awaddr_o          (axi_awaddr),
+      .axi_awvalid_o         (axi_awvalid),
+      .axi_awready_i         (axi_awready),
+      .axi_wdata_o           (axi_wdata),
+      .axi_wstrb_o           (axi_wstrb),
+      .axi_wvalid_o          (axi_wvalid),
+      .axi_wready_i          (axi_wready),
+      .axi_bresp_i           (axi_bresp),
+      .axi_bvalid_i          (axi_bvalid),
+      .axi_bready_o          (axi_bready),
+      .axi_araddr_o          (axi_araddr),
+      .axi_arvalid_o         (axi_arvalid),
+      .axi_arready_i         (axi_arready),
+      .axi_rdata_i           (axi_rdata),
+      .axi_rresp_i           (axi_rresp),
+      .axi_rvalid_i          (axi_rvalid),
+      .axi_rready_o          (axi_rready)
 `ifdef DICE_RF_DEBUG
       , .dbg_rf_rd_data_o    (dbg_rf_rd_data)
       , .dbg_pred_o          (dbg_pred)
@@ -234,13 +250,20 @@ module tb_dice_backend_dispatch;
 
   task automatic clear_rf_inputs();
     begin
-      mem_rsp_base_tid_i    = '0;
-      mem_rsp_ld_dest_reg_i = '0;
-      mem_rsp_data_i        = '0;
-      mem_rsp_valid_i       = 1'b0;
       fdr_if_i.valid        = 1'b0;
       fdr_if_i.data         = '0;
       eblock_commit_ready_i = 1'b0;
+      // AXI-Lite slave defaults: accept AW/W immediately; hold off AR/R
+      // (the vector-mul bitstream does not issue external memory ops, so
+      //  AR/R will never be exercised by these tests)
+      axi_awready           = 1'b1;
+      axi_wready            = 1'b1;
+      axi_bresp             = '0;
+      axi_bvalid            = 1'b0;
+      axi_arready           = 1'b1;
+      axi_rdata             = '0;
+      axi_rresp             = '0;
+      axi_rvalid            = 1'b0;
     end
   endtask
 
@@ -310,19 +333,21 @@ module tb_dice_backend_dispatch;
       input int                             reg_idx,
       input logic [DICE_REG_DATA_WIDTH-1:0] data
   );
+    // Inject directly into dice_backend's internal LDST response path, bypassing
+    // the AXI-Lite / mem_req_fifo.  The old mem_rsp_*_i top-level ports have been
+    // absorbed into the module; this force/release achieves the same RF write.
     begin
       @(negedge clk_i);
-      mem_rsp_base_tid_i                      = tid;
-      mem_rsp_ld_dest_reg_i                   = reg_idx[DICE_REG_ADDR_WIDTH-1:0];
-      mem_rsp_data_i                          = '0;
-      mem_rsp_data_i[DICE_REG_DATA_WIDTH-1:0] = data;
-      mem_rsp_valid_i                         = 1'b1;
+      force dut.mem_rsp_tid_lo   = tid;
+      force dut.mem_rsp_addr_lo  = reg_idx[DICE_REG_ADDR_WIDTH-1:0];
+      force dut.mem_rsp_data_lo  = data;
+      force dut.mem_rsp_valid_lo = 1'b1;
       @(posedge clk_i);
       @(negedge clk_i);
-      mem_rsp_valid_i       = 1'b0;
-      mem_rsp_base_tid_i    = '0;
-      mem_rsp_ld_dest_reg_i = '0;
-      mem_rsp_data_i        = '0;
+      release dut.mem_rsp_valid_lo;
+      release dut.mem_rsp_tid_lo;
+      release dut.mem_rsp_addr_lo;
+      release dut.mem_rsp_data_lo;
     end
   endtask
 

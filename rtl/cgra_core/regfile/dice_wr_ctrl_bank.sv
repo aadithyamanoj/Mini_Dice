@@ -26,6 +26,8 @@ module dice_wr_ctrl_bank
 
     // stall from either buffer
     , output logic stall_o
+    , output logic ldst_pop_o
+    , output logic [DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_o
 
 
     // signals out to register file
@@ -38,6 +40,7 @@ module dice_wr_ctrl_bank
   reg_wr_cmd ldst_wb;
   logic      ldst_wb_valid;
   logic      pop_ldst;
+  logic      cgra_bank_write;
 
   localparam int WBUF = $bits(reg_wr_cmd);
   reg_wr_buffer #(
@@ -59,13 +62,20 @@ module dice_wr_ctrl_bank
 
   assign stall_o = ldst_full;
   assign cgra_ready_o = 1'b1;
+  assign ldst_pop_o = pop_ldst;
+  assign ldst_pop_e_block_id_o = ldst_wb.e_block_id;
 
   always_comb begin
-    cmd_lo   = cgra_valid_i ? cgra_wr_i : ldst_wb;
-    pop_ldst = !cgra_valid_i && ldst_wb_valid;
-    data_o   = cmd_lo.data;
-    we_o     = (cgra_valid_i | ldst_wb_valid) & cmd_lo.mask;
-    ws_o     = cmd_lo.tid;
+    cgra_bank_write = cgra_valid_i && cgra_wr_i.mask;
+    cmd_lo          = cgra_bank_write ? cgra_wr_i : ldst_wb;
+    // Only signal a retire event when the buffered write actually targets this
+    // bank (mask=1). All banks enqueue when ldst_gpr_valid fires, but only
+    // the bank whose ld_dest_reg maps here has mask=1. Firing ldst_pop for
+    // mask=0 banks would over-count retire events and underflow the BCT.
+    pop_ldst        = !cgra_bank_write && ldst_wb_valid && ldst_wb.mask;
+    data_o          = cmd_lo.data;
+    we_o            = cgra_bank_write || (!cgra_bank_write && ldst_wb_valid && ldst_wb.mask);
+    ws_o            = cmd_lo.tid;
   end
 
 

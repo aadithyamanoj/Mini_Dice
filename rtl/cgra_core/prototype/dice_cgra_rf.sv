@@ -30,19 +30,31 @@ module dice_cgra_rf
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3,
     output logic                                                   mem_valid_o,
     output logic [DICE_TID_WIDTH-1:0]                              cgra_tid_o,
+    output logic [DICE_EBLOCK_ID_WIDTH-1:0]                        cgra_e_block_id_o,
+    output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] pred_all_o,
+    output logic [DICE_NUM_BANKS-1:0]                              ldst_pop_o,
+    output logic [DICE_NUM_BANKS-1:0][DICE_EBLOCK_ID_WIDTH-1:0]    ldst_pop_e_block_id_o,
+    output logic                                                   ldst_special_pop_o,
+    output logic [DICE_EBLOCK_ID_WIDTH-1:0]                        ldst_special_pop_e_block_id_o,
+    output logic                                                   ldst_special_ready_o,
+    output logic [NUM_MEM_PORTS-1:0]                         mem_port_valid_o,
+    output logic [NUM_MEM_PORTS-1:0]                         mem_port_op_o,
+    input  logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
+    input  logic [$clog2(NUM_MEM_PORTS-1):0]                      num_stores_i,
     input  logic [7:0]                                             latency_i,
 
     input  logic                                                 rd_tid_valid_i,
     output logic                                                 rd_tid_ready_o,
     // input  logic                                                 rd_en_i,
     input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]     rd_tid_i,
+    input  logic [DICE_EBLOCK_ID_WIDTH-1:0]                      e_block_id_i,
     input  logic [DICE_TOTAL_REGS-1:0]                           rd_bitmap_i,
     input  logic [DICE_TOTAL_REGS-1:0]                           wr_bitmap_i,
     // output logic                                                 rf_rd_valid_o,
 
     input  logic [$bits(cache_wr_cmd)-1:0]                       ldst_wr_i,
     input  logic                                                 ldst_valid_i,
-    output logic                                                 ldst_ready_o
+    output logic [DICE_NUM_BANKS-1:0]                            ldst_ready_o
 
 `ifdef DICE_RF_DEBUG
     , output logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_rd_data_o
@@ -62,12 +74,20 @@ module dice_cgra_rf
   localparam int NUM_BANKS = DICE_NUM_BANKS;
   localparam int NUM_CONST = DICE_NUM_CONST;
   localparam int NUM_PRED = DICE_NUM_PRED;
+  localparam int NUM_TID = DICE_NUM_MAX_THREADS_PER_CORE;
   localparam int TOTAL_REGS = DICE_TOTAL_REGS;
   localparam int DATA_WIDTH = DICE_REG_DATA_WIDTH;
   localparam int SHIFT_LAT_W = $clog2(128);
 
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_rd_data_lo;
   logic [NUM_PRED-1:0]                         pred_lo;
+  logic [NUM_TID*NUM_PRED-1:0]                pred_all_lo;
+  logic [NUM_BANKS-1:0]                       ldst_pop_lo;
+  logic [NUM_BANKS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_lo;
+  logic                                       ldst_special_pop_lo;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0]            ldst_special_pop_e_block_id_lo;
+  logic [NUM_BANKS-1:0]                       ldst_ready_lo;
+  logic                                       ldst_special_ready_lo;
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_launch_data_lo;
   logic [NUM_PRED-1:0]                         pred_launch_lo;
 
@@ -78,6 +98,14 @@ module dice_cgra_rf
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_li;
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_lo;
   logic [TOTAL_REGS-1:0]                            wr_bitmap_reg_li;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0]                 e_block_id_li;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0]                 e_block_id_lo;
+  logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_lo;
+  logic [$clog2(NUM_MEM_PORTS-1):0]                      num_stores_lo;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_valid_li;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_valid_lo;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_op_li;
+  logic [NUM_MEM_PORTS-1:0]                              mem_port_op_lo;
   logic                                             cgra_valid_lo;
 
   always_ff @(posedge clk_i) begin
@@ -164,6 +192,9 @@ module dice_cgra_rf
   );
 
   wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i + 1;
+  assign mem_port_valid_li = gen_mem_port_valid(ld_dest_regs_lo, num_stores_lo);
+  assign mem_port_op_li    = gen_mem_port_op(ld_dest_regs_lo, num_stores_lo);
+
   shift_reg
       #(.WIDTH          (DICE_TID_WIDTH)
        ,.MAX_PIPE_STAGE (128)
@@ -189,6 +220,42 @@ module dice_cgra_rf
       );
 
   shift_reg
+      #(.WIDTH          (DICE_EBLOCK_ID_WIDTH)
+       ,.MAX_PIPE_STAGE (128)
+      )
+      EBLOCK_ID_SHIFT
+      (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+      ,.latency(cgra_lat)
+      ,.in_data(e_block_id_li)
+      ,.out_data(e_block_id_lo)
+      );
+
+  shift_reg
+      #(.WIDTH          (NUM_MEM_PORTS)
+       ,.MAX_PIPE_STAGE (128)
+      )
+      LDST_PORT_VALID_SHIFT
+      (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+      ,.latency(cgra_lat)
+      ,.in_data(mem_port_valid_li)
+      ,.out_data(mem_port_valid_lo)
+      );
+
+  shift_reg
+      #(.WIDTH          (NUM_MEM_PORTS)
+       ,.MAX_PIPE_STAGE (128)
+      )
+      LDST_PORT_OP_SHIFT
+      (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+      ,.latency(cgra_lat)
+      ,.in_data(mem_port_op_li)
+      ,.out_data(mem_port_op_lo)
+      );
+
+  shift_reg
       #(.WIDTH          (1)
        ,.MAX_PIPE_STAGE (128)
       )
@@ -207,23 +274,45 @@ module dice_cgra_rf
       .rd_tid_ready_o(rd_tid_ready_o),
       // .rd_en_i(rd_en_i),
       .rd_tid_i(rd_tid_i),
+      .e_block_id_i(e_block_id_i),
       .rd_bitmap_i(rd_bitmap_i),
       .wr_bitmap_i(wr_bitmap_i),
+      .ld_dest_regs_i(ld_dest_regs_i),
+      .num_stores_i(num_stores_i),
       .rd_data_o(rf_rd_data_lo),
       .rf_rd_valid_o(rf_rd_valid_lo),
       .tid_o(cgra_tid_li),
+      .e_block_id_o(e_block_id_li),
       .wr_bitmap_o(wr_bitmap_reg_li),
+      .ld_dest_regs_o(ld_dest_regs_lo),
+      .num_stores_o(num_stores_lo),
       .pred_o(pred_lo),
+      .pred_all_o(pred_all_lo),
+      .ldst_pop_o(ldst_pop_lo),
+      .ldst_pop_e_block_id_o(ldst_pop_e_block_id_lo),
+      .ldst_special_pop_o(ldst_special_pop_lo),
+      .ldst_special_pop_e_block_id_o(ldst_special_pop_e_block_id_lo),
+      .ldst_special_ready_o(ldst_special_ready_lo),
       .cgra_tid_i(cgra_tid_lo),
       .cgra_data_i(cgra_data_li),
       .cgra_wr_bitmap_i(cgra_wr_bitmap_li),
       .cgra_valid_i(cgra_valid_lo),
       .ldst_wr_i(ldst_wr_i),
       .ldst_valid_i(ldst_valid_i),
-      .ldst_ready_o(ldst_ready_o)
+      .ldst_ready_o(ldst_ready_lo)
   );
   assign mem_valid_o = cgra_valid_lo;
   assign cgra_tid_o = cgra_tid_lo;
+  assign cgra_e_block_id_o = e_block_id_lo;
+  assign pred_all_o = pred_all_lo;
+  assign ldst_pop_o = ldst_pop_lo;
+  assign ldst_pop_e_block_id_o = ldst_pop_e_block_id_lo;
+  assign ldst_special_pop_o = ldst_special_pop_lo;
+  assign ldst_special_pop_e_block_id_o = ldst_special_pop_e_block_id_lo;
+  assign ldst_ready_o = ldst_ready_lo;
+  assign ldst_special_ready_o = ldst_special_ready_lo;
+  assign mem_port_valid_o = mem_port_valid_lo;
+  assign mem_port_op_o    = mem_port_op_lo;
 
 `ifdef DICE_RF_DEBUG
   assign dbg_rf_rd_data_o    = rf_rd_data_lo;
