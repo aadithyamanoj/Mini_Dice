@@ -68,7 +68,7 @@ module dice_wr_ctrl_bank
   always_comb begin
     cgra_bank_write = cgra_valid_i && cgra_wr_i.mask;
     cmd_lo          = cgra_bank_write ? cgra_wr_i : ldst_wb;
-    pop_ldst        = !cgra_bank_write && ldst_wb_valid;
+    pop_ldst        = !cgra_bank_write && ldst_wb_valid && ldst_wb.mask;
     data_o          = cmd_lo.data;
     we_o            = cgra_bank_write || (!cgra_bank_write && ldst_wb_valid && ldst_wb.mask);
     ws_o            = cmd_lo.tid;

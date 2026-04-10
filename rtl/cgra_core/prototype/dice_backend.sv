@@ -145,14 +145,12 @@ module dice_backend
 
   // Block Commit Table
   logic                               bct_insert_valid;
-  logic [   DICE_HW_CTA_ID_WIDTH-1:0] bct_insert_hw_cta_id;
+  logic                               bct_insert_valid_r;
   logic [   DICE_EBLOCK_ID_WIDTH-1:0] bct_insert_e_block_id;
   logic [                       13:0] bct_insert_pending_reads;
-  logic [                       13:0] bct_insert_pending_writes;
 
   logic                               bct_update_valid;
   logic [   DICE_EBLOCK_ID_WIDTH-1:0] bct_update_e_block_id;
-  logic                               bct_update_is_write;
   logic [2**DICE_HW_CTA_ID_WIDTH-1:0] bct_update_reduce_count;
 
   localparam int RETIRE_EVT_W = 1 + DICE_EBLOCK_ID_WIDTH;
@@ -179,8 +177,7 @@ module dice_backend
   assign ldst_valid_li      = mem_rsp_valid_lo;
   assign peek_num_load_lo   = gen_num_loads(fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores);
 
-
-  // =========================================================================
+// =========================================================================
   // Dispatcher → BCT Glue
   // =========================================================================
   // Latch e-block metadata whenever the dispatcher accepts a new e-block.
@@ -188,24 +185,26 @@ module dice_backend
     if (rst_i) begin
       dispatch_e_block_id    <= '0;
       dispatch_pending_reads <= '0;
-      dispatch_pending_writes <= '0;
     end else if (fdr_valid_i && ~dispatch_busy) begin
       dispatch_e_block_id    <= DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id);
       dispatch_pending_reads <= 14'($countones(fdr_data_li.real_active_mask) *
                                     gen_num_loads(fdr_data_li.metadata.ld_dest_regs,
                                                   fdr_data_li.metadata.num_stores));
-      dispatch_pending_writes <= 14'($countones(fdr_data_li.real_active_mask) *
-                                     fdr_data_li.metadata.num_stores);
     end
   end
 
-  // BCT insert: fires on dispatcher_done with the metadata latched above.
-  // hw_cta_id hardwired to 0 — only one CTA in current config.
-  assign bct_insert_valid          = dispatcher_done;
-  assign bct_insert_e_block_id     = dispatch_e_block_id;
-  assign bct_insert_hw_cta_id      = '0;
-  assign bct_insert_pending_reads  = dispatch_pending_reads;
-  assign bct_insert_pending_writes = dispatch_pending_writes;
+  // BCT insert: registered one cycle after the dispatcher accepts a new e-block.
+  // dispatch_* latches update at the end of the fdr_valid_i && ~dispatch_busy
+  // cycle, so bct_insert_valid_r fires in cycle N+1 when those values are correct.
+  // This still guarantees the BCT entry exists before any load can complete.
+  always_ff @(posedge clk_i) begin
+    if (rst_i) bct_insert_valid_r <= 1'b0;
+    else       bct_insert_valid_r <= fdr_valid_i && ~dispatch_busy;
+  end
+  assign bct_insert_valid         = bct_insert_valid_r;
+  assign bct_insert_e_block_id    = dispatch_e_block_id;
+  assign bct_insert_pending_reads = dispatch_pending_reads;
+
 
   always_comb begin
     retire_bundle_li = '0;
@@ -255,7 +254,6 @@ module dice_backend
   // BCT update: fires on serialized RF retire events tagged with e_block_id.
   assign bct_update_valid        = retire_evt_valid_lo;
   assign bct_update_e_block_id   = retire_evt_e_block_id_lo;
-  assign bct_update_is_write     = 1'b0;
   assign bct_update_reduce_count = (2**DICE_HW_CTA_ID_WIDTH)'(1);
 
   // =========================================================================
@@ -454,30 +452,28 @@ module dice_backend
   // Block Commit Table
   // =========================================================================
 
+
   block_commit_table u_block_commit_table (
-      .clk(clk_i),
-      .rst(rst_i),
+      .clk_i(clk_i),
+      .rst_i(rst_i),
 
       // Insert interface
-      .insert_valid         (bct_insert_valid),
-      .insert_hw_cta_id     (bct_insert_hw_cta_id),
-      .insert_e_block_id    (bct_insert_e_block_id),
-      .insert_pending_reads (bct_insert_pending_reads),
-      .insert_pending_writes(bct_insert_pending_writes),
+      .insert_valid_i        (bct_insert_valid),
+      .insert_e_block_id_i   (bct_insert_e_block_id),
+      .insert_pending_reads_i(bct_insert_pending_reads),
 
       // Update interface
-      .update_valid       (bct_update_valid),
-      .update_e_block_id  (bct_update_e_block_id),
-      .update_is_write    (bct_update_is_write),
-      .update_reduce_count(bct_update_reduce_count),
+      .update_valid_i       (bct_update_valid),
+      .update_e_block_id_i  (bct_update_e_block_id),
+      .update_reduce_count_i(bct_update_reduce_count),
 
       // Commit interface
-      .pop_valid     (eblock_commit_valid_o),
-      .pop_e_block_id(eblock_commit_id_o),
-      .pop_ready     (eblock_commit_ready_i),
+      .pop_valid_o     (eblock_commit_valid_o),
+      .pop_e_block_id_o(eblock_commit_id_o),
+      .pop_ready_i     (eblock_commit_ready_i),
 
       // Status
-      .hw_cta_pending(hw_cta_pending_o)
+      .hw_cta_pending_o(hw_cta_pending_o)
   );
 
 endmodule

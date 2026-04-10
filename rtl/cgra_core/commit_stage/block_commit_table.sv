@@ -10,12 +10,10 @@ module block_commit_table
     input  logic                                    insert_valid_i,
     input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         insert_e_block_id_i,
     input  logic [R_W-1:0]                          insert_pending_reads_i,
-    input  logic [R_W-1:0]                          insert_pending_writes_i,
-    
-    // Pending read/write update interface
+
+    // Pending read update interface
     input  logic                                    update_valid_i,
     input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         update_e_block_id_i,
-    input  logic                                    update_is_write_i,    // 0: read, 1: write
     input  logic [2**DICE_HW_CTA_ID_WIDTH-1:0]      update_reduce_count_i,  // max 8
     
     // E-block commit interface
@@ -32,7 +30,6 @@ module block_commit_table
         logic                            valid;
         logic [DICE_EBLOCK_ID_WIDTH-1:0] e_block_id;
         logic [R_W-1:0]                  pending_reads;
-        logic [R_W-1:0]                  pending_writes;
     } table_entry_t;
 
     // Table storage
@@ -54,7 +51,6 @@ module block_commit_table
                 commit_table[i].valid <= 1'b0;
                 commit_table[i].e_block_id <= '0;
                 commit_table[i].pending_reads <= '0;
-                commit_table[i].pending_writes <= '0;
             end
         end else begin
             // Handle insert
@@ -62,20 +58,12 @@ module block_commit_table
                 commit_table[insert_e_block_id_i].valid <= 1'b1;
                 commit_table[insert_e_block_id_i].e_block_id <= insert_e_block_id_i;
                 commit_table[insert_e_block_id_i].pending_reads <= insert_pending_reads_i;
-                commit_table[insert_e_block_id_i].pending_writes <= insert_pending_writes_i;
             end
 
-            // Handle pending count updates
+            // Handle pending read count updates (load RF writebacks)
             if (update_valid_i && commit_table[update_e_block_id_i].valid) begin
-                if (update_is_write_i) begin
-                    // Update pending writes
-                    commit_table[update_e_block_id_i].pending_writes <=
-                        commit_table[update_e_block_id_i].pending_writes - update_reduce_count_i;
-                end else begin
-                    // Update pending reads
-                    commit_table[update_e_block_id_i].pending_reads <=
-                        commit_table[update_e_block_id_i].pending_reads - update_reduce_count_i;
-                end
+                commit_table[update_e_block_id_i].pending_reads <=
+                    commit_table[update_e_block_id_i].pending_reads - update_reduce_count_i;
             end
 
             // Handle commit/pop
@@ -88,9 +76,8 @@ module block_commit_table
     // Check which entries are ready to commit
     always_comb begin
         for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
-            ready_to_commit[i] = commit_table[i].valid && 
-                                (commit_table[i].pending_reads == {{R_W}{1'd0}}) && 
-                                (commit_table[i].pending_writes == {{R_W}{1'd0}});
+            ready_to_commit[i] = commit_table[i].valid &&
+                                (commit_table[i].pending_reads == {{R_W}{1'd0}});
         end
     end
 
@@ -166,19 +153,10 @@ module block_commit_table
         update_valid_i |-> (update_reduce_count_i <= 4'd8)
     ) else $error("Invalid reduce count %0d exceeds maximum of 8", update_reduce_count_i);
 
-    // Pending writes must not underflow on a write update
-    assert_no_write_underflow: assert property (
-        @(posedge clk_i) disable iff (rst_i)
-        (update_valid_i && commit_table[update_e_block_id_i].valid && update_is_write_i) |->
-        (commit_table[update_e_block_id_i].pending_writes >= update_reduce_count_i)
-    ) else $error("Error: Pending writes underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
-                  update_e_block_id_i, commit_table[update_e_block_id_i].pending_writes,
-                  update_reduce_count_i, $time);
-
-    // Pending reads must not underflow on a read update
+    // Pending reads must not underflow on an update
     assert_no_read_underflow: assert property (
         @(posedge clk_i) disable iff (rst_i)
-        (update_valid_i && commit_table[update_e_block_id_i].valid && !update_is_write_i) |->
+        (update_valid_i && commit_table[update_e_block_id_i].valid) |->
         (commit_table[update_e_block_id_i].pending_reads >= update_reduce_count_i)
     ) else $error("Error: Pending reads underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
                   update_e_block_id_i, commit_table[update_e_block_id_i].pending_reads,
