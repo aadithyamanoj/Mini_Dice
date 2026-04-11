@@ -104,6 +104,7 @@ module dice_cgra_rf
   logic [TOTAL_REGS-1:0]                           cgra_wr_bitmap_li;
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_li;
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_tid_lo;
+  logic [DATA_WIDTH-1:0]                          regS_i_0_li;
   logic [TOTAL_REGS-1:0]                            wr_bitmap_reg_li;
   logic [DICE_EBLOCK_ID_WIDTH-1:0]                 e_block_id_li;
   logic [DICE_EBLOCK_ID_WIDTH-1:0]                 e_block_id_lo;
@@ -137,6 +138,8 @@ module dice_cgra_rf
     cgra_data_li[(NUM_BANKS + 2)*DATA_WIDTH +: DATA_WIDTH] = {{(DATA_WIDTH-1){1'b0}}, cgra_ext_pred_o[1]};
   end
 
+  assign regS_i_0_li = {{(DATA_WIDTH-DICE_TID_WIDTH){1'b0}}, cgra_tid_li};
+
   dice_cgra_subs cgra_subs_inst (
       .clk_i(clk_i),
       .reset_i(reset_i),
@@ -168,14 +171,15 @@ module dice_cgra_rf
       .ext_data_i_13(rf_launch_data_lo[13*DATA_WIDTH +: DATA_WIDTH]),
       .ext_data_i_14(rf_launch_data_lo[14*DATA_WIDTH +: DATA_WIDTH]),
       .ext_data_i_15(rf_launch_data_lo[15*DATA_WIDTH +: DATA_WIDTH]),
-      .csrX0(csrX0_i),
-      .csrX1(csrX1_i),
-      .csrX2(csrX2_i),
-      .csrX3(csrX3_i),
-      .csrX4(csrX4_i),
-      .csrX5(csrX5_i),
-      .csrX6(csrX6_i),
-      .csrX7(csrX7_i),
+      .csrX_i_0(csrX0_i),
+      .csrX_i_1(csrX1_i),
+      .csrX_i_2(csrX2_i),
+      .csrX_i_3(csrX3_i),
+      .csrX_i_4(csrX4_i),
+      .csrX_i_5(csrX5_i),
+      .csrX_i_6(csrX6_i),
+      .csrX_i_7(csrX7_i),
+      .regS_i_0(regS_i_0_li),
       .ext_data_o_0(cgra_ext_data_o[0]),
       .ext_data_o_1(cgra_ext_data_o[1]),
       .ext_data_o_2(cgra_ext_data_o[2]),
