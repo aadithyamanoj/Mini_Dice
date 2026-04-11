@@ -20,6 +20,14 @@ module dice_cgra_rf
     output logic [1:0] bank_valid_o,
     output logic prog_dout_o,
     output logic prog_we_o,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX3_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX4_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_0,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_0,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_1,
@@ -74,9 +82,9 @@ module dice_cgra_rf
   localparam int NUM_BANKS = DICE_NUM_BANKS;
   localparam int NUM_CONST = DICE_NUM_CONST;
   localparam int NUM_PRED = DICE_NUM_PRED;
-  localparam int NUM_TID = DICE_NUM_MAX_THREADS_PER_CORE;
   localparam int TOTAL_REGS = DICE_TOTAL_REGS;
   localparam int DATA_WIDTH = DICE_REG_DATA_WIDTH;
+  localparam int NUM_TID = DICE_NUM_MAX_THREADS_PER_CORE;
   localparam int SHIFT_LAT_W = $clog2(128);
 
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_rd_data_lo;
@@ -91,7 +99,7 @@ module dice_cgra_rf
   logic [(NUM_BANKS+NUM_CONST)*DATA_WIDTH-1:0] rf_launch_data_lo;
   logic [NUM_PRED-1:0]                         pred_launch_lo;
 
-  logic [15:0] cgra_ext_data_o [0:15];
+  logic [DATA_WIDTH-1:0] cgra_ext_data_o [0:15];
   logic       cgra_ext_pred_o [0:1];
   logic [((NUM_BANKS+NUM_PRED+1)*DATA_WIDTH)-1:0] cgra_data_li;
   logic [TOTAL_REGS-1:0]                           cgra_wr_bitmap_li;
@@ -161,6 +169,14 @@ module dice_cgra_rf
       .ext_data_i_13(rf_launch_data_lo[13*DATA_WIDTH +: DATA_WIDTH]),
       .ext_data_i_14(rf_launch_data_lo[14*DATA_WIDTH +: DATA_WIDTH]),
       .ext_data_i_15(rf_launch_data_lo[15*DATA_WIDTH +: DATA_WIDTH]),
+      .csrX0(csrX0_i),
+      .csrX1(csrX1_i),
+      .csrX2(csrX2_i),
+      .csrX3(csrX3_i),
+      .csrX4(csrX4_i),
+      .csrX5(csrX5_i),
+      .csrX6(csrX6_i),
+      .csrX7(csrX7_i),
       .ext_data_o_0(cgra_ext_data_o[0]),
       .ext_data_o_1(cgra_ext_data_o[1]),
       .ext_data_o_2(cgra_ext_data_o[2]),
@@ -181,14 +197,14 @@ module dice_cgra_rf
       .ext_pred_i_1(pred_launch_lo[1]),
       .ext_pred_o_0(cgra_ext_pred_o[0]),
       .ext_pred_o_1(cgra_ext_pred_o[1]),
-      .mem_data_o_0(mem_data_o_0[15:0]),
-      .mem_addr_o_0(mem_addr_o_0[15:0]),
-      .mem_data_o_1(mem_data_o_1[15:0]),
-      .mem_addr_o_1(mem_addr_o_1[15:0]),
-      .mem_data_o_2(mem_data_o_2[15:0]),
-      .mem_addr_o_2(mem_addr_o_2[15:0]),
-      .mem_data_o_3(mem_data_o_3[15:0]),
-      .mem_addr_o_3(mem_addr_o_3[15:0])
+      .mem_data_o_0(mem_data_o_0),
+      .mem_addr_o_0(mem_addr_o_0),
+      .mem_data_o_1(mem_data_o_1),
+      .mem_addr_o_1(mem_addr_o_1),
+      .mem_data_o_2(mem_data_o_2),
+      .mem_addr_o_2(mem_addr_o_2),
+      .mem_data_o_3(mem_data_o_3),
+      .mem_addr_o_3(mem_addr_o_3)
   );
 
   wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i + 1;

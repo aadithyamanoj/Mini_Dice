@@ -34,6 +34,16 @@ module dice_backend
     output logic       cgra_prog_dout_o,
     output logic       cgra_prog_we_o,
 
+    // Input-only CSR sources exposed to the CGRA input crossbar
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX3_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX4_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i,
+
     // for branch handler
     output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] cgra_pred_all_o,
 
@@ -128,31 +138,11 @@ module dice_backend
   logic mem_req_fifo_ready_lo;
   logic mem_req_fifo_pop_lo;
 
-  // Latched dispatch metadata
+  // Latched dispatch e_block_id (driven by dice_brt, also consumed by dice_cgra_rf)
   logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
-  logic [                    13:0] dispatch_pending_reads;
 
-  // Block Commit Table
-  logic                               bct_insert_valid;
-  logic                               bct_insert_valid_r;
-  logic [   DICE_EBLOCK_ID_WIDTH-1:0] bct_insert_e_block_id;
-  logic [                       13:0] bct_insert_pending_reads;
-
-  logic                               bct_update_valid;
-  logic [   DICE_EBLOCK_ID_WIDTH-1:0] bct_update_e_block_id;
-  logic [2**DICE_HW_CTA_ID_WIDTH-1:0] bct_update_reduce_count;
-
-  localparam int RETIRE_EVT_W = 1 + DICE_EBLOCK_ID_WIDTH;
-  localparam int RETIRE_EVT_CNT = DICE_NUM_BANKS + 1;
-  localparam int RETIRE_BUNDLE_W = RETIRE_EVT_CNT * RETIRE_EVT_W;
-  logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_li;
-  logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_words_lo;
-  logic [RETIRE_BUNDLE_W-1:0] retire_bundle_bits_li, retire_bundle_bits_lo;
-  logic retire_bundle_valid_li, retire_bundle_v_lo, retire_bundle_yumi_li;
-  logic retire_ser_ready_lo, retire_ser_v_lo, retire_ser_yumi_li;
-  logic [RETIRE_EVT_W-1:0] retire_ser_data_lo;
-  logic retire_evt_valid_lo;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] retire_evt_e_block_id_lo;
+  // Precomputed pending reads passed into dice_brt
+  logic [13:0] fdr_pending_reads_li;
 
   assign fdr_data_li         = fdr_data_i;
   assign fdr_ready_o        = ~dispatch_busy;
@@ -165,85 +155,39 @@ module dice_backend
   assign ldst_wr_li         = ldst_cmd;
   assign ldst_valid_li      = mem_rsp_valid_lo;
   assign peek_num_load_lo   = gen_num_loads(fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores);
-
-
-  // =========================================================================
-  // Dispatcher → BCT Glue
-  // =========================================================================
-  // Latch e-block metadata whenever the dispatcher accepts a new e-block.
-  always_ff @(posedge clk_i) begin
-    if (rst_i) begin
-      dispatch_e_block_id    <= '0;
-      dispatch_pending_reads <= '0;
-    end else if (fdr_valid_i && ~dispatch_busy) begin
-      dispatch_e_block_id    <= DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id);
-      dispatch_pending_reads <= 14'($countones(fdr_data_li.real_active_mask) *
+  assign fdr_pending_reads_li = 14'($countones(fdr_data_li.real_active_mask) *
                                     gen_num_loads(fdr_data_li.metadata.ld_dest_regs,
                                                   fdr_data_li.metadata.num_stores));
-    end
-  end
 
-  // BCT insert: registered one cycle after the dispatcher accepts a new e-block.
-  // dispatch_* latches update at the end of the fdr_valid_i && ~dispatch_busy
-  // cycle, so bct_insert_valid_r fires in cycle N+1 when those values are correct.
-  // This still guarantees the BCT entry exists before any load can complete.
-  always_ff @(posedge clk_i) begin
-    if (rst_i) bct_insert_valid_r <= 1'b0;
-    else       bct_insert_valid_r <= fdr_valid_i && ~dispatch_busy;
-  end
-  assign bct_insert_valid         = bct_insert_valid_r;
-  assign bct_insert_e_block_id    = dispatch_e_block_id;
-  assign bct_insert_pending_reads = dispatch_pending_reads;
+  // =========================================================================
+  // Block Retire Table (BCT insert pipeline + retire FIFO + serializer + BCT)
+  // =========================================================================
 
-  always_comb begin
-    retire_bundle_li = '0;
-    for (int i = 0; i < DICE_NUM_BANKS; i++) begin
-      retire_bundle_li[i] = {ldst_pop_lo[i], ldst_pop_e_block_id_lo[i]};
-    end
-    retire_bundle_li[DICE_NUM_BANKS] = {ldst_special_pop_lo, ldst_special_pop_e_block_id_lo};
-  end
+  dice_brt u_dice_brt (
+    .clk_i(clk_i),
+    .rst_i(rst_i),
 
-  assign retire_bundle_bits_li = retire_bundle_li;
-  assign retire_bundle_words_lo = retire_bundle_bits_lo;
-  assign retire_bundle_valid_li = |ldst_pop_lo | ldst_special_pop_lo;
+    // Dispatcher handshake
+    .fdr_valid_i         (fdr_valid_i),
+    .dispatch_busy_i     (dispatch_busy),
+    .fdr_e_block_id_i    (DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id)),
+    .fdr_pending_reads_i (fdr_pending_reads_li),
 
-  bsg_fifo_1r1w_small #(
-      .width_p(RETIRE_BUNDLE_W),
-      .els_p(LDST_BUF_DEPTH)
-  ) retire_bundle_fifo (
-      .clk_i(clk_i),
-      .reset_i(rst_i),
-      .v_i(retire_bundle_valid_li),
-      .ready_o(),
-      .data_i(retire_bundle_bits_li),
-      .v_o(retire_bundle_v_lo),
-      .data_o(retire_bundle_bits_lo),
-      .yumi_i(retire_bundle_yumi_li)
+    // Latched e_block_id (also consumed by dice_cgra_rf)
+    .dispatch_e_block_id_o(dispatch_e_block_id),
+
+    // Retire signals from dice_cgra_rf
+    .ldst_pop_i                  (ldst_pop_lo),
+    .ldst_pop_e_block_id_i       (ldst_pop_e_block_id_lo),
+    .ldst_special_pop_i          (ldst_special_pop_lo),
+    .ldst_special_pop_e_block_id_i(ldst_special_pop_e_block_id_lo),
+
+    // Commit interface
+    .eblock_commit_valid_o(eblock_commit_valid_o),
+    .eblock_commit_id_o   (eblock_commit_id_o),
+    .eblock_commit_ready_i(eblock_commit_ready_i),
+    .hw_cta_pending_o     (hw_cta_pending_o)
   );
-
-  bsg_parallel_in_serial_out #(
-      .width_p(RETIRE_EVT_W),
-      .els_p(RETIRE_EVT_CNT)
-  ) retire_evt_serializer (
-      .clk_i(clk_i),
-      .reset_i(rst_i),
-      .valid_i(retire_bundle_v_lo),
-      .data_i(retire_bundle_words_lo),
-      .ready_and_o(retire_ser_ready_lo),
-      .valid_o(retire_ser_v_lo),
-      .data_o(retire_ser_data_lo),
-      .yumi_i(retire_ser_yumi_li)
-  );
-
-  assign retire_bundle_yumi_li = retire_bundle_v_lo & retire_ser_ready_lo;
-  assign retire_ser_yumi_li = retire_ser_v_lo;
-  assign retire_evt_valid_lo = retire_ser_v_lo & retire_ser_data_lo[RETIRE_EVT_W-1];
-  assign retire_evt_e_block_id_lo = retire_ser_data_lo[DICE_EBLOCK_ID_WIDTH-1:0];
-
-  // BCT update: fires on serialized RF retire events tagged with e_block_id.
-  assign bct_update_valid        = retire_evt_valid_lo;
-  assign bct_update_e_block_id   = retire_evt_e_block_id_lo;
-  assign bct_update_reduce_count = (2**DICE_HW_CTA_ID_WIDTH)'(1);
 
   // =========================================================================
   // Dispatcher
@@ -317,6 +261,15 @@ module dice_backend
       .bank_valid_o(cm_bank_valid_o),
       .prog_dout_o (cgra_prog_dout_o),
       .prog_we_o   (cgra_prog_we_o),
+
+      .csrX0_i      (csrX0_i),
+      .csrX1_i      (csrX1_i),
+      .csrX2_i      (csrX2_i),
+      .csrX3_i      (csrX3_i),
+      .csrX4_i      (csrX4_i),
+      .csrX5_i      (csrX5_i),
+      .csrX6_i      (csrX6_i),
+      .csrX7_i      (csrX7_i),
 
       .mem_data_o_0(cgra_mem_data_lo_0),
       .mem_addr_o_0(cgra_mem_addr_lo_0),
@@ -427,32 +380,5 @@ module dice_backend
   );
 
 
-
-  // =========================================================================
-  // Block Commit Table
-  // =========================================================================
-
-  block_commit_table u_block_commit_table (
-      .clk_i(clk_i),
-      .rst_i(rst_i),
-
-      // Insert interface
-      .insert_valid_i        (bct_insert_valid),
-      .insert_e_block_id_i   (bct_insert_e_block_id),
-      .insert_pending_reads_i(bct_insert_pending_reads),
-
-      // Update interface
-      .update_valid_i       (bct_update_valid),
-      .update_e_block_id_i  (bct_update_e_block_id),
-      .update_reduce_count_i(bct_update_reduce_count),
-
-      // Commit interface
-      .pop_valid_o     (eblock_commit_valid_o),
-      .pop_e_block_id_o(eblock_commit_id_o),
-      .pop_ready_i     (eblock_commit_ready_i),
-
-      // Status
-      .hw_cta_pending_o(hw_cta_pending_o)
-  );
 
 endmodule

@@ -276,7 +276,7 @@ module tb_dice_backend_retire;
     int actual;
     begin
       @(negedge clk_i);  // sample on negedge for stable registered values
-      actual = int'(dut.u_block_commit_table.commit_table[eblock_id].pending_reads);
+      actual = int'(dut.u_dice_brt.u_block_commit_table.commit_table[eblock_id].pending_reads);
       if (actual !== expected)
         $fatal(1, "%s: e-block %0d pending_reads — expected %0d, got %0d",
                label, eblock_id, expected, actual);
