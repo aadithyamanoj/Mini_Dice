@@ -13,7 +13,7 @@ package dice_pkg;
   parameter int DICE_METADATA_WIDTH           = `DICE_METADATA_WIDTH;
 
   parameter int DICE_ADDR_WIDTH               = `DICE_ADDR_WIDTH;
-  parameter int DICE_DATA_WIDTH               = `DICE_DATA_WIDTH;
+  parameter int DICE_DATA_WIDTH               = 16;
   parameter int DICE_KERNEL_ID_WIDTH          = $clog2(`DICE_MAX_KERNEL_ID);
   parameter int DICE_CTA_ID_WIDTH             = $clog2(`DICE_MAX_GRID_SIZE);
   parameter int DICE_TID_WIDTH                = $clog2(`DICE_NUM_MAX_THREADS_PER_CORE);
@@ -37,9 +37,9 @@ package dice_pkg;
   parameter int DICE_MAX_REG_WIDTH            = `DICE_CR_NUM;
 
   // Memory bus parameters (for VX_mem_bus_if / cgra_cm_if)
-  parameter int DICE_MEM_DATA_WIDTH           = 512;
-  parameter int DICE_MEM_ADDR_WIDTH           = 32;
-  parameter int DICE_MEM_FLAGS_WIDTH          = 4;
+  // parameter int DICE_MEM_DATA_WIDTH           = 512;
+  // parameter int DICE_MEM_ADDR_WIDTH           = 32;
+  // parameter int DICE_MEM_FLAGS_WIDTH          = 4;
 
   // =========================================================
   // Type definitions
@@ -86,6 +86,7 @@ package dice_pkg;
     logic unresolved_control_divergence;
     logic [DICE_ADDR_WIDTH-1:0] predict_pc;
     logic has_pending_eblock;
+    logic eblock_in_flight;
     logic is_return;
   } dice_cta_status_t;  // CTA status descriptor
 

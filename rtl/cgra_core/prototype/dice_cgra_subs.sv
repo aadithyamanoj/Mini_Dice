@@ -1,5 +1,6 @@
 module dice_cgra_subs
   import dice_pkg::*;
+  import DE_pkg::*;
 (
     input logic clk_i,
     input logic reset_i,

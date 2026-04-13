@@ -1,4 +1,3 @@
-
 module dice_backend
   import dice_pkg::*;
   import dice_frontend_pkg::*;
@@ -7,47 +6,62 @@ module dice_backend
     input logic clk_i,
     input logic rst_i,
 
-    // FDR interface (from frontend)
-    fdr_if.slave fdr_if_i,
-
-    // North boundary outputs (row = 0, columns 0 / 2 / 4 / 6 / 8)
-    output logic [DICE_REG_DATA_WIDTH-1:0] north_0_data_o,
-    output logic                           north_0_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] north_2_data_o,
-    output logic                           north_2_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] north_4_data_o,
-    output logic                           north_4_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] north_6_data_o,
-    output logic                           north_6_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] north_8_data_o,
-    output logic                           north_8_pred_o,
-
-    // South boundary outputs (row = 8, columns 0 / 2 / 4 / 6 / 8)
-    output logic [DICE_REG_DATA_WIDTH-1:0] south_0_data_o,
-    output logic                           south_0_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] south_2_data_o,
-    output logic                           south_2_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] south_4_data_o,
-    output logic                           south_4_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] south_6_data_o,
-    output logic                           south_6_pred_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] south_8_data_o,
-    output logic                           south_8_pred_o,
-
-    // Memory Response Input (cache_wr_cmd fields)
-    input  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0]                            mem_rsp_base_tid_i,
-    input  logic [TID_BITMAP_WIDTH-1:0]                                                 mem_rsp_tid_bitmap_i,
-    input  logic [DICE_REG_ADDR_WIDTH-1:0]                                              mem_rsp_ld_dest_reg_i,
-    input  logic [NUMBER_OF_MAX_COALESCED_COMMANDS-1:0][BASE_ADDRESS_OFFSET-1:0]        mem_rsp_address_map_i,
-    input  logic [(CACHE_LINE_SIZE*8)-1:0]                                              mem_rsp_data_i,
-    input  logic                                                                        mem_rsp_valid_i,
+    // FDR interface fields (flattened for synthesis friendliness)
+    input logic fdr_valid_i,
+    input logic [$bits(fdr_t)-1:0] fdr_data_i,
+    output logic fdr_ready_o,
 
     // Block commit table outputs
-    output logic                                    eblock_commit_valid_o,
-    output logic [DICE_EBLOCK_ID_WIDTH-1:0]         eblock_commit_id_o,
-    input  logic                                    eblock_commit_ready_i,
-    output logic [2**DICE_HW_CTA_ID_WIDTH-1:0]     hw_cta_pending_o
+    output logic                            eblock_commit_valid_o,
+    output logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_commit_id_o,
+    input  logic                            eblock_commit_ready_i,
+    output logic                            hw_cta_pending_o,
+
+    // Frontend configuration-memory write stream
+    input logic                                   cm_wr_buffer_i,
+    input logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_i,
+    input logic [        DICE_REG_DATA_WIDTH-1:0] cm_wr_data_i,
+    input logic                                   cm_wr_valid_i,
+
+    // CGRA scan chain / bitstream outputs
+    output logic cgra_prog_dout_o,
+    output logic cgra_prog_we_o,
+
+    // Input-only CSR sources exposed to the CGRA input crossbar
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX3_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX4_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
+    input logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i,
+
+    // for branch handler
+    output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] cgra_pred_all_o,
+
+    // AXI-Lite master interface from LDST FIFO
+    output logic [DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
+    output logic                           axi_awvalid_o,
+    input  logic                           axi_awready_i,
+    output logic [DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
+    output logic [                    1:0] axi_wstrb_o,
+    output logic                           axi_wvalid_o,
+    input  logic                           axi_wready_i,
+    input  logic [                    1:0] axi_bresp_i,
+    input  logic                           axi_bvalid_i,
+    output logic                           axi_bready_o,
+    output logic [DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
+    output logic                           axi_arvalid_o,
+    input  logic                           axi_arready_i,
+    input  logic [DICE_REG_DATA_WIDTH-1:0] axi_rdata_i,
+    input  logic [                    1:0] axi_rresp_i,
+    input  logic                           axi_rvalid_i,
+    output logic                           axi_rready_o
 );
+
+  localparam int CmChunkCount = (DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1)
+                                / DICE_MEM_DATA_WIDTH;
 
   // Dispatcher
   logic dispatch_busy;
@@ -55,469 +69,329 @@ module dice_backend
   logic dispatch_fifo_empty;
   logic [NUM_LANES*DICE_TID_WIDTH-1:0] rd_tid;
   logic [NUM_LANES-1:0] rd_tid_valid;
+  logic [NUM_LANES-1:0] disp_tid_valid;
   logic [DICE_TOTAL_REGS-1:0] full_reg_bitmap_lo;
+  fdr_t fdr_data_li;
 
-  // Register File Control
-  logic rf_rd_valid_lo;
+  // RF + CGRA wrapper outputs
   logic rf_rd_ready_lo;
-
-  logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] rd_data_lo;
-  logic [DICE_NUM_PRED-1:0] pred_lo;
-
-  // Crossbar parameters
-  localparam int NUM_PE_PORTS          = 8;                  // number of data inputs and ourputs to CGRA PE array
-  localparam int GPR_XBAR_NUM_INPUTS   = DICE_NUM_REGS + DICE_NUM_CONST; // GPRs + const regs
-  localparam int GPR_XBAR_NUM_OUTPUTS  = NUM_PE_PORTS;       // PE data input count
-
-  localparam int PRED_XBAR_NUM_INPUTS  = DICE_NUM_PRED;     // predicate regs = 2
-  localparam int PRED_XBAR_NUM_OUTPUTS = NUM_PE_PORTS;      // PE pred input count
-
-  // Crossbar -> feed into CGRA PE array inputs
-  logic [GPR_XBAR_NUM_OUTPUTS-1:0][DICE_REG_DATA_WIDTH-1:0] gpr_rd_xbar_lo;
-  logic [PRED_XBAR_NUM_OUTPUTS-1:0][0:0]                    pred_rd_xbar_lo;
-  // CGRA PE array outputs -> write-back crossbar -> register file
-  logic [GPR_XBAR_NUM_INPUTS-1:0][DICE_REG_DATA_WIDTH-1:0] gpr_wb_xbar_lo;   
-  logic [PRED_XBAR_NUM_INPUTS-1:0][0:0]                    pred_wb_xbar_lo;  
-
-  // Crossbar configuration — sourced from the CGRA bitstream.
-  // TODO: drive from bitstream decoder once that path is implemented.
-  //       cfg_sel_i layout: bits [(i+1)*SEL_WIDTH-1 : i*SEL_WIDTH] = selector for output i.
-  //
-  // Input  crossbar: NUM_INPUTS=GPR_XBAR_NUM_INPUTS(16), NUM_OUTPUTS=GPR_XBAR_NUM_OUTPUTS(8)
-  //                  SEL_W = clog2(16) = 4  →  cfg_sel width = 8*4 = 32 bits
-  // Output crossbar: NUM_INPUTS=GPR_XBAR_NUM_OUTPUTS(8),  NUM_OUTPUTS=GPR_XBAR_NUM_INPUTS(16)
-  //                  SEL_W = clog2(8)  = 3  →  cfg_sel width = 16*3 = 48 bits
-  logic [GPR_XBAR_NUM_OUTPUTS*($clog2(GPR_XBAR_NUM_INPUTS))-1:0]   gpr_rd_xbar_cfg_sel;
-  logic [GPR_XBAR_NUM_INPUTS*($clog2(GPR_XBAR_NUM_OUTPUTS))-1:0]   gpr_wb_xbar_cfg_sel;
-  logic [PRED_XBAR_NUM_OUTPUTS*($clog2(PRED_XBAR_NUM_INPUTS))-1:0] pred_rd_xbar_cfg_sel;
-  logic [PRED_XBAR_NUM_INPUTS*($clog2(PRED_XBAR_NUM_OUTPUTS))-1:0] pred_wb_xbar_cfg_sel;
-  logic                                                              xbar_cfg_load;
-
-  assign gpr_rd_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
-  assign pred_rd_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
-  assign gpr_wb_xbar_cfg_sel  = '0; // TODO: connect to bitstream decoder output
-  assign pred_wb_xbar_cfg_sel = '0; // TODO: connect to bitstream decoder output
-  assign xbar_cfg_load        = '0; // TODO: pulse when new p-graph bitstream config is ready
-
+  logic [DICE_NUM_BANKS-1:0] ldst_ready_lo;
+  logic cgra_v_lo;
+  logic [DICE_TID_WIDTH-1:0] cgra_tid_lo;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] cgra_e_block_id_lo;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_0;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_0;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_1;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_1;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_2;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_2;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_data_lo_3;
+  logic [DICE_REG_DATA_WIDTH-1:0] cgra_mem_addr_lo_3;
+  logic [NUM_MEM_PORTS-1:0] cgra_mem_port_valid_lo;
+  logic [NUM_MEM_PORTS-1:0] cgra_mem_port_op_lo;
+  logic [DICE_NUM_BANKS-1:0] ldst_pop_lo;
+  logic [DICE_NUM_BANKS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_lo;
+  logic ldst_special_pop_lo;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] ldst_special_pop_e_block_id_lo;
+  logic ldst_special_ready_lo;
 
   // LDST write interface — pack module inputs into cache_wr_cmd
-  cache_wr_cmd                    ldst_cmd;
-  logic [$bits(cache_wr_cmd)-1:0] ldst_wr_lo;
-  logic                           ldst_valid_lo;
-  logic                           ldst_ready_lo;
+  cache_wr_cmd ldst_cmd;
+  logic [$bits(cache_wr_cmd)-1:0] ldst_wr_li;
+  logic ldst_valid_li;
+  logic [DICE_TID_WIDTH-1:0] mem_rsp_tid_lo;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] mem_rsp_e_block_id_lo;
+  logic [DICE_REG_ADDR_WIDTH-1:0] mem_rsp_addr_lo;
+  logic [DICE_REG_DATA_WIDTH-1:0] mem_rsp_data_lo;
+  logic mem_rsp_valid_lo;
+
+  // One-hot TID bitmap for scoreboard writeback release
+  logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] cgra_wb_tid_bitmap;
+  assign cgra_wb_tid_bitmap = cgra_v_lo ? (DICE_NUM_MAX_THREADS_PER_CORE'(1'b1) << cgra_tid_lo) : '0;
 
 
-  logic [DICE_TID_WIDTH-1:0] cgra_tid_li; // out of rf, in to shift reg and cgra
 
-  logic [DICE_TOTAL_REGS-1:0] wb_map_li; // shifted form metadata, goes to rf
+  //credit signals
 
+  logic                                cgra_credit_ready_lo;
+  logic                                load_credit_fire_lo;
+  logic [ $clog2(NUM_MEM_PORTS+1)-1:0] peek_num_load_lo;
+  logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_up_li;
+  logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_need_li;
 
-  // CGRA write-back wires
-  logic                                          cgra_v_lo; // asserted lat cycles after RF read valid
-  logic [NUM_PE_PORTS*DICE_REG_DATA_WIDTH-1:0] cgra_gpr_data_lo;
-  logic [NUM_PE_PORTS-1:0]                     cgra_pred_data_lo;
-  logic [DICE_TID_WIDTH-1:0]                     cgra_tid_lo;
+  logic                                mem_req_fifo_ready_lo;
+  logic                                mem_req_fifo_pop_lo;
 
-  // Register file writeback from CGRA (after crossbar)
-  logic [((DICE_NUM_REGS+DICE_NUM_CONST)+DICE_NUM_PRED)-1:0]  cgra_data_lo; // combined GPR and predicate data
-  assign cgra_data_lo = {gpr_wb_xbar_lo, pred_wb_xbar_lo};
+  // CGRA programming glue
+  logic [     DICE_MEM_DATA_WIDTH-1:0] cgra_cm0_data_li;
+  logic [            CmChunkCount-1:0] cgra_cm0_chunk_en_li;
+  logic [     DICE_MEM_DATA_WIDTH-1:0] cgra_cm1_data_li;
+  logic [            CmChunkCount-1:0] cgra_cm1_chunk_en_li;
+  logic                                prog_ready_lo;
+  logic                                prog_busy_lo;
+  logic [                         1:0] cm_bank_valid_lo;
+  logic                                prog_v_li;
+  logic                                prog_handshake_li;
 
-  // Block Commit Table
-  logic                                    bct_insert_valid;
-  logic [DICE_HW_CTA_ID_WIDTH-1:0]        bct_insert_hw_cta_id;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0]         bct_insert_e_block_id;
-  logic [13:0]                             bct_insert_pending_reads;
-  logic [13:0]                             bct_insert_pending_writes;
+  // Latched dispatch e_block_id (driven by dice_brt, also consumed by dice_cgra_rf)
+  logic [    DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
 
-  logic                                    bct_update_valid;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0]         bct_update_e_block_id;
-  logic                                    bct_update_is_write;
-  logic [2**DICE_HW_CTA_ID_WIDTH-1:0]     bct_update_reduce_count;
+  // Precomputed pending reads passed into dice_brt
+  logic [                        13:0] fdr_pending_reads_li;
 
-  assign fdr_if_i.ready = ~dispatch_busy;
+  assign fdr_data_li = fdr_data_i;
+  assign fdr_ready_o = ~dispatch_busy;
 
-  assign ldst_cmd.outcmd_base_tid    = mem_rsp_base_tid_i;
-  assign ldst_cmd.outcmd_tid_bitmap  = mem_rsp_tid_bitmap_i;
-  assign ldst_cmd.outcmd_ld_dest_reg = mem_rsp_ld_dest_reg_i;
-  assign ldst_cmd.outcmd_address_map = mem_rsp_address_map_i;
-  assign ldst_cmd.core_rsp_data      = mem_rsp_data_i;
+  assign ldst_cmd.tid = mem_rsp_tid_lo;
+  assign ldst_cmd.e_block_id = mem_rsp_e_block_id_lo;
+  assign ldst_cmd.data = mem_rsp_data_lo;
+  assign ldst_cmd.wr_bitmap = DICE_TOTAL_REGS'(1'b1) << mem_rsp_addr_lo;
 
-  assign ldst_wr_lo    = ldst_cmd;
-  assign ldst_valid_lo = mem_rsp_valid_i;
+  assign ldst_wr_li = ldst_cmd;
+  assign ldst_valid_li = mem_rsp_valid_lo;
+  assign peek_num_load_lo = gen_num_loads(
+      fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores
+  );
+  assign fdr_pending_reads_li = 14'($countones(
+      fdr_data_li.real_active_mask
+  ) * gen_num_loads(
+      fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores
+  ));
+  assign cgra_cm0_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
+  assign cgra_cm1_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
+  assign prog_handshake_li = fdr_valid_i & prog_ready_lo;
+
+  always_comb begin
+    cgra_cm0_chunk_en_li = '0;
+    cgra_cm1_chunk_en_li = '0;
+
+    if (cm_wr_valid_i) begin
+      if (cm_wr_buffer_i == 1'b0) begin
+        cgra_cm0_chunk_en_li[cm_wr_addr_i/DICE_MEM_DATA_WIDTH] = 1'b1;
+      end else begin
+        cgra_cm1_chunk_en_li[cm_wr_addr_i/DICE_MEM_DATA_WIDTH] = 1'b1;
+      end
+    end
+  end
+
+  bsg_edge_detect u_prog_v_edge_detect (
+      .clk_i   (clk_i),
+      .reset_i (rst_i),
+      .sig_i   (prog_handshake_li),
+      .detect_o(prog_v_li)
+  );
+
+  // =========================================================================
+  // Block Retire Table (BCT insert pipeline + retire FIFO + serializer + BCT)
+  // =========================================================================
+
+  dice_brt u_dice_brt (
+      .clk_i(clk_i),
+      .rst_i(rst_i),
+
+      // Dispatcher handshake
+      .fdr_valid_i        (fdr_valid_i),
+      .dispatch_busy_i    (dispatch_busy),
+      .fdr_e_block_id_i   (DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id)),
+      .fdr_pending_reads_i(fdr_pending_reads_li),
+
+      // Latched e_block_id (also consumed by dice_cgra_rf)
+      .dispatch_e_block_id_o(dispatch_e_block_id),
+
+      // Retire signals from dice_cgra_rf
+      .ldst_pop_i                   (ldst_pop_lo),
+      .ldst_pop_e_block_id_i        (ldst_pop_e_block_id_lo),
+      .ldst_special_pop_i           (ldst_special_pop_lo),
+      .ldst_special_pop_e_block_id_i(ldst_special_pop_e_block_id_lo),
+
+      // Commit interface
+      .eblock_commit_valid_o(eblock_commit_valid_o),
+      .eblock_commit_id_o   (eblock_commit_id_o),
+      .eblock_commit_ready_i(eblock_commit_ready_i),
+      .hw_cta_pending_o     (hw_cta_pending_o)
+  );
 
   // =========================================================================
   // Dispatcher
   // =========================================================================
 
+  wire disp_pop = load_credit_fire_lo & !prog_busy_lo;
+  assign rd_tid_valid = disp_tid_valid & {NUM_LANES{disp_pop}};
+
   dispatcher u_dispatcher (
       .clk_i(clk_i),
       .rst(rst_i),
-      .ld_dest_regs(fdr_if_i.data.metadata.ld_dest_regs),
-      .input_register_bitmap(fdr_if_i.data.metadata.in_regs_bitmap),
-      .active_mask(fdr_if_i.data.real_active_mask),
-      .fetch_done(fdr_if_i.valid),
-      .wb_valid(),              // comes from cgra
-      .wb_tid_bitmap(),         // comes from cgra
-      .dispatch_fifo_pop('1),   // cgra ready
+      .ld_dest_regs(fdr_data_li.metadata.ld_dest_regs),
+      .input_register_bitmap(fdr_data_li.metadata.in_regs_bitmap),
+      .active_mask(fdr_data_li.real_active_mask),
+      .fetch_done(fdr_valid_i),
+      .wb_valid(cgra_v_lo),  // CGRA writeback pulse (lat-shifted RF read valid)
+      .wb_tid_bitmap(cgra_wb_tid_bitmap),  // one-hot TID that just completed
+      .dispatch_fifo_pop(disp_pop),  // advance FIFO when we have credits
       .dispatch_fifo_empty(dispatch_fifo_empty),
       .dispatch_tid_o(rd_tid),
-      .dispatch_valid_o(rd_tid_valid),
+      .dispatch_valid_o(disp_tid_valid),
       .full_reg_bitmap_o(full_reg_bitmap_lo),
       .dispatcher_busy(dispatch_busy),
       .dispatcher_done(dispatcher_done)
   );
 
+
   // =========================================================================
-  // Register File Control
+  // Load credit counter
   // =========================================================================
 
-  dice_rf_ctrl u_dice_rf_ctrl (
+  assign load_credit_up_li = {{($bits(load_credit_up_li) - 1) {1'b0}}, mem_req_fifo_pop_lo};
+  assign load_credit_need_li = {
+    {($bits(load_credit_need_li) - $bits(peek_num_load_lo)) {1'b0}}, peek_num_load_lo
+  };
+
+  dice_ready_to_credit_flow_converter #(
+      .credit_initial_p(NUM_CREDITS),
+      .credit_max_val_p(NUM_CREDITS),
+      .max_step_p(DICE_NUM_BANKS)
+  ) credit_ctrl (
       .clk_i(clk_i),
       .reset_i(rst_i),
+      .v_i((|disp_tid_valid) && !prog_busy_lo),
+      .ready_o(cgra_credit_ready_lo),
+      .v_o(load_credit_fire_lo),
+      .credit_i(load_credit_up_li),
+      .credit_need_i(load_credit_need_li)
+  );
 
-      // Read Interface
+
+
+  // =========================================================================
+  // Register File + CGRA Wrapper
+  // =========================================================================
+
+  dice_cgra_rf u_dice_cgra_rf (
+      .clk_i  (clk_i),
+      .reset_i(rst_i),
+      .en_i   (~prog_busy_lo),
+
+      // Configuration memory
+      .cm0_data_i    (cgra_cm0_data_li),
+      .cm0_chunk_en_i(cgra_cm0_chunk_en_li),
+      .cm1_data_i    (cgra_cm1_data_li),
+      .cm1_chunk_en_i(cgra_cm1_chunk_en_li),
+
+      // Scan chain / bitstream
+      .v_i         (prog_v_li),
+      .bank_i      (fdr_data_li.loaded_buffer),
+      .ready_o     (prog_ready_lo),
+      .busy_o      (prog_busy_lo),
+      .bank_valid_o(cm_bank_valid_lo),
+      .prog_dout_o (cgra_prog_dout_o),
+      .prog_we_o   (cgra_prog_we_o),
+
+      .csrX0_i(csrX0_i),
+      .csrX1_i(csrX1_i),
+      .csrX2_i(csrX2_i),
+      .csrX3_i(csrX3_i),
+      .csrX4_i(csrX4_i),
+      .csrX5_i(csrX5_i),
+      .csrX6_i(csrX6_i),
+      .csrX7_i(csrX7_i),
+
+      .mem_data_o_0(cgra_mem_data_lo_0),
+      .mem_addr_o_0(cgra_mem_addr_lo_0),
+      .mem_data_o_1(cgra_mem_data_lo_1),
+      .mem_addr_o_1(cgra_mem_addr_lo_1),
+      .mem_data_o_2(cgra_mem_data_lo_2),
+      .mem_addr_o_2(cgra_mem_addr_lo_2),
+      .mem_data_o_3(cgra_mem_data_lo_3),
+      .mem_addr_o_3(cgra_mem_addr_lo_3),
+      .mem_valid_o(cgra_v_lo),
+      .cgra_tid_o(cgra_tid_lo),
+      .cgra_e_block_id_o(cgra_e_block_id_lo),
+      .pred_all_o(cgra_pred_all_o),
+      .ldst_pop_o(ldst_pop_lo),
+      .ldst_pop_e_block_id_o(ldst_pop_e_block_id_lo),
+      .ldst_special_pop_o(ldst_special_pop_lo),
+      .ldst_special_pop_e_block_id_o(ldst_special_pop_e_block_id_lo),
+      .ldst_special_ready_o(ldst_special_ready_lo),
+      .mem_port_valid_o(cgra_mem_port_valid_lo),
+      .mem_port_op_o(cgra_mem_port_op_lo),
+      .ld_dest_regs_i(fdr_data_li.metadata.ld_dest_regs),
+      .num_stores_i(fdr_data_li.metadata.num_stores),
+
+      // CGRA latency from instruction metadata
+      .latency_i(fdr_data_li.metadata.lat),
+
+      // RF read interface (from dispatcher)
       .rd_tid_valid_i(rd_tid_valid),
       .rd_tid_ready_o(rf_rd_ready_lo),
-      .rd_en_i(rd_tid_valid),
-      .rd_tid_i(rd_tid),
-      .rd_bitmap_i(full_reg_bitmap_lo),
-      .rd_data_o(rd_data_lo),
-      .rf_rd_valid_o(rf_rd_valid_lo),
-      .tid_o        (cgra_tid_li),
+      //   .rd_en_i       (1'b1),
+      .rd_tid_i      (rd_tid),
+      .e_block_id_i  (dispatch_e_block_id),
+      .rd_bitmap_i   (full_reg_bitmap_lo),
+      .wr_bitmap_i   (fdr_data_li.metadata.out_regs_bitmap),
 
-      // Predicate output
-      .pred_o(pred_lo),
-
-      // Write Interface — CGRA
-      .cgra_tid_i(cgra_tid_lo),
-      .cgra_data_i(cgra_data_lo),
-      .wr_bitmap_i(wb_map_li),
-      .cgra_valid_i(cgra_v_lo),
-
-      // Write Interface — LDST
-      .ldst_wr_i(ldst_wr_lo),
-      .ldst_valid_i(ldst_valid_lo),
+      // LDST write back interface
+      .ldst_wr_i   (ldst_wr_li),
+      .ldst_valid_i(ldst_valid_li),
       .ldst_ready_o(ldst_ready_lo)
   );
 
-    shift_reg
-        #(.WIDTH          (DICE_TID_WIDTH)
-         ,.MAX_PIPE_STAGE (128) // 
-        )
-        TID_SHIFT
-        (.clk_i(clk_i)
-        ,.reset_i(rst_i)   
-        
-        ,.latency (fdr_if_i.data.metadata.lat) // 
-
-        ,.in_data (cgra_tid_li) // as if it comes out of the cgra
-        ,.out_data (cgra_tid_lo)
-        );
-    
-    shift_reg
-        #(.WIDTH          (DICE_TOTAL_REGS)
-         ,.MAX_PIPE_STAGE (128+1) //
-        )
-        WB_MAP_SHIFT
-        (.clk_i(clk_i)
-        ,.reset_i(rst_i)
-
-        ,.latency (fdr_if_i.data.metadata.lat+1) //
-
-        ,.in_data (fdr_if_i.data.metadata.out_regs_bitmap) //straight from metadata
-        ,.out_data (wb_map_li) //
-        );
-
-  // CGRA valid: asserted `lat` cycles after the RF read produces valid data.
-  // Replaces a direct ready signal from mini_dice (which has no such output).
-  shift_reg
-      #(.WIDTH          (1)
-       ,.MAX_PIPE_STAGE (128)
-      )
-      CGRA_V_SHIFT
-      (.clk_i   (clk_i)
-      ,.reset_i (rst_i)
-      ,.latency (fdr_if_i.data.metadata.lat)
-      ,.in_data (rf_rd_valid_lo)   // pulse when RF read data is presented to CGRA
-      ,.out_data(cgra_v_lo)        // pulse to RF ctrl to trigger write-back
-      );
-
   // =========================================================================
-  // Input Crossbar: register file -> CGRA PE array inputs
+  // LDST FIFO
   // =========================================================================
-  cgra_crossbar #(
-      .NUM_INPUTS  (GPR_XBAR_NUM_INPUTS),
-      .NUM_OUTPUTS (GPR_XBAR_NUM_OUTPUTS),
-      .DATA_WIDTH  (DICE_REG_DATA_WIDTH)
-  ) u_gpr_xbar_in (
-      .clk_i      (clk_i),
-      .rst_i      (rst_i),
-      .data_i     (rd_data_lo),       
-      .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (gpr_rd_xbar_cfg_sel),
-      .data_o     (gpr_rd_xbar_lo)
+
+  mem_req_fifo u_mem_req_fifo (
+      .clk_i(clk_i),
+      .rst_i(rst_i),
+
+      .enq_valid_i_0(cgra_mem_port_valid_lo[0]),
+      .enq_valid_i_1(cgra_mem_port_valid_lo[1]),
+      .enq_valid_i_2(cgra_mem_port_valid_lo[2]),
+      .enq_valid_i_3(cgra_mem_port_valid_lo[3]),
+      .enq_ready_o  (mem_req_fifo_ready_lo),
+
+      .enq_tid_i(cgra_tid_lo),
+      .enq_e_block_id_i(cgra_e_block_id_lo),
+      .enq_addr_i_0(cgra_mem_addr_lo_0),
+      .enq_addr_i_1(cgra_mem_addr_lo_1),
+      .enq_addr_i_2(cgra_mem_addr_lo_2),
+      .enq_addr_i_3(cgra_mem_addr_lo_3),
+      .enq_data_i_0(cgra_mem_data_lo_0),
+      .enq_data_i_1(cgra_mem_data_lo_1),
+      .enq_data_i_2(cgra_mem_data_lo_2),
+      .enq_data_i_3(cgra_mem_data_lo_3),
+      .enq_op_i_0(cgra_mem_port_op_lo[0]),
+      .enq_op_i_1(cgra_mem_port_op_lo[1]),
+      .enq_op_i_2(cgra_mem_port_op_lo[2]),
+      .enq_op_i_3(cgra_mem_port_op_lo[3]),
+
+      .axi_awaddr_o (axi_awaddr_o),
+      .axi_awvalid_o(axi_awvalid_o),
+      .axi_awready_i(axi_awready_i),
+      .axi_wdata_o  (axi_wdata_o),
+      .axi_wstrb_o  (axi_wstrb_o),
+      .axi_wvalid_o (axi_wvalid_o),
+      .axi_wready_i (axi_wready_i),
+      .axi_bresp_i  (axi_bresp_i),
+      .axi_bvalid_i (axi_bvalid_i),
+      .axi_bready_o (axi_bready_o),
+      .axi_araddr_o (axi_araddr_o),
+      .axi_arvalid_o(axi_arvalid_o),
+      .axi_arready_i(axi_arready_i),
+      .axi_rdata_i  (axi_rdata_i),
+      .axi_rresp_i  (axi_rresp_i),
+      .axi_rvalid_i (axi_rvalid_i),
+      .axi_rready_o (axi_rready_o),
+
+      .rsp_data_ready_i(ldst_ready_lo),
+      .rsp_special_ready_i(ldst_special_ready_lo),
+      .pop_o(mem_req_fifo_pop_lo),
+      .rsp_valid_o(mem_rsp_valid_lo),
+      .rsp_tid_o(mem_rsp_tid_lo),
+      .rsp_e_block_id_o(mem_rsp_e_block_id_lo),
+      .rsp_addr_o(mem_rsp_addr_lo),
+      .rsp_data_o(mem_rsp_data_lo)
   );
 
-  cgra_crossbar #(
-      .NUM_INPUTS  (PRED_XBAR_NUM_INPUTS),
-      .NUM_OUTPUTS (PRED_XBAR_NUM_OUTPUTS),
-      .DATA_WIDTH  (1)
-  ) u_pred_xbar_in (
-      .clk_i      (clk_i),
-      .rst_i      (rst_i),
-      .data_i     (pred_lo),           
-      .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (pred_rd_xbar_cfg_sel),
-      .data_o     (pred_rd_xbar_lo)
-  );
 
-  // =========================================================================
-  // Output Crossbar: CGRA PE array outputs -> register file
-  // =========================================================================
-  cgra_crossbar #(
-      .NUM_INPUTS  (GPR_XBAR_NUM_OUTPUTS),
-      .NUM_OUTPUTS (GPR_XBAR_NUM_INPUTS),
-      .DATA_WIDTH  (DICE_REG_DATA_WIDTH)
-  ) u_gpr_xbar_out (
-      .clk_i      (clk_i),
-      .rst_i      (rst_i),
-      .data_i     (cgra_gpr_data_lo),
-      .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (gpr_wb_xbar_cfg_sel),
-      .data_o     (gpr_wb_xbar_lo)
-  );
-
-  cgra_crossbar #(
-      .NUM_INPUTS  (PRED_XBAR_NUM_OUTPUTS),
-      .NUM_OUTPUTS (PRED_XBAR_NUM_INPUTS),
-      .DATA_WIDTH  (1)
-  ) u_pred_xbar_out (
-      .clk_i      (clk_i),
-      .rst_i      (rst_i),
-      .data_i     (cgra_pred_data_lo),
-      .cfg_load_i (xbar_cfg_load),
-      .cfg_sel_i  (pred_wb_xbar_cfg_sel),
-      .data_o     (pred_wb_xbar_lo)
-  );
-
-  // =========================================================================
-  // CGRA: mini_dice
-  // West boundary (sb_*_0 W ports): data input PEs 0-3 / write-back output PEs 4-7
-  // East boundary (sb_*_8 E ports): data input PEs 4-7 / write-back output PEs 0-3
-  // All diagonal, top, and bottom boundary ports are tied off.
-  // =========================================================================
-  mini_dice u_mini_dice (
-      .clk_i   (clk_i),
-      .reset_i (rst_i),
-      .en_i    (1'b1),
-
-      // -----------------------------------------------------------------------
-      // Top-left corner (sb_0_0): West data in/out + top/diagonal tie-offs
-      // -----------------------------------------------------------------------
-      .sb_0_0_W_i      (gpr_rd_xbar_lo[0]),
-      .sb_0_0_W_o      (cgra_gpr_data_lo[4*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_0_0_pred_W_i (pred_rd_xbar_lo[0]),
-      .sb_0_0_pred_W_o (cgra_pred_data_lo[4]),
-      .sb_0_0_N_i      ('0), .sb_0_0_N_o      (north_0_data_o),
-      .sb_0_0_pred_N_i ('0), .sb_0_0_pred_N_o (north_0_pred_o),
-      .sb_0_0_NE_i     ('0), .sb_0_0_NE_o     (),
-      .sb_0_0_pred_NE_i('0), .sb_0_0_pred_NE_o(),
-      .sb_0_0_NW_i     ('0), .sb_0_0_NW_o     (),
-      .sb_0_0_pred_NW_i('0), .sb_0_0_pred_NW_o(),
-      .sb_0_0_SW_i     ('0), .sb_0_0_SW_o     (),
-      .sb_0_0_pred_SW_i('0), .sb_0_0_pred_SW_o(),
-
-      // -----------------------------------------------------------------------
-      // Top boundary (row = 0, col = 2, 4, 6) — tie off
-      // -----------------------------------------------------------------------
-      .sb_0_2_N_i      ('0), .sb_0_2_N_o      (north_2_data_o),
-      .sb_0_2_pred_N_i ('0), .sb_0_2_pred_N_o (north_2_pred_o),
-      .sb_0_2_NE_i     ('0), .sb_0_2_NE_o     (),
-      .sb_0_2_pred_NE_i('0), .sb_0_2_pred_NE_o(),
-      .sb_0_2_NW_i     ('0), .sb_0_2_NW_o     (),
-      .sb_0_2_pred_NW_i('0), .sb_0_2_pred_NW_o(),
-
-      .sb_0_4_N_i      ('0), .sb_0_4_N_o      (north_4_data_o),
-      .sb_0_4_pred_N_i ('0), .sb_0_4_pred_N_o (north_4_pred_o),
-      .sb_0_4_NE_i     ('0), .sb_0_4_NE_o     (),
-      .sb_0_4_pred_NE_i('0), .sb_0_4_pred_NE_o(),
-      .sb_0_4_NW_i     ('0), .sb_0_4_NW_o     (),
-      .sb_0_4_pred_NW_i('0), .sb_0_4_pred_NW_o(),
-
-      .sb_0_6_N_i      ('0), .sb_0_6_N_o      (north_6_data_o),
-      .sb_0_6_pred_N_i ('0), .sb_0_6_pred_N_o (north_6_pred_o),
-      .sb_0_6_NE_i     ('0), .sb_0_6_NE_o     (),
-      .sb_0_6_pred_NE_i('0), .sb_0_6_pred_NE_o(),
-      .sb_0_6_NW_i     ('0), .sb_0_6_NW_o     (),
-      .sb_0_6_pred_NW_i('0), .sb_0_6_pred_NW_o(),
-
-      // -----------------------------------------------------------------------
-      // Top-right corner (sb_0_8): East data in/out + top/diagonal tie-offs
-      // -----------------------------------------------------------------------
-      .sb_0_8_E_i      (gpr_rd_xbar_lo[4]),
-      .sb_0_8_E_o      (cgra_gpr_data_lo[0*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_0_8_pred_E_i (pred_rd_xbar_lo[4]),
-      .sb_0_8_pred_E_o (cgra_pred_data_lo[0]),
-      .sb_0_8_N_i      ('0), .sb_0_8_N_o      (north_8_data_o),
-      .sb_0_8_pred_N_i ('0), .sb_0_8_pred_N_o (north_8_pred_o),
-      .sb_0_8_NE_i     ('0), .sb_0_8_NE_o     (),
-      .sb_0_8_pred_NE_i('0), .sb_0_8_pred_NE_o(),
-      .sb_0_8_NW_i     ('0), .sb_0_8_NW_o     (),
-      .sb_0_8_pred_NW_i('0), .sb_0_8_pred_NW_o(),
-      .sb_0_8_SE_i     ('0), .sb_0_8_SE_o     (),
-      .sb_0_8_pred_SE_i('0), .sb_0_8_pred_SE_o(),
-
-      // -----------------------------------------------------------------------
-      // West boundary (col = 0, row = 2, 4, 6): PEs 1-3 data in/out
-      // -----------------------------------------------------------------------
-      .sb_2_0_W_i      (gpr_rd_xbar_lo[1]),
-      .sb_2_0_W_o      (cgra_gpr_data_lo[5*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_2_0_pred_W_i (pred_rd_xbar_lo[1]),
-      .sb_2_0_pred_W_o (cgra_pred_data_lo[5]),
-      .sb_2_0_NW_i     ('0), .sb_2_0_NW_o     (),
-      .sb_2_0_pred_NW_i('0), .sb_2_0_pred_NW_o(),
-      .sb_2_0_SW_i     ('0), .sb_2_0_SW_o     (),
-      .sb_2_0_pred_SW_i('0), .sb_2_0_pred_SW_o(),
-
-      .sb_4_0_W_i      (gpr_rd_xbar_lo[2]),
-      .sb_4_0_W_o      (cgra_gpr_data_lo[6*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_4_0_pred_W_i (pred_rd_xbar_lo[2]),
-      .sb_4_0_pred_W_o (cgra_pred_data_lo[6]),
-      .sb_4_0_NW_i     ('0), .sb_4_0_NW_o     (),
-      .sb_4_0_pred_NW_i('0), .sb_4_0_pred_NW_o(),
-      .sb_4_0_SW_i     ('0), .sb_4_0_SW_o     (),
-      .sb_4_0_pred_SW_i('0), .sb_4_0_pred_SW_o(),
-
-      .sb_6_0_W_i      (gpr_rd_xbar_lo[3]),
-      .sb_6_0_W_o      (cgra_gpr_data_lo[7*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_6_0_pred_W_i (pred_rd_xbar_lo[3]),
-      .sb_6_0_pred_W_o (cgra_pred_data_lo[7]),
-      .sb_6_0_NW_i     ('0), .sb_6_0_NW_o     (),
-      .sb_6_0_pred_NW_i('0), .sb_6_0_pred_NW_o(),
-      .sb_6_0_SW_i     ('0), .sb_6_0_SW_o     (),
-      .sb_6_0_pred_SW_i('0), .sb_6_0_pred_SW_o(),
-
-      // -----------------------------------------------------------------------
-      // East boundary (col = 8, row = 2, 4, 6): PEs 5-7 data in/out
-      // -----------------------------------------------------------------------
-      .sb_2_8_E_i      (gpr_rd_xbar_lo[5]),
-      .sb_2_8_E_o      (cgra_gpr_data_lo[1*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_2_8_pred_E_i (pred_rd_xbar_lo[5]),
-      .sb_2_8_pred_E_o (cgra_pred_data_lo[1]),
-      .sb_2_8_NE_i     ('0), .sb_2_8_NE_o     (),
-      .sb_2_8_pred_NE_i('0), .sb_2_8_pred_NE_o(),
-      .sb_2_8_SE_i     ('0), .sb_2_8_SE_o     (),
-      .sb_2_8_pred_SE_i('0), .sb_2_8_pred_SE_o(),
-
-      .sb_4_8_E_i      (gpr_rd_xbar_lo[6]),
-      .sb_4_8_E_o      (cgra_gpr_data_lo[2*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_4_8_pred_E_i (pred_rd_xbar_lo[6]),
-      .sb_4_8_pred_E_o (cgra_pred_data_lo[2]),
-      .sb_4_8_NE_i     ('0), .sb_4_8_NE_o     (),
-      .sb_4_8_pred_NE_i('0), .sb_4_8_pred_NE_o(),
-      .sb_4_8_SE_i     ('0), .sb_4_8_SE_o     (),
-      .sb_4_8_pred_SE_i('0), .sb_4_8_pred_SE_o(),
-
-      .sb_6_8_E_i      (gpr_rd_xbar_lo[7]),
-      .sb_6_8_E_o      (cgra_gpr_data_lo[3*DICE_REG_DATA_WIDTH +: DICE_REG_DATA_WIDTH]),
-      .sb_6_8_pred_E_i (pred_rd_xbar_lo[7]),
-      .sb_6_8_pred_E_o (cgra_pred_data_lo[3]),
-      .sb_6_8_NE_i     ('0), .sb_6_8_NE_o     (),
-      .sb_6_8_pred_NE_i('0), .sb_6_8_pred_NE_o(),
-      .sb_6_8_SE_i     ('0), .sb_6_8_SE_o     (),
-      .sb_6_8_pred_SE_i('0), .sb_6_8_pred_SE_o(),
-
-      // -----------------------------------------------------------------------
-      // Bottom-left corner (sb_8_0) — tie off
-      // -----------------------------------------------------------------------
-      .sb_8_0_S_i      ('0), .sb_8_0_S_o      (south_0_data_o),
-      .sb_8_0_pred_S_i ('0), .sb_8_0_pred_S_o (south_0_pred_o),
-      .sb_8_0_W_i      ('0), .sb_8_0_W_o      (),
-      .sb_8_0_pred_W_i ('0), .sb_8_0_pred_W_o (),
-      .sb_8_0_NW_i     ('0), .sb_8_0_NW_o     (),
-      .sb_8_0_pred_NW_i('0), .sb_8_0_pred_NW_o(),
-      .sb_8_0_SE_i     ('0), .sb_8_0_SE_o     (),
-      .sb_8_0_pred_SE_i('0), .sb_8_0_pred_SE_o(),
-      .sb_8_0_SW_i     ('0), .sb_8_0_SW_o     (),
-      .sb_8_0_pred_SW_i('0), .sb_8_0_pred_SW_o(),
-
-      // -----------------------------------------------------------------------
-      // Bottom boundary (row = 8, col = 2, 4, 6) — tie off
-      // -----------------------------------------------------------------------
-      .sb_8_2_S_i      ('0), .sb_8_2_S_o      (south_2_data_o),
-      .sb_8_2_pred_S_i ('0), .sb_8_2_pred_S_o (south_2_pred_o),
-      .sb_8_2_SE_i     ('0), .sb_8_2_SE_o     (),
-      .sb_8_2_pred_SE_i('0), .sb_8_2_pred_SE_o(),
-      .sb_8_2_SW_i     ('0), .sb_8_2_SW_o     (),
-      .sb_8_2_pred_SW_i('0), .sb_8_2_pred_SW_o(),
-
-      .sb_8_4_S_i      ('0), .sb_8_4_S_o      (south_4_data_o),
-      .sb_8_4_pred_S_i ('0), .sb_8_4_pred_S_o (south_4_pred_o),
-      .sb_8_4_SE_i     ('0), .sb_8_4_SE_o     (),
-      .sb_8_4_pred_SE_i('0), .sb_8_4_pred_SE_o(),
-      .sb_8_4_SW_i     ('0), .sb_8_4_SW_o     (),
-      .sb_8_4_pred_SW_i('0), .sb_8_4_pred_SW_o(),
-
-      .sb_8_6_S_i      ('0), .sb_8_6_S_o      (south_6_data_o),
-      .sb_8_6_pred_S_i ('0), .sb_8_6_pred_S_o (south_6_pred_o),
-      .sb_8_6_SE_i     ('0), .sb_8_6_SE_o     (),
-      .sb_8_6_pred_SE_i('0), .sb_8_6_pred_SE_o(),
-      .sb_8_6_SW_i     ('0), .sb_8_6_SW_o     (),
-      .sb_8_6_pred_SW_i('0), .sb_8_6_pred_SW_o(),
-
-      // -----------------------------------------------------------------------
-      // Bottom-right corner (sb_8_8) — tie off
-      // -----------------------------------------------------------------------
-      .sb_8_8_S_i      ('0), .sb_8_8_S_o      (south_8_data_o),
-      .sb_8_8_pred_S_i ('0), .sb_8_8_pred_S_o (south_8_pred_o),
-      .sb_8_8_E_i      ('0), .sb_8_8_E_o      (),
-      .sb_8_8_pred_E_i ('0), .sb_8_8_pred_E_o (),
-      .sb_8_8_NE_i     ('0), .sb_8_8_NE_o     (),
-      .sb_8_8_pred_NE_i('0), .sb_8_8_pred_NE_o(),
-      .sb_8_8_SE_i     ('0), .sb_8_8_SE_o     (),
-      .sb_8_8_pred_SE_i('0), .sb_8_8_pred_SE_o(),
-      .sb_8_8_SW_i     ('0), .sb_8_8_SW_o     (),
-      .sb_8_8_pred_SW_i('0), .sb_8_8_pred_SW_o(),
-
-      // -----------------------------------------------------------------------
-      // Programming chain — tie off until bitstream loader is implemented
-      // -----------------------------------------------------------------------
-      .prog_clk_i  ('0),
-      .prog_rst_i  ('0),
-      .prog_done_i ('0),
-      .prog_we_i   ('0),
-      .prog_din_i  ('0),
-      .prog_dout_o (),
-      .prog_we_o   ()
-  );
-
-  // =========================================================================
-  // Block Commit Table
-  // =========================================================================
-
-  block_commit_table u_block_commit_table (
-      .clk_i                 (clk_i),
-      .rst_i                 (rst_i),
-
-      // Insert interface
-      .insert_valid_i        (bct_insert_valid),
-      .insert_e_block_id_i   (bct_insert_e_block_id),
-      .insert_pending_reads_i(bct_insert_pending_reads),
-      .insert_pending_writes_i(bct_insert_pending_writes),
-
-      // Update interface
-      .update_valid_i        (bct_update_valid),
-      .update_e_block_id_i   (bct_update_e_block_id),
-      .update_is_write_i     (bct_update_is_write),
-      .update_reduce_count_i (bct_update_reduce_count),
-
-      // Commit interface
-      .pop_valid_o          (eblock_commit_valid_o),
-      .pop_e_block_id_o     (eblock_commit_id_o),
-      .pop_ready_i          (eblock_commit_ready_i),
-
-      // Status
-      .hw_cta_pending_o     (hw_cta_pending_o)
-  );
 
 endmodule

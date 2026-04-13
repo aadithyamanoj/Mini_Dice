@@ -32,6 +32,8 @@ module cgra_bitstream_buf_serial
 
   localparam int num_chunks_lp = (DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1)
                                  / DICE_MEM_DATA_WIDTH;
+  localparam int last_chunk_bits_lp = DICE_BITSTREAM_SIZE
+                                      - ((num_chunks_lp - 1) * DICE_MEM_DATA_WIDTH);
   localparam int bit_ctr_width_lp = $clog2(DICE_BITSTREAM_SIZE);
   localparam int reset_ctr_width_lp = (PROG_RESET_CYCLES_P > 1) ? $clog2(PROG_RESET_CYCLES_P) : 1;
   localparam int flush_ctr_width_lp = (PROG_FLUSH_CYCLES_P > 1) ? $clog2(PROG_FLUSH_CYCLES_P) : 1;
@@ -203,12 +205,22 @@ module cgra_bitstream_buf_serial
 
       for (i = 0; i < num_chunks_lp; i++) begin
         if (cm0_chunk_en_i[i]) begin
-          bank_data_r[0][i*DICE_MEM_DATA_WIDTH+:DICE_MEM_DATA_WIDTH] <= cm0_data_i;
+          if (i == num_chunks_lp - 1) begin
+            bank_data_r[0][i*DICE_MEM_DATA_WIDTH+:last_chunk_bits_lp]
+              <= cm0_data_i[last_chunk_bits_lp-1:0];
+          end else begin
+            bank_data_r[0][i*DICE_MEM_DATA_WIDTH+:DICE_MEM_DATA_WIDTH] <= cm0_data_i;
+          end
           next_cm0_mask_li[i] = 1'b1;
         end
 
         if (cm1_chunk_en_i[i]) begin
-          bank_data_r[1][i*DICE_MEM_DATA_WIDTH+:DICE_MEM_DATA_WIDTH] <= cm1_data_i;
+          if (i == num_chunks_lp - 1) begin
+            bank_data_r[1][i*DICE_MEM_DATA_WIDTH+:last_chunk_bits_lp]
+              <= cm1_data_i[last_chunk_bits_lp-1:0];
+          end else begin
+            bank_data_r[1][i*DICE_MEM_DATA_WIDTH+:DICE_MEM_DATA_WIDTH] <= cm1_data_i;
+          end
           next_cm1_mask_li[i] = 1'b1;
         end
       end

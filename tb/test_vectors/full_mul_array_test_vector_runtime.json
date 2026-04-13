@@ -1,0 +1,15 @@
+{
+  "axi": {
+    "expected_writes": []
+  },
+  "csr_values": {
+    "csrX0": 0,
+    "csrX1": 0,
+    "csrX2": 0,
+    "csrX3": 0,
+    "csrX4": 0,
+    "csrX5": 0,
+    "csrX6": 0,
+    "csrX7": 0
+  }
+}

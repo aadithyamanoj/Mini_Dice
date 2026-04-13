@@ -1,3 +1,4 @@
+`define NO_SRAM
 module simt_stack
   import dice_pkg::*;
   import dice_frontend_pkg::*;
@@ -29,159 +30,154 @@ module simt_stack
     output logic stack_full_o
 );
 
-    // Local Parameters (derived from packages)
-    localparam int StackIndexWidth = $clog2(SIMT_STACK_DEPTH);
+  // Local Parameters (derived from packages)
+  localparam int StackIndexWidth = $clog2(SIMT_STACK_DEPTH);
 
-    // Constants
-    localparam int EntryWidth = DICE_ADDR_WIDTH + DICE_ADDR_WIDTH +
-                                DICE_NUM_MAX_THREADS_PER_CORE;
+  // Constants
+  localparam int EntryWidth = DICE_ADDR_WIDTH + DICE_ADDR_WIDTH + DICE_NUM_MAX_THREADS_PER_CORE;
 
-    // Stack pointer (0 = empty, points to top of stack + 1)
-    logic [StackIndexWidth:0] stack_ptr_q;  // Extra bit to represent SIMT_STACK_DEPTH
+  // Stack pointer (0 = empty, points to top of stack + 1)
+  logic [StackIndexWidth:0] stack_ptr_q;  // Extra bit to represent SIMT_STACK_DEPTH
 
-    // Output valid register
-    logic out_valid_q;
+  // Output valid register
+  logic out_valid_q;
 
-    // RAM interface signals
-    logic ram_wr_en, ram_rd_en;
-    logic [StackIndexWidth-1:0] ram_wr_addr, ram_rd_addr;
-    logic [EntryWidth-1:0] ram_wr_data, ram_rd_data;
+  // RAM interface signals
+  logic ram_wr_en, ram_rd_en;
+  logic [StackIndexWidth-1:0] ram_wr_addr, ram_rd_addr;
+  logic [EntryWidth-1:0] ram_wr_data, ram_rd_data;
 
-    // Pack/unpack functions for RAM data
-    function automatic [EntryWidth-1:0] pack_entry(
-        input logic [DICE_ADDR_WIDTH-1:0] next_pc,
-        input logic [DICE_ADDR_WIDTH-1:0] reconvergence_pc,
-        input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask
-    );
-        return {next_pc, reconvergence_pc, active_mask};
-    endfunction
+  // Pack/unpack functions for RAM data
+  function automatic [EntryWidth-1:0] pack_entry(
+      input logic [DICE_ADDR_WIDTH-1:0] next_pc, input logic [DICE_ADDR_WIDTH-1:0] reconvergence_pc,
+      input logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] active_mask);
+    return {next_pc, reconvergence_pc, active_mask};
+  endfunction
 
-    function automatic logic [DICE_ADDR_WIDTH-1:0] unpack_next_pc(
-        input logic [EntryWidth-1:0] entry);
-        return entry[EntryWidth-1:DICE_ADDR_WIDTH+DICE_NUM_MAX_THREADS_PER_CORE];
-    endfunction
+  function automatic logic [DICE_ADDR_WIDTH-1:0] unpack_next_pc(input logic [EntryWidth-1:0] entry);
+    return entry[EntryWidth-1:DICE_ADDR_WIDTH+DICE_NUM_MAX_THREADS_PER_CORE];
+  endfunction
 
-    function automatic logic [DICE_ADDR_WIDTH-1:0] unpack_reconvergence_pc(
-        input logic [EntryWidth-1:0] entry);
-        return entry[DICE_ADDR_WIDTH+DICE_NUM_MAX_THREADS_PER_CORE-1:DICE_NUM_MAX_THREADS_PER_CORE];
-    endfunction
+  function automatic logic [DICE_ADDR_WIDTH-1:0] unpack_reconvergence_pc(
+      input logic [EntryWidth-1:0] entry);
+    return entry[DICE_ADDR_WIDTH+DICE_NUM_MAX_THREADS_PER_CORE-1:DICE_NUM_MAX_THREADS_PER_CORE];
+  endfunction
 
-    function automatic logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] unpack_active_mask(
-        input logic [EntryWidth-1:0] entry);
-        return entry[DICE_NUM_MAX_THREADS_PER_CORE-1:0];
-    endfunction
+  function automatic logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] unpack_active_mask(
+      input logic [EntryWidth-1:0] entry);
+    return entry[DICE_NUM_MAX_THREADS_PER_CORE-1:0];
+  endfunction
 
-    // Instantiate DICE RAM for stack entries
+  // Instantiate DICE RAM for stack entries
 `ifndef NO_SRAM
-    sram_0rw1r1w_320_32_freepdk45 stack_ram (
-        .clk0(clk_i),
-        .csb0(~ram_wr_en),
-        .addr0(ram_wr_addr),
-        .din0(ram_wr_data),
-        .clk1(clk_i),
-        .csb1(~ram_rd_en),
-        .addr1(ram_rd_addr),
-        .dout1(ram_rd_data)
-    );
+  sram_0rw1r1w_320_32_freepdk45 stack_ram (
+      .clk0 (clk_i),
+      .csb0 (~ram_wr_en),
+      .addr0(ram_wr_addr),
+      .din0 (ram_wr_data),
+      .clk1 (clk_i),
+      .csb1 (~ram_rd_en),
+      .addr1(ram_rd_addr),
+      .dout1(ram_rd_data)
+  );
 
 `else
-    dice_ram_1w1r #(
-        .DATA_WIDTH(EntryWidth),
-        .DEPTH(SIMT_STACK_DEPTH)
-    ) stack_ram (
-        .clk(clk_i),
-        .wr_en(ram_wr_en),
-        .wr_addr(ram_wr_addr),
-        .wr_data(ram_wr_data),
-        // .rd_en(ram_rd_en),
-        .rd_addr(ram_rd_addr),
-        .rd_data(ram_rd_data)
-    );
+  bsg_mem_1r1w_sync #(
+      .width_p(EntryWidth),
+      .els_p(SIMT_STACK_DEPTH)
+  ) stack_ram (
+      .clk_i   (clk_i),
+      .reset_i (rst_i),
+      .w_v_i   (ram_wr_en),
+      .w_addr_i(ram_wr_addr),
+      .w_data_i(ram_wr_data),
+      .r_v_i   (ram_rd_en),
+      .r_addr_i(ram_rd_addr),
+      .r_data_o(ram_rd_data)
+  );
 `endif
-    // Stack status
-    assign stack_empty_o = (stack_ptr_q == '0);
-    assign stack_full_o = (stack_ptr_q == SIMT_STACK_DEPTH);
+  // Stack status
+  assign stack_empty_o = (stack_ptr_q == '0);
+  assign stack_full_o = (stack_ptr_q == SIMT_STACK_DEPTH);
 
-    // Top of stack outputs - directly from RAM (registered)
-    assign top_next_pc_o = unpack_next_pc(ram_rd_data);
-    assign top_reconvergence_pc_o = unpack_reconvergence_pc(ram_rd_data);
-    assign top_active_mask_o = unpack_active_mask(ram_rd_data);
-    assign out_valid_o = out_valid_q;
+  // Top of stack outputs - directly from RAM (registered)
+  assign top_next_pc_o = unpack_next_pc(ram_rd_data);
+  assign top_reconvergence_pc_o = unpack_reconvergence_pc(ram_rd_data);
+  assign top_active_mask_o = unpack_active_mask(ram_rd_data);
+  assign out_valid_o = out_valid_q;
 
-    // Control logic for RAM operations
-    always_comb begin
-        // Default values
-        ram_wr_en = 1'b0;
-        ram_rd_en = 1'b0;
-        ram_wr_addr = '0;
-        ram_rd_addr = '0;
-        ram_wr_data = '0;
+  // Control logic for RAM operations
+  always_comb begin
+    // Default values
+    ram_wr_en   = 1'b0;
+    ram_rd_en   = 1'b0;
+    ram_wr_addr = '0;
+    ram_rd_addr = '0;
+    ram_wr_data = '0;
 
-        if ((push_i == 1'b1) && (stack_full_o == 1'b0)) begin
-            if ((modify_top_i == 1'b1) && (stack_ptr_q > '0)) begin
-                // Modify top: write to current top location
-                ram_wr_en = 1'b1;
-                ram_wr_addr = (StackIndexWidth)'(stack_ptr_q - 1);
-                ram_wr_data = pack_entry(push_next_pc_i, push_reconvergence_pc_i,
-                                         push_active_mask_i);
-            end else if (modify_top_i == 1'b0) begin
-                // Normal push: write to next location
-                ram_wr_en = 1'b1;
-                ram_wr_addr = (StackIndexWidth)'(stack_ptr_q);
-                ram_wr_data = pack_entry(push_next_pc_i, push_reconvergence_pc_i,
-                                         push_active_mask_i);
-            end
-        end
-
-        // Read top of stack when requested
-        if ((read_top_i == 1'b1) && (stack_ptr_q > '0)) begin
-            ram_rd_en = 1'b1;
-            ram_rd_addr = (StackIndexWidth)'(stack_ptr_q - 1);  // Top of stack
-        end
+    if ((push_i == 1'b1) && (stack_full_o == 1'b0)) begin
+      if ((modify_top_i == 1'b1) && (stack_ptr_q > '0)) begin
+        // Modify top: write to current top location
+        ram_wr_en   = 1'b1;
+        ram_wr_addr = (StackIndexWidth)'(stack_ptr_q - 1);
+        ram_wr_data = pack_entry(push_next_pc_i, push_reconvergence_pc_i, push_active_mask_i);
+      end else if (modify_top_i == 1'b0) begin
+        // Normal push: write to next location
+        ram_wr_en   = 1'b1;
+        ram_wr_addr = (StackIndexWidth)'(stack_ptr_q);
+        ram_wr_data = pack_entry(push_next_pc_i, push_reconvergence_pc_i, push_active_mask_i);
+      end
     end
 
-    // Sequential logic for stack pointer management and output valid
-    always_ff @(posedge clk_i) begin
-        if (rst_i == 1'b1) begin
-            stack_ptr_q <= '0;
-            out_valid_q <= 1'b0;
-
-        end else begin
-            // Handle stack pointer updates
-            if ((push_i == 1'b1) && (stack_full_o == 1'b0) && (modify_top_i == 1'b0)) begin
-                // Normal push: increment stack pointer
-                stack_ptr_q <= stack_ptr_q + 1;
-
-            end else if ((pop_i == 1'b1) && (stack_empty_o == 1'b0)) begin
-                // Pop: decrement stack pointer
-                stack_ptr_q <= stack_ptr_q - 1;
-            end
-            // modify_top doesn't change stack_ptr_q
-
-            // Handle output valid - becomes valid one cycle after read_top
-            if ((read_top_i == 1'b1) && (stack_ptr_q > '0)) begin
-                out_valid_q <= 1'b1;
-            end else begin
-                out_valid_q <= 1'b0;
-            end
-        end
+    // Read top of stack when requested
+    if ((read_top_i == 1'b1) && (stack_ptr_q > '0)) begin
+      ram_rd_en   = 1'b1;
+      ram_rd_addr = (StackIndexWidth)'(stack_ptr_q - 1);  // Top of stack
     end
+  end
 
-    // Assertions for debugging
+  // Sequential logic for stack pointer management and output valid
+  always_ff @(posedge clk_i) begin
+    if (rst_i == 1'b1) begin
+      stack_ptr_q <= '0;
+      out_valid_q <= 1'b0;
+
+    end else begin
+      // Handle stack pointer updates
+      if ((push_i == 1'b1) && (stack_full_o == 1'b0) && (modify_top_i == 1'b0)) begin
+        // Normal push: increment stack pointer
+        stack_ptr_q <= stack_ptr_q + 1;
+
+      end else if ((pop_i == 1'b1) && (stack_empty_o == 1'b0)) begin
+        // Pop: decrement stack pointer
+        stack_ptr_q <= stack_ptr_q - 1;
+      end
+      // modify_top doesn't change stack_ptr_q
+
+      // Handle output valid - becomes valid one cycle after read_top
+      if ((read_top_i == 1'b1) && (stack_ptr_q > '0)) begin
+        out_valid_q <= 1'b1;
+      end else begin
+        out_valid_q <= 1'b0;
+      end
+    end
+  end
+
+  // Assertions for debugging
 `ifndef SYNTHESIS
-    always @(posedge clk_i) begin
-        if (rst_i == 1'b0) begin
-            if ((push_i == 1'b1) && (stack_full_o == 1'b1)) begin
-                $error("SIMT Stack overflow: trying to push when stack is full");
-            end
-            if ((pop_i == 1'b1) && (stack_empty_o == 1'b1)) begin
-                $error("SIMT Stack underflow: trying to pop empty stack");
-            end
-            if ((modify_top_i == 1'b1) && (stack_empty_o == 1'b1)) begin
-                $error("SIMT Stack: trying to modify top of empty stack");
-            end
-        end
+  always @(posedge clk_i) begin
+    if (rst_i == 1'b0) begin
+      if ((push_i == 1'b1) && (stack_full_o == 1'b1)) begin
+        $error("SIMT Stack overflow: trying to push when stack is full");
+      end
+      if ((pop_i == 1'b1) && (stack_empty_o == 1'b1)) begin
+        $error("SIMT Stack underflow: trying to pop empty stack");
+      end
+      if ((modify_top_i == 1'b1) && (stack_empty_o == 1'b1)) begin
+        $error("SIMT Stack: trying to modify top of empty stack");
+      end
     end
+  end
 `endif
 
 endmodule

@@ -5,7 +5,7 @@ package dice_frontend_pkg;
 
   parameter int BITSTREAM_LENGTH_WIDTH = 8;
   parameter int MAX_EBLOCK = `DICE_NUM_MAX_CTA_PER_CORE + `DICE_NUM_RETIRE_TABLE_ENTRIES;
-  parameter int EBLOCK_ID_WIDTH = $clog2(MAX_EBLOCK);
+  parameter int EBLOCK_ID_WIDTH = DICE_EBLOCK_ID_WIDTH;
   parameter int SIMT_STACK_COUNT = `DICE_NUM_MAX_CTA_PER_CORE;
   parameter int SIMT_STACK_THREAD_WIDTH = `DICE_NUM_MAX_THREADS_PER_CORE;
   parameter int SIMT_STACK_DEPTH = `DICE_SIMT_STACK_DEPTH;
