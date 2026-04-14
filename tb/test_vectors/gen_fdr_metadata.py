@@ -20,7 +20,6 @@ from typing import Any
 
 
 FULL_MUL_ARRAY_KERNEL_STAGES = (
-    "load_thread_bases",
     "load_mul_array_a",
     "load_mul_array_b",
     "mul_array",
@@ -43,6 +42,16 @@ DEFAULT_PC_STRIDE = 0x0100
 DEFAULT_BITSTREAM_BASE = 0x0000
 DEFAULT_BITSTREAM_STRIDE = 0x0200
 DEFAULT_THREAD_COUNT = 16
+DEFAULT_AFFINE_CSR_VALUES = {
+    "csrX0": 0x0100,
+    "csrX1": 0x0200,
+    "csrX2": 0x0300,
+    "csrX3": 0x0008,
+    "csrX4": 0x0000,
+    "csrX5": 0x0001,
+    "csrX6": 0x0002,
+    "csrX7": 0x0003,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -126,20 +135,6 @@ def _no_branch_meta() -> dict[str, int]:
 
 
 def _stage_spec(kernel: str) -> dict[str, Any]:
-    if kernel == "load_thread_bases":
-        return {
-            "in_regs_bitmap": 0,
-            "out_regs_bitmap": 0,
-            "ld_dest_regs": [0, 1, 2, 3],
-            "num_stores": 0,
-            "unrolling_factor": 0,
-            "lat": 0,
-            "parameter_load": 1,
-            "notes": [
-                "Bootstraps thread-local base values from memory into GPRs 0..3.",
-                "Current pseudo-compiler implementation uses csrX0..3 for addresses.",
-            ],
-        }
     if kernel == "load_mul_array_a":
         return {
             "in_regs_bitmap": _bitmap_from_indices(0, 1, 2, 3),
@@ -147,11 +142,11 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "ld_dest_regs": [0, 1, 2, 3],
             "num_stores": 0,
             "unrolling_factor": 0,
-            "lat": 0,
             "parameter_load": 0,
             "notes": [
-                "Uses GPRs 0..3 as load addresses for A-side operand fetch.",
-                "Loaded A operands overwrite GPRs 0..3.",
+                "A-side load stage for the staged mul-array flow.",
+                "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
+                "Runtime CSR ABI still reserves affine launch fields for future address generation.",
             ],
         }
     if kernel == "load_mul_array_b":
@@ -161,11 +156,11 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "ld_dest_regs": [4, 5, 6, 7],
             "num_stores": 0,
             "unrolling_factor": 0,
-            "lat": 0,
             "parameter_load": 0,
             "notes": [
-                "Uses GPRs 4..7 as load addresses for B-side operand fetch.",
-                "Loaded B operands overwrite GPRs 4..7.",
+                "B-side load stage for the staged mul-array flow.",
+                "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
+                "Runtime CSR ABI still reserves affine launch fields for future address generation.",
             ],
         }
     if kernel == "mul_array":
@@ -175,7 +170,6 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "ld_dest_regs": [UNUSED_LD_DEST_REG] * 4,
             "num_stores": 0,
             "unrolling_factor": 0,
-            "lat": 0,
             "parameter_load": 0,
             "notes": [
                 "Consumes GPRs 0..7 as mul operands.",
@@ -189,10 +183,10 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "ld_dest_regs": [UNUSED_LD_DEST_REG] * 4,
             "num_stores": 4,
             "unrolling_factor": 0,
-            "lat": 0,
             "parameter_load": 0,
             "notes": [
                 "Uses GPRs 0..3 as store data and GPRs 4..7 as store addresses.",
+                "Store addresses are expected to follow the same affine CSR ABI.",
                 "All four memory ports are marked as stores.",
             ],
         }
@@ -220,6 +214,33 @@ def _load_compile_report(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _runtime_csr_values_from_reports(
+    *,
+    kernels: tuple[str, ...],
+    build_dir: Path,
+) -> dict[str, int]:
+    for kernel in kernels:
+        report = _load_compile_report(_report_path(build_dir, kernel))
+        runtime_contract = report.get("runtime_contract")
+        if not isinstance(runtime_contract, dict):
+            continue
+        raw_defaults = runtime_contract.get("default_csr_values")
+        if not isinstance(raw_defaults, dict):
+            continue
+
+        csr_values: dict[str, int] = {}
+        for idx in range(8):
+            key = f"csrX{idx}"
+            value = raw_defaults.get(key)
+            if not isinstance(value, int):
+                break
+            csr_values[key] = value
+        else:
+            return csr_values
+
+    return dict(DEFAULT_AFFINE_CSR_VALUES)
+
+
 def _bitstream_length_from_report(report: dict[str, Any]) -> int:
     binary_byte_count = report.get("binary_byte_count")
     if isinstance(binary_byte_count, int):
@@ -230,6 +251,16 @@ def _bitstream_length_from_report(report: dict[str, Any]) -> int:
         return config_byte_count
 
     raise ValueError("Compile report is missing binary_byte_count/config_byte_count")
+
+
+def _latency_from_report(report: dict[str, Any], kernel: str) -> int:
+    latency_cycles = report.get("latency_cycles")
+    if isinstance(latency_cycles, int) and latency_cycles >= 0:
+        return latency_cycles
+
+    raise ValueError(
+        f"Compile report is missing latency_cycles for {kernel}"
+    )
 
 
 def _pgraph_payload_for_kernel(
@@ -259,7 +290,7 @@ def _pgraph_payload_for_kernel(
             "ld_dest_regs": spec["ld_dest_regs"],
             "num_stores": spec["num_stores"],
             "unrolling_factor": spec["unrolling_factor"],
-            "lat": spec["lat"],
+            "lat": _latency_from_report(report, kernel),
             "branch_meta": _no_branch_meta(),
             "barrier": 0,
             "parameter_load": spec["parameter_load"],
@@ -300,6 +331,10 @@ def _build_coalesced_test_vector(
 ) -> dict[str, Any]:
     pgraph_metadata = []
     stage_artifacts = []
+    runtime_csr_values = _runtime_csr_values_from_reports(
+        kernels=kernels,
+        build_dir=build_dir,
+    )
 
     for idx, kernel in enumerate(kernels):
         bitstream_addr = bitstream_base + idx * bitstream_stride
@@ -343,9 +378,7 @@ def _build_coalesced_test_vector(
         },
         "pgraph_metadata": pgraph_metadata,
         "runtime": {
-            "csr_values": {
-                f"csrX{idx}": 0 for idx in range(8)
-            },
+            "csr_values": runtime_csr_values,
             "axi": {
                 "expected_writes": [],
             },

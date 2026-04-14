@@ -32,7 +32,7 @@ module bitstream_fetch_load
 );
 
   localparam int CmAddrWidth = $clog2(DICE_BITSTREAM_SIZE);
-  localparam int BeatCount   = DICE_BITSTREAM_SIZE / AxiDataWidth;
+  localparam int BeatCount   = (DICE_BITSTREAM_SIZE + AxiDataWidth - 1) / AxiDataWidth;
   localparam int BurstLen    = BeatCount - 1;
 
   typedef enum logic [1:0] {

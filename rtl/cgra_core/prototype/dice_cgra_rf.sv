@@ -46,8 +46,8 @@ module dice_cgra_rf
     output logic ldst_special_ready_o,
     output logic [NUM_MEM_PORTS-1:0] mem_port_valid_o,
     output logic [NUM_MEM_PORTS-1:0] mem_port_op_o,
-    input logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
-    input logic [$clog2(NUM_MEM_PORTS-1):0] num_stores_i,
+    input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
+    input logic [$clog2(NUM_MEM_PORTS+1)-1:0] num_stores_i,
     input logic [7:0] latency_i,
 
     input  logic                                             rd_tid_valid_i,
@@ -95,8 +95,8 @@ module dice_cgra_rf
   logic [TOTAL_REGS-1:0] wr_bitmap_reg_li;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] e_block_id_li;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] e_block_id_lo;
-  logic [$clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_lo;
-  logic [$clog2(NUM_MEM_PORTS-1):0] num_stores_lo;
+  logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_lo;
+  logic [$clog2(NUM_MEM_PORTS+1)-1:0] num_stores_lo;
   logic [NUM_MEM_PORTS-1:0] mem_port_valid_li;
   logic [NUM_MEM_PORTS-1:0] mem_port_valid_lo;
   logic [NUM_MEM_PORTS-1:0] mem_port_op_li;
@@ -245,7 +245,7 @@ module dice_cgra_rf
       .clk_i(clk_i)
       , .reset_i(reset_i)
       , .latency(cgra_lat)
-      , .in_data(mem_port_valid_li)
+      , .in_data(rf_rd_valid_lo ? mem_port_valid_li : '0)
       , .out_data(mem_port_valid_lo)
   );
 
@@ -256,7 +256,7 @@ module dice_cgra_rf
       .clk_i(clk_i)
       , .reset_i(reset_i)
       , .latency(cgra_lat)
-      , .in_data(mem_port_op_li)
+      , .in_data(rf_rd_valid_lo ? mem_port_op_li : '0)
       , .out_data(mem_port_op_lo)
   );
 
@@ -315,8 +315,8 @@ module dice_cgra_rf
   assign ldst_special_pop_e_block_id_o = ldst_special_pop_e_block_id_lo;
   assign ldst_ready_o = ldst_ready_lo;
   assign ldst_special_ready_o = ldst_special_ready_lo;
-  assign mem_port_valid_o = mem_port_valid_lo;
-  assign mem_port_op_o    = mem_port_op_lo;
+  assign mem_port_valid_o = mem_port_valid_lo & {NUM_MEM_PORTS{cgra_valid_lo}};
+  assign mem_port_op_o    = mem_port_op_lo & {NUM_MEM_PORTS{cgra_valid_lo}};
 
 
 endmodule

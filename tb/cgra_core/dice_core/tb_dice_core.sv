@@ -6,6 +6,8 @@ import "DPI-C" context function void dice_core_tb_init(
   input string bitstream_mem_file,
   input string runtime_json_file
 );
+import "DPI-C" context function int unsigned dice_core_tb_has_init_error();
+import "DPI-C" context function string dice_core_tb_get_init_error();
 import "DPI-C" context function int unsigned dice_core_tb_get_cta_desc_word(
   input int unsigned word_idx
 );
@@ -38,17 +40,20 @@ module tb_dice_core;
 
 
   localparam int ClkPeriod = 10;
-  localparam int TimeoutCycles = 5000;
+  localparam int TimeoutCycles = 50000;
   localparam int MetaBeatBytes = AxiDataWidth / 8;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
   localparam string DefaultTestVector = "full_mul_array_test_vector";
+  localparam string DefaultTestVectorDir = "tb/test_vectors";
 
   logic clk_i;
   logic rst_i;
   int cycle_count;
 
   string test_vector_name;
+  string test_vector_stem;
+  string test_vector_dir;
   string cta_desc_mem_file;
   string meta_mem_file;
   string bitstream_mem_file;
@@ -164,15 +169,41 @@ module tb_dice_core;
     end
   end
 
+  function automatic bit has_path_component(input string path);
+    if (path.len() == 0) begin
+      return 1'b0;
+    end
+
+    if (path.getc(0) == "/") begin
+      return 1'b1;
+    end
+
+    for (int idx = 0; idx < path.len(); idx++) begin
+      if (path.getc(idx) == "/") begin
+        return 1'b1;
+      end
+    end
+
+    return 1'b0;
+  endfunction
+
   task automatic init_paths();
     begin
       if (!$value$plusargs("TEST_VECTOR=%s", test_vector_name)) begin
         test_vector_name = DefaultTestVector;
       end
-      cta_desc_mem_file  = {test_vector_name, "_cta_desc.mem"};
-      meta_mem_file      = {test_vector_name, "_meta.mem"};
-      bitstream_mem_file = {test_vector_name, "_bitstream.mem"};
-      runtime_json_file  = {test_vector_name, "_runtime.json"};
+      if (has_path_component(test_vector_name)) begin
+        test_vector_stem = test_vector_name;
+      end else begin
+        if (!$value$plusargs("TEST_VECTOR_DIR=%s", test_vector_dir)) begin
+          test_vector_dir = DefaultTestVectorDir;
+        end
+        test_vector_stem = {test_vector_dir, "/", test_vector_name};
+      end
+      cta_desc_mem_file  = {test_vector_stem, "_cta_desc.mem"};
+      meta_mem_file      = {test_vector_stem, "_meta.mem"};
+      bitstream_mem_file = {test_vector_stem, "_bitstream.mem"};
+      runtime_json_file  = {test_vector_stem, "_runtime.json"};
     end
   endtask
 
@@ -181,6 +212,9 @@ module tb_dice_core;
     begin
       packed_desc = '0;
       dice_core_tb_init(cta_desc_mem_file, meta_mem_file, bitstream_mem_file, runtime_json_file);
+      if (dice_core_tb_has_init_error()) begin
+        $fatal(1, "[TB] DPI init failed: %s", dice_core_tb_get_init_error());
+      end
 
       for (int word_idx = 0; word_idx < CTA_DESC_WORDS; word_idx++) begin
         packed_desc[word_idx*32+:32] = dice_core_tb_get_cta_desc_word(word_idx);
@@ -196,7 +230,7 @@ module tb_dice_core;
       csrX6_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(6));
       csrX7_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(7));
 
-      $display("[TB] Using test vector stem: %s", test_vector_name);
+      $display("[TB] Using test vector stem: %s", test_vector_stem);
       $display("[TB] CTA start_pc=%0d grid=(%0d,%0d,%0d) thread_count=%0d cta_id=(%0d,%0d,%0d)",
                launch_desc.kernel_desc.start_pc, launch_desc.kernel_desc.grid_size.x,
                launch_desc.kernel_desc.grid_size.y, launch_desc.kernel_desc.grid_size.z,

@@ -3,13 +3,13 @@
     "expected_writes": []
   },
   "csr_values": {
-    "csrX0": 0,
-    "csrX1": 0,
-    "csrX2": 0,
-    "csrX3": 0,
+    "csrX0": 256,
+    "csrX1": 512,
+    "csrX2": 768,
+    "csrX3": 8,
     "csrX4": 0,
-    "csrX5": 0,
-    "csrX6": 0,
-    "csrX7": 0
+    "csrX5": 1,
+    "csrX6": 2,
+    "csrX7": 3
   }
 }

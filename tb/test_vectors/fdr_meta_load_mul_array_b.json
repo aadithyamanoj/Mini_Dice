@@ -1,15 +1,16 @@
 {
-  "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
-  "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b_compile_report.json",
-  "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
+  "binary_output_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
+  "compile_report_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b_compile_report.json",
+  "fasm_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
   "kernel": "load_mul_array_b",
   "notes": [
-    "Uses GPRs 4..7 as load addresses for B-side operand fetch.",
-    "Loaded B operands overwrite GPRs 4..7."
+    "B-side load stage for the staged mul-array flow.",
+    "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
+    "Runtime CSR ABI still reserves affine launch fields for future address generation."
   ],
   "pgraph_meta_t": {
     "barrier": 0,
-    "bitstream_addr": 1024,
+    "bitstream_addr": 512,
     "bitstream_length": 213,
     "branch_meta": {
       "branch_ena": 0,
@@ -21,7 +22,7 @@
       "is_return": 0
     },
     "in_regs_bitmap": 240,
-    "lat": 0,
+    "lat": 9,
     "ld_dest_regs": [
       4,
       5,

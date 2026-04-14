@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases.bin",
-  "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases_compile_report.json",
-  "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases.fasm",
+  "binary_output_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases.bin",
+  "compile_report_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases_compile_report.json",
+  "fasm_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases.fasm",
   "kernel": "load_thread_bases",
   "notes": [
     "Bootstraps thread-local base values from memory into GPRs 0..3.",

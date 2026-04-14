@@ -173,4 +173,63 @@ module cta_schedule_stage
       .stack_full_o                 (stack_full)
   );
 
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin
+    if (!rst_i) begin
+      if (active_table_add_valid && active_table_add_ready) begin
+        $display(
+            "[CS] t=%0t accepted CTA launch: start_pc=%0d thread_count=%0d cta_id=(%0d,%0d,%0d)",
+            $time,
+            active_table_cta_desc.kernel_desc.start_pc,
+            active_table_cta_desc.kernel_desc.thread_count,
+            active_table_cta_desc.cta_id.x,
+            active_table_cta_desc.cta_id.y,
+            active_table_cta_desc.cta_id.z
+        );
+      end
+
+      if (simt_init_valid && simt_init_ready) begin
+        $display(
+            "[CS] t=%0t initialized SIMT stack: pc=%0d reconv=%0d threads=%0d",
+            $time,
+            simt_init_pc,
+            simt_init_reconvergence_pc,
+            simt_init_thread_count
+        );
+      end
+
+      if (schedule_if.valid && schedule_if.ready) begin
+        $display(
+            "[CS] t=%0t CTA schedule complete: eblock=%0d next_pc=%0d mask=%h prefetch=%0b",
+            $time,
+            schedule_if.data.schedule_eblock_id,
+            schedule_if.data.schedule_next_pc,
+            schedule_if.data.schedule_active_mask,
+            schedule_if.data.schedule_prefetch_block
+        );
+      end
+
+      if (simt_update_valid_i && simt_stack_update_ready) begin
+        $display(
+            "[CS] t=%0t SIMT update accepted: with_div=%0b next_pc=%0d not_taken=%0d reconv=%0d pred=%h",
+            $time,
+            simt_update_stack_data_i.update_with_divergence,
+            simt_update_stack_data_i.update_next_pc,
+            simt_update_stack_data_i.branch_not_taken_pc,
+            simt_update_stack_data_i.branch_reconvergence_pc,
+            simt_update_stack_data_i.predicate_regs_value
+        );
+      end
+
+      if (eblock_commit_valid_i) begin
+        $display("[CS] t=%0t backend commit observed: eblock=%0d", $time, eblock_commit_id_i);
+      end
+
+      if (eblock_flush_valid_i) begin
+        $display("[CS] t=%0t branch flush observed: eblock=%0d", $time, eblock_flush_id_i);
+      end
+    end
+  end
+`endif
+
 endmodule

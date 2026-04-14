@@ -12,6 +12,7 @@ module priority_encoder_64bit
   localparam int NUM_CHUNKS = LANE_SIZE / 8;
   localparam int CHUNK_IDX_WIDTH = $clog2(NUM_CHUNKS);
 
+
   // Compute chunk index and bit index mathematically (NOT by slicing)
   wire  [CHUNK_IDX_WIDTH-1:0] start_chunk = start_pos >> 3;  // divide by 8
   wire  [                2:0] start_bit = start_pos[2:0];
