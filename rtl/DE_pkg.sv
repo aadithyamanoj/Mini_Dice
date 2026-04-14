@@ -7,7 +7,7 @@ package DE_pkg;
 // =========================================================
 // Dispatcher architecture constants
 // =========================================================
-parameter int NUM_CREDITS      = 24;
+parameter int NUM_CREDITS      = 100;
 
 parameter int NUM_SCOREBOARDS  = 1;
 parameter int NUM_LANES        = 1;
@@ -124,7 +124,7 @@ typedef struct packed {
 function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_valid
 (
     input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
-    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+    input logic [$clog2(NUM_MEM_PORTS+1)-1:0]                num_stores
 );
     logic [NUM_MEM_PORTS-1:0] valid_vec;
     valid_vec = '0;
@@ -139,7 +139,7 @@ endfunction
 function automatic logic [NUM_MEM_PORTS-1:0] gen_mem_port_op
 (
     input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
-    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+    input logic [$clog2(NUM_MEM_PORTS+1)-1:0]                num_stores
 );
     logic [NUM_MEM_PORTS-1:0] op_vec;
     op_vec = '0;
@@ -154,7 +154,7 @@ endfunction
 function automatic logic [$clog2(NUM_MEM_PORTS+1)-1:0] gen_num_loads
 (
     input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs,
-    input logic [$clog2(NUM_MEM_PORTS-1):0]                  num_stores
+    input logic [$clog2(NUM_MEM_PORTS+1)-1:0]                num_stores
 );
     logic [$clog2(NUM_MEM_PORTS+1)-1:0] load_cnt;
     logic [NUM_MEM_PORTS-1:0] valid_vec;

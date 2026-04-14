@@ -197,4 +197,127 @@ module fdr_top
   assign eblock_flush_valid_o = predict_miss_internal;
   assign eblock_flush_id_o    = schedule_data_q.schedule_eblock_id;
 
+`ifndef SYNTHESIS
+  logic meta_valid_prev_q;
+  logic bitstream_addr_valid_prev_q;
+  logic done_streaming_prev_q;
+  logic fdr_valid_prev_q;
+  logic fire_eblock_prev_q;
+  logic cm_wr_valid_prev_q;
+
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      meta_valid_prev_q           <= 1'b0;
+      bitstream_addr_valid_prev_q <= 1'b0;
+      done_streaming_prev_q       <= 1'b0;
+      fdr_valid_prev_q            <= 1'b0;
+      fire_eblock_prev_q          <= 1'b0;
+      cm_wr_valid_prev_q          <= 1'b0;
+    end else begin
+      if (schedule_if.valid && schedule_if.ready) begin
+        $display(
+            "[FDR] t=%0t schedule accepted: eblock=%0d cta_id=%0d next_pc=%0d active_mask=%h",
+            $time,
+            schedule_if.data.schedule_eblock_id,
+            schedule_if.data.schedule_cta_id,
+            schedule_if.data.schedule_next_pc,
+            schedule_if.data.schedule_active_mask
+        );
+      end
+
+      if (!meta_valid_prev_q && meta_valid_internal) begin
+        $display(
+            "[FDR] t=%0t metadata fetched: bitstream_addr=%0d bitstream_len=%0d latency=%0d branch=%0b barrier=%0b",
+            $time,
+            meta_internal.bitstream_addr,
+            meta_internal.bitstream_length,
+            meta_internal.lat,
+            meta_internal.branch_meta.branch_ena,
+            meta_internal.barrier
+        );
+      end
+
+      if (!bitstream_addr_valid_prev_q && bitstream_addr_valid_internal) begin
+        $display(
+            "[FDR] t=%0t starting bitstream fetch/load: addr=%0d len=%0d",
+            $time,
+            bitstream_addr,
+            bitstream_length
+        );
+      end
+
+      if (!cm_wr_valid_prev_q && cm_wr_valid_o) begin
+        $display(
+            "[FDR] t=%0t first config-memory write: buffer=%0d addr=%0d data=%h",
+            $time,
+            cm_num_internal,
+            cm_wr_addr_o,
+            cm_wr_data_o
+        );
+      end
+
+      if (!done_streaming_prev_q && done_streaming_internal) begin
+        $display(
+            "[FDR] t=%0t bitstream load complete: buffer=%0d",
+            $time,
+            cm_num_internal
+        );
+      end
+
+      if (!fire_eblock_prev_q && fire_eblock_internal) begin
+        $display(
+            "[FDR] t=%0t execution block fired: eblock=%0d loaded_buffer=%0d",
+            $time,
+            schedule_data_q.schedule_eblock_id,
+            cm_num_internal
+        );
+      end
+
+      if (!fdr_valid_prev_q && fdr_if.valid) begin
+        $display(
+            "[FDR] t=%0t backend payload ready: eblock=%0d cta_id=%0d active_mask=%h",
+            $time,
+            fdr_if.data.schedule_eblock_id,
+            fdr_if.data.schedule_cta_id,
+            fdr_if.data.real_active_mask
+        );
+      end
+
+      if (fdr_if.valid && fdr_if.ready) begin
+        $display(
+            "[FDR] t=%0t backend accepted payload: eblock=%0d",
+            $time,
+            fdr_if.data.schedule_eblock_id
+        );
+      end
+
+      if (bh_update_valid && bh_update_ready) begin
+        $display(
+            "[FDR] t=%0t branch handler issued SIMT update: with_div=%0b next_pc=%0d not_taken=%0d reconv=%0d",
+            $time,
+            bh_simt_update.update_with_divergence,
+            bh_simt_update.update_next_pc,
+            bh_simt_update.branch_not_taken_pc,
+            bh_simt_update.branch_reconvergence_pc
+        );
+      end
+
+      if (predict_miss_internal) begin
+        $display(
+            "[FDR] t=%0t branch prediction miss: flushing eblock=%0d",
+            $time,
+            schedule_data_q.schedule_eblock_id
+        );
+      end
+
+      meta_valid_prev_q           <= meta_valid_internal;
+      bitstream_addr_valid_prev_q <= bitstream_addr_valid_internal;
+      done_streaming_prev_q       <= done_streaming_internal;
+      fdr_valid_prev_q            <= fdr_if.valid;
+      fire_eblock_prev_q          <= fire_eblock_internal;
+      cm_wr_valid_prev_q          <= cm_wr_valid_o;
+    end
+  end
+`endif
+
 endmodule

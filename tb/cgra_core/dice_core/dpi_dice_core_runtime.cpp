@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -28,6 +29,82 @@ std::uint32_t g_csr_values[8] = {};
 std::vector<ExpectedWrite> g_expected_writes;
 std::size_t g_observed_write_idx = 0;
 std::uint32_t g_error_count = 0;
+std::string g_init_error;
+
+bool file_exists(const std::string& path) {
+  std::ifstream stream(path);
+  return static_cast<bool>(stream);
+}
+
+bool has_path_component(const std::string& path) {
+  return !path.empty() &&
+         (path.front() == '/' || path.find('/') != std::string::npos);
+}
+
+std::string join_path(const std::string& base, const std::string& leaf) {
+  if (base.empty()) {
+    return leaf;
+  }
+  if (base.back() == '/') {
+    return base + leaf;
+  }
+  return base + "/" + leaf;
+}
+
+std::string repo_root_from_source_path() {
+  const std::string source_path(__FILE__);
+  const std::string suffix = "/tb/cgra_core/dice_core/dpi_dice_core_runtime.cpp";
+  const std::size_t suffix_pos = source_path.rfind(suffix);
+  if (suffix_pos == std::string::npos) {
+    return "";
+  }
+  return source_path.substr(0, suffix_pos);
+}
+
+std::string resolve_input_path(const std::string& path) {
+  if (file_exists(path)) {
+    return path;
+  }
+
+  if (path.empty()) {
+    return path;
+  }
+
+  std::vector<std::string> search_roots;
+  if (const char* dice_home_env = std::getenv("DICE_HOME")) {
+    search_roots.emplace_back(dice_home_env);
+  }
+
+  const std::string source_repo_root = repo_root_from_source_path();
+  if (!source_repo_root.empty() &&
+      std::find(search_roots.begin(), search_roots.end(), source_repo_root) ==
+          search_roots.end()) {
+    search_roots.push_back(source_repo_root);
+  }
+
+  for (const std::string& root : search_roots) {
+    if (has_path_component(path)) {
+      const std::string root_candidate = join_path(root, path);
+      if (file_exists(root_candidate)) {
+        return root_candidate;
+      }
+      continue;
+    }
+
+    const std::string test_vector_candidate =
+        join_path(join_path(root, "tb/test_vectors"), path);
+    if (file_exists(test_vector_candidate)) {
+      return test_vector_candidate;
+    }
+
+    const std::string root_candidate = join_path(root, path);
+    if (file_exists(root_candidate)) {
+      return root_candidate;
+    }
+  }
+
+  return path;
+}
 
 std::string read_text_file(const std::string& path) {
   std::ifstream stream(path);
@@ -88,7 +165,8 @@ void load_memfile_map(
     std::unordered_map<std::uint32_t, std::string>* out_map) {
   out_map->clear();
 
-  std::ifstream stream(path);
+  const std::string resolved_path = resolve_input_path(path);
+  std::ifstream stream(resolved_path);
   if (!stream) {
     throw std::runtime_error("Could not open mem file '" + path + "'");
   }
@@ -115,7 +193,8 @@ void load_memfile_map(
 }
 
 void load_cta_desc_hex(const std::string& path) {
-  std::ifstream stream(path);
+  const std::string resolved_path = resolve_input_path(path);
+  std::ifstream stream(resolved_path);
   if (!stream) {
     throw std::runtime_error("Could not open CTA descriptor mem '" + path + "'");
   }
@@ -144,7 +223,7 @@ void load_cta_desc_hex(const std::string& path) {
 }
 
 void load_runtime_json(const std::string& path) {
-  const std::string text = read_text_file(path);
+  const std::string text = read_text_file(resolve_input_path(path));
 
   for (std::uint32_t idx = 0; idx < 8; ++idx) {
     const std::regex csr_re(
@@ -204,15 +283,38 @@ void dice_core_tb_init(
     const char* meta_mem_file,
     const char* bitstream_mem_file,
     const char* runtime_json_file) {
-  if (!cta_desc_mem_file || !meta_mem_file || !bitstream_mem_file ||
-      !runtime_json_file) {
-    throw std::runtime_error("dice_core_tb_init: null input path");
-  }
+  g_init_error.clear();
+  g_cta_hex.clear();
+  g_meta_words.clear();
+  g_bitstream_words.clear();
+  std::fill(std::begin(g_csr_values), std::end(g_csr_values), 0u);
+  g_expected_writes.clear();
+  g_observed_write_idx = 0;
+  g_error_count = 0;
 
-  load_cta_desc_hex(cta_desc_mem_file);
-  load_memfile_map(meta_mem_file, &g_meta_words);
-  load_memfile_map(bitstream_mem_file, &g_bitstream_words);
-  load_runtime_json(runtime_json_file);
+  try {
+    if (!cta_desc_mem_file || !meta_mem_file || !bitstream_mem_file ||
+        !runtime_json_file) {
+      throw std::runtime_error("dice_core_tb_init: null input path");
+    }
+
+    load_cta_desc_hex(cta_desc_mem_file);
+    load_memfile_map(meta_mem_file, &g_meta_words);
+    load_memfile_map(bitstream_mem_file, &g_bitstream_words);
+    load_runtime_json(runtime_json_file);
+  } catch (const std::exception& e) {
+    g_init_error = e.what();
+  } catch (...) {
+    g_init_error = "Unknown exception in dice_core_tb_init";
+  }
+}
+
+unsigned int dice_core_tb_has_init_error() {
+  return g_init_error.empty() ? 0u : 1u;
+}
+
+const char* dice_core_tb_get_init_error() {
+  return g_init_error.c_str();
 }
 
 unsigned int dice_core_tb_get_cta_desc_word(unsigned int word_idx) {

@@ -84,7 +84,8 @@ module simt_stack
 `else
   bsg_mem_1r1w_sync #(
       .width_p(EntryWidth),
-      .els_p(SIMT_STACK_DEPTH)
+      .els_p(SIMT_STACK_DEPTH),
+      .read_write_same_addr_p(1)
   ) stack_ram (
       .clk_i   (clk_i),
       .reset_i (rst_i),

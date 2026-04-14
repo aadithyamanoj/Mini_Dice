@@ -20,7 +20,7 @@ module mem_req_fifo
   import dice_pkg::*;
   import DE_pkg::*;
 #(
-    parameter int DEPTH = 16,
+    parameter int DEPTH = 64,
     localparam int ENQ_PORTS_LP = 4,
     localparam int AXI_AW = 16,
     localparam int AXI_DW = 16
@@ -38,7 +38,7 @@ module mem_req_fifo
     output logic enq_ready_o,    // FIFO not full
 
     input logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] enq_tid_i,
-    input logic [                         DICE_EBLOCK_ID_WIDTH-1:0] enq_e_block_id_i,
+    input logic [DICE_EBLOCK_ID_WIDTH-1:0] enq_e_block_id_i,
     input logic [AXI_AW-1:0] enq_addr_i_0,  // mem_addr_o → AXI address
     input logic [AXI_AW-1:0] enq_addr_i_1,
     input logic [AXI_AW-1:0] enq_addr_i_2,
@@ -80,12 +80,12 @@ module mem_req_fifo
     // -------------------------------------------------------------------------
     // Backend writeback — wire directly to dice_backend.sv mem_rsp_* inputs
     // -------------------------------------------------------------------------
-    input  logic [                      DICE_NUM_BANKS-1:0] rsp_data_ready_i,
+    input  logic [                       DICE_NUM_BANKS-1:0] rsp_data_ready_i,
     input  logic                                             rsp_special_ready_i,
     output logic                                             pop_o,
     output logic                                             rsp_valid_o,
     output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid_o,
-    output logic [                         DICE_EBLOCK_ID_WIDTH-1:0] rsp_e_block_id_o,
+    output logic [                 DICE_EBLOCK_ID_WIDTH-1:0] rsp_e_block_id_o,
     output logic [                               AXI_AW-1:0] rsp_addr_o,
     output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o
 );
@@ -96,7 +96,7 @@ module mem_req_fifo
   typedef struct packed {
     logic                                             valid;
     logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
-    logic [                         DICE_EBLOCK_ID_WIDTH-1:0] e_block_id;
+    logic [DICE_EBLOCK_ID_WIDTH-1:0]                  e_block_id;
     logic [AXI_AW-1:0]                                addr;
     logic [AXI_DW-1:0]                                data;
     logic                                             op;
@@ -107,11 +107,11 @@ module mem_req_fifo
   logic [ENQ_PORTS_LP-1:0][AXI_AW-1:0] enq_addr_li;
   logic [ENQ_PORTS_LP-1:0][AXI_DW-1:0] enq_data_li;
   logic [ENQ_PORTS_LP-1:0] enq_op_li;
-  mem_req_s serial_req_lo, head_req;
+  mem_req_s serial_req_lo, head_req, active_req_q;
   logic [$bits(mem_req_s)-1:0] serial_req_bits_lo, head_req_lo;
   logic piso_v_lo, piso_yumi_li, piso_ready_lo;
   logic req_fifo_ready_lo;
-  logic head_v_lo, head_yumi_li;
+  logic head_v_lo, head_yumi_li, req_fifo_yumi_li;
 
   assign enq_valid_li[0] = enq_valid_i_0;
   assign enq_valid_li[1] = enq_valid_i_1;
@@ -133,13 +133,18 @@ module mem_req_fifo
   assign enq_op_li[2] = enq_op_i_2;
   assign enq_op_li[3] = enq_op_i_3;
 
-  for (genvar i = 0; i < ENQ_PORTS_LP; i++) begin : gen_enq_req
-    assign enq_req_li[i].valid = enq_valid_li[i];
-    assign enq_req_li[i].tid   = enq_tid_i;
-    assign enq_req_li[i].e_block_id = enq_e_block_id_i;
-    assign enq_req_li[i].addr  = enq_addr_li[i];
-    assign enq_req_li[i].data  = enq_data_li[i];
-    assign enq_req_li[i].op    = enq_op_li[i];
+  always_comb begin
+    for (int i = 0; i < ENQ_PORTS_LP; i++) begin
+      enq_req_li[i] = '0;
+      if (enq_valid_li[i]) begin
+        enq_req_li[i].valid      = 1'b1;
+        enq_req_li[i].tid        = enq_tid_i;
+        enq_req_li[i].e_block_id = enq_e_block_id_i;
+        enq_req_li[i].addr       = enq_addr_li[i];
+        enq_req_li[i].data       = enq_data_li[i];
+        enq_req_li[i].op         = enq_op_li[i];
+      end
+    end
   end
 
   bsg_parallel_in_serial_out #(
@@ -156,8 +161,8 @@ module mem_req_fifo
       .yumi_i(piso_yumi_li)
   );
 
-  assign serial_req_lo = serial_req_bits_lo;
-  assign head_req      = head_req_lo;
+  assign serial_req_lo = piso_v_lo ? serial_req_bits_lo : '0;
+  assign head_req      = head_v_lo ? head_req_lo : '0;
   assign enq_ready_o   = piso_ready_lo & (&rsp_data_ready_i) & rsp_special_ready_i;
 
   bsg_fifo_1r1w_small #(
@@ -171,35 +176,36 @@ module mem_req_fifo
       .data_i(serial_req_bits_lo),
       .v_o(head_v_lo),
       .data_o(head_req_lo),
-      .yumi_i(head_yumi_li)
+      .yumi_i(req_fifo_yumi_li)
   );
 
   assign piso_yumi_li = piso_v_lo & (~serial_req_lo.valid | req_fifo_ready_lo);
 
   // Head-of-FIFO convenience wires
   logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] h_tid;
-  logic [                         DICE_EBLOCK_ID_WIDTH-1:0] h_e_block_id;
+  logic [                 DICE_EBLOCK_ID_WIDTH-1:0] h_e_block_id;
   logic [                               AXI_AW-1:0] h_addr;
   logic [                               AXI_DW-1:0] h_data;
   logic                                             h_op;
   logic                                             rsp_is_gpr;
   logic                                             rsp_bank_ready;
 
-  assign h_tid  = head_req.tid;
-  assign h_e_block_id = head_req.e_block_id;
-  assign h_addr = head_req.addr;
-  assign h_data = head_req.data;
-  assign h_op   = head_req.op;
+  assign h_tid = active_req_q.tid;
+  assign h_e_block_id = active_req_q.e_block_id;
+  assign h_addr = active_req_q.addr;
+  assign h_data = active_req_q.data;
+  assign h_op = active_req_q.op;
   assign rsp_is_gpr = (h_addr < AXI_AW'(DICE_NUM_BANKS));
-  assign rsp_bank_ready = rsp_is_gpr
-                          ? rsp_data_ready_i[h_addr[$clog2(DICE_NUM_BANKS)-1:0]]
-                          : rsp_special_ready_i;
+  assign rsp_bank_ready = rsp_is_gpr ? rsp_data_ready_i[h_addr[$clog2(
+      DICE_NUM_BANKS
+  )-1:0]] : rsp_special_ready_i;
 
   // -------------------------------------------------------------------------
   // AXI-Lite transaction FSM
   // -------------------------------------------------------------------------
   typedef enum logic [2:0] {
     ST_IDLE,
+    ST_LATCH,    // latch FIFO head into active_req_q
     ST_ISSUE_W,  // asserting AW + W for a store
     ST_WAIT_B,   // waiting for BVALID (store complete)
     ST_ISSUE_R,  // asserting AR for a load
@@ -248,10 +254,11 @@ module mem_req_fifo
   assign rsp_valid_o = (state == ST_WAIT_R) && axi_rvalid_i && rsp_bank_ready;
   assign head_yumi_li = ((state == ST_WAIT_B) && axi_bvalid_i)
                      || ((state == ST_WAIT_R) && axi_rvalid_i && rsp_bank_ready);
+  assign req_fifo_yumi_li = (state == ST_IDLE) && head_v_lo;
   assign pop_o = head_yumi_li;
 
   always_comb begin
-    rsp_tid_o  = h_tid;
+    rsp_tid_o = h_tid;
     rsp_e_block_id_o = h_e_block_id;
     rsp_addr_o = h_addr;
     rsp_data_o = axi_rdata_i;
@@ -262,9 +269,10 @@ module mem_req_fifo
   // -------------------------------------------------------------------------
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
-      state   <= ST_IDLE;
-      aw_done <= 1'b0;
-      w_done  <= 1'b0;
+      state        <= ST_IDLE;
+      aw_done      <= 1'b0;
+      w_done       <= 1'b0;
+      active_req_q <= '0;
     end else begin
 
       // --- FSM --------------------------------------------------------------
@@ -273,7 +281,14 @@ module mem_req_fifo
         ST_IDLE: begin
           aw_done <= 1'b0;
           w_done  <= 1'b0;
-          if (head_v_lo) state <= h_op ? ST_ISSUE_W : ST_ISSUE_R;
+          if (head_v_lo) begin
+            active_req_q <= head_req_lo;
+            state <= ST_LATCH;
+          end
+        end
+
+        ST_LATCH: begin
+          state <= h_op ? ST_ISSUE_W : ST_ISSUE_R;
         end
 
         ST_ISSUE_W: begin

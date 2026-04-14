@@ -7,7 +7,7 @@ module dispatcher
     input logic rst,
 
     // metadata input package
-    input logic [$clog2(NUM_MEM_PORTS-1):0][REG_INDEX_WIDTH-1:0] ld_dest_regs,
+    input logic [NUM_MEM_PORTS-1:0][REG_INDEX_WIDTH-1:0] ld_dest_regs,
     input logic [REG_NUM-1:0] input_register_bitmap,
 
     // Runtime execution context inputs
@@ -38,7 +38,7 @@ module dispatcher
     localparam int SCOREBOARD_TID_WIDTH   = $clog2(CHUNK_SIZE);    // TID bit-width within one SB
 
     // load destination registers (ld_dest_reg) bitmap assembly
-    localparam int NUM_LD_DEST_REGS = $clog2(NUM_MEM_PORTS-1) + 1; // number of ld_dest entries
+    localparam int NUM_LD_DEST_REGS = NUM_MEM_PORTS;
 
     // Convert packed ld_dest_regs array into a flat REG_NUM-wide bitmap
     logic [REG_NUM-1:0] ld_dest_regs_bitmap;
@@ -117,6 +117,7 @@ module dispatcher
         .fetch_done(fetch_done),
         .thread_chunk_done(thread_chunk_done),
         .dispatch_fifo_empty(dispatch_fifo_empty),
+        .dispatch_pipeline_idle(dispatch_pipeline_idle),
         .clk(clk_i),
         .rst(rst)
     );
@@ -261,6 +262,7 @@ module dispatcher
 
     //flag of if current valid tids are checking collision
     logic is_checking_collision, is_checking_collision_next; //flag of current tids is checking collision and have not been pushed to ready fifo yet
+    logic dispatch_pipeline_idle;
     always_ff@(posedge clk_i) begin
         if (rst) begin
             is_checking_collision <= 1'b0;
@@ -302,11 +304,11 @@ module dispatcher
     // Ready-to-dispatch FIFOs using sync_fifo module
     generate
         for (i = 0; i < NUM_LANES; i++) begin : gen_ready_fifos
-            sync_fifo #(
+            sync_fifo_read_unreg #(
                 .DATA_WIDTH(DICE_TID_WIDTH + 1),        // {valid, tid[DICE_TID_WIDTH-1:0]}
                 .DEPTH(4)                               // 4 entries deep
             ) ready_fifo (
-                .clk(clk_i),
+                .clk_i(clk_i),
                 .rst(rst),
                 .push(ready_fifo_push_en[i]),
                 .push_data(ready_fifo_push_data[i]),
@@ -328,5 +330,11 @@ module dispatcher
     assign dispatch_valid_o = dispatch_valid_0;
 
     assign dispatch_fifo_empty = ready_fifo_empty[0];
+    assign dispatch_pipeline_idle = !thread_fifo_pop
+                                 && thread_fifo_empty
+                                 && !thread_fifo_data_valid
+                                 && !is_checking_collision
+                                 && !(|ready_fifo_push_en)
+                                 && dispatch_fifo_empty;
 
 endmodule

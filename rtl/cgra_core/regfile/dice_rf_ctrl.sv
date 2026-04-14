@@ -31,16 +31,16 @@ module dice_rf_ctrl
     , input  logic [                       TID_WIDTH-1:0]                          rd_tid_i
     , input  logic [                      TOTAL_REGS-1:0]                          rd_bitmap_i
     , input  logic [                      TOTAL_REGS-1:0]                          wr_bitmap_i
-    , input  logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i
-    , input  logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_i
+    , input  logic [                         NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i
+    , input  logic [           $clog2(NUM_MEM_PORTS+1)-1:0]                             num_stores_i
     , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0]                          rd_data_o
     , output logic                                                                 rf_rd_valid_o
     , output logic [                       TID_WIDTH-1:0]                          tid_o
     , input  logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_i
     , output logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_o
     , output logic [                      TOTAL_REGS-1:0]                          wr_bitmap_o
-    , output logic [           $clog2(NUM_MEM_PORTS-1):0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
-    , output logic [           $clog2(NUM_MEM_PORTS-1):0]                          num_stores_o
+    , output logic [                         NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
+    , output logic [           $clog2(NUM_MEM_PORTS+1)-1:0]                             num_stores_o
 
     // Predicate outputs
     , output logic [        NUM_PRED-1:0] pred_o
@@ -316,7 +316,9 @@ module dice_rf_ctrl
       tid_o <= '0;
       e_block_id_o <= '0;
       wr_bitmap_o <= '0;
-      ld_dest_regs_o <= '0;
+      for (int j = 0; j < $size(ld_dest_regs_o); j++) begin
+        ld_dest_regs_o[j] <= DICE_REG_ADDR_WIDTH'(31);
+      end
       num_stores_o <= '0;
     end else if (rd_tid_valid_i) begin
       tid_o <= rd_tid_i;

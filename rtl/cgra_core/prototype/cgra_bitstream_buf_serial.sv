@@ -3,7 +3,7 @@
 module cgra_bitstream_buf_serial
   import dice_pkg::*;
 #(
-    parameter int PROG_BITSTREAM_BITS_P = 1690,
+    parameter int PROG_BITSTREAM_BITS_P = 1700,
     parameter int PROG_RESET_CYCLES_P   = 10,
     parameter int PROG_FLUSH_CYCLES_P   = 84
 ) (

@@ -36,8 +36,8 @@ PGRAPH_OFFSET_WIDTH  = 5    # clog2(32)
 BITSTREAM_LENGTH_WIDTH = 8
 REG_NUM              = 18   # 8 GPR + 2 PR + 8 CR
 REG_INDEX_WIDTH      = 5    # clog2(18)
-LD_DEST_COUNT        = 3    # clog2(CGRA_MEM_PORTS-1)+1 = clog2(3)+1 = 3
-NUM_STORES_WIDTH     = 3    # clog2(CGRA_MEM_PORTS-1)+1
+LD_DEST_COUNT        = 4    # one ld_dest entry per CGRA memory port
+NUM_STORES_WIDTH     = 3    # clog2(CGRA_MEM_PORTS+1) for 0..4 stores
 THREAD_COUNT_WIDTH   = DICE_TID_WIDTH + 1
 
 # Memory configuration from current TB / RTL
@@ -132,7 +132,7 @@ def pack_pgraph_meta(meta):
     p.push(parse_int(meta["in_regs_bitmap"]),    REG_NUM)
     p.push(parse_int(meta["out_regs_bitmap"]),   REG_NUM)
 
-    # ld_dest_regs: packed [2:0][REG_INDEX_WIDTH-1:0] = 3 entries
+    # ld_dest_regs: packed [3:0][REG_INDEX_WIDTH-1:0] = 4 entries
     ld_regs = meta["ld_dest_regs"]
     for i in range(LD_DEST_COUNT):
         val = parse_int(ld_regs[i]) if i < len(ld_regs) else 0

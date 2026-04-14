@@ -9,7 +9,7 @@
   ],
   "pgraph_meta_t": {
     "barrier": 0,
-    "bitstream_addr": 1536,
+    "bitstream_addr": 1024,
     "bitstream_length": 213,
     "branch_meta": {
       "branch_ena": 0,
@@ -21,7 +21,7 @@
       "is_return": 0
     },
     "in_regs_bitmap": 255,
-    "lat": 0,
+    "lat": 7,
     "ld_dest_regs": [
       31,
       31,

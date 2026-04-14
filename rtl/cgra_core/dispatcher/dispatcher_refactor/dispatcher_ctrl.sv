@@ -16,6 +16,8 @@ module dispatcher_control
     input logic thread_chunk_done,
     input logic last_chunk_done,
     input logic dispatch_fifo_empty,
+    input logic dispatch_pipeline_idle,
+    input logic dispatched_count_nonzero,
     input logic [CHUNK_ADDR_WIDTH-1:0] chunk_counter,
     max_chunks,
     input logic clk,
@@ -37,7 +39,7 @@ module dispatcher_control
       end
 
       DISPATCHING: begin
-        if (last_chunk_done && dispatch_fifo_empty) ns = DONE;
+        if (last_chunk_done && dispatch_pipeline_idle) ns = DONE;
         else ns = ps;
       end
 
@@ -57,7 +59,8 @@ module dispatcher_control
   assign incr_counter = (ps == DISPATCHING) && thread_chunk_done && (chunk_counter < max_chunks);
   assign assert_restart = (ps == DISPATCHING) && thread_chunk_done && (chunk_counter < max_chunks);
   assign rst_counter = (ps == DISPATCHING) && thread_chunk_done && (chunk_counter >= max_chunks);
-  assign last_chunk_fin = (ps == DISPATCHING) && thread_chunk_done && (chunk_counter >= max_chunks);
+  assign last_chunk_fin = (ps == DISPATCHING) && thread_chunk_done
+                       && dispatched_count_nonzero && (chunk_counter >= max_chunks);
   // DONE
   assign start_new_cta = (ps == DONE) && (ns == DISPATCHING);
 

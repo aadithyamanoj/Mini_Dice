@@ -19,6 +19,7 @@ module dispatcher_fsm
     input logic fetch_done,
     input logic thread_chunk_done,
     input logic dispatch_fifo_empty,
+    input logic dispatch_pipeline_idle,
     input logic clk, rst
 );
     // Intermediate logic
@@ -90,6 +91,8 @@ module dispatcher_fsm
         .thread_chunk_done(thread_chunk_done),
         .last_chunk_done(last_chunk_done),
         .dispatch_fifo_empty(dispatch_fifo_empty),
+        .dispatch_pipeline_idle(dispatch_pipeline_idle),
+        .dispatched_count_nonzero(|dispatched_count),
         .chunk_counter(chunk_counter),
         .max_chunks(MAX_CHUNKS),
         .clk(clk),

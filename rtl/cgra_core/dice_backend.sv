@@ -132,15 +132,22 @@ module dice_backend
   logic [                         1:0] cm_bank_valid_lo;
   logic                                prog_v_li;
   logic                                prog_handshake_li;
+  logic                                prog_pending_q;
+  logic                                prog_pending_buffer_q;
+  logic [    DICE_EBLOCK_ID_WIDTH-1:0] prog_pending_eblock_q;
+  logic                                prog_active_buffer_q;
+  logic [    DICE_EBLOCK_ID_WIDTH-1:0] prog_active_eblock_q;
 
   // Latched dispatch e_block_id (driven by dice_brt, also consumed by dice_cgra_rf)
   logic [    DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
 
   // Precomputed pending reads passed into dice_brt
   logic [                        13:0] fdr_pending_reads_li;
+  logic                                fdr_accept_li;
 
   assign fdr_data_li = fdr_data_i;
-  assign fdr_ready_o = ~dispatch_busy;
+  assign fdr_ready_o = ~dispatch_busy && ~prog_busy_lo && ~prog_pending_q && ~cgra_v_lo;
+  assign fdr_accept_li = fdr_valid_i & fdr_ready_o;
 
   assign ldst_cmd.tid = mem_rsp_tid_lo;
   assign ldst_cmd.e_block_id = mem_rsp_e_block_id_lo;
@@ -159,7 +166,7 @@ module dice_backend
   ));
   assign cgra_cm0_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign cgra_cm1_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
-  assign prog_handshake_li = fdr_valid_i & prog_ready_lo;
+  assign prog_handshake_li = prog_pending_q & prog_ready_lo;
 
   always_comb begin
     cgra_cm0_chunk_en_li = '0;
@@ -181,6 +188,28 @@ module dice_backend
       .detect_o(prog_v_li)
   );
 
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      prog_pending_q        <= 1'b0;
+      prog_pending_buffer_q <= 1'b0;
+      prog_pending_eblock_q <= '0;
+      prog_active_buffer_q  <= '0;
+      prog_active_eblock_q  <= '0;
+    end else begin
+      if (fdr_accept_li) begin
+        prog_pending_q        <= 1'b1;
+        prog_pending_buffer_q <= fdr_data_li.loaded_buffer;
+        prog_pending_eblock_q <= fdr_data_li.schedule_eblock_id;
+      end
+
+      if (prog_v_li) begin
+        prog_pending_q       <= 1'b0;
+        prog_active_buffer_q <= prog_pending_buffer_q;
+        prog_active_eblock_q <= prog_pending_eblock_q;
+      end
+    end
+  end
+
   // =========================================================================
   // Block Retire Table (BCT insert pipeline + retire FIFO + serializer + BCT)
   // =========================================================================
@@ -190,7 +219,7 @@ module dice_backend
       .rst_i(rst_i),
 
       // Dispatcher handshake
-      .fdr_valid_i        (fdr_valid_i),
+      .fdr_valid_i        (fdr_accept_li),
       .dispatch_busy_i    (dispatch_busy),
       .fdr_e_block_id_i   (DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id)),
       .fdr_pending_reads_i(fdr_pending_reads_li),
@@ -224,7 +253,7 @@ module dice_backend
       .ld_dest_regs(fdr_data_li.metadata.ld_dest_regs),
       .input_register_bitmap(fdr_data_li.metadata.in_regs_bitmap),
       .active_mask(fdr_data_li.real_active_mask),
-      .fetch_done(fdr_valid_i),
+      .fetch_done(fdr_accept_li),
       .wb_valid(cgra_v_lo),  // CGRA writeback pulse (lat-shifted RF read valid)
       .wb_tid_bitmap(cgra_wb_tid_bitmap),  // one-hot TID that just completed
       .dispatch_fifo_pop(disp_pop),  // advance FIFO when we have credits
@@ -279,7 +308,7 @@ module dice_backend
 
       // Scan chain / bitstream
       .v_i         (prog_v_li),
-      .bank_i      (fdr_data_li.loaded_buffer),
+      .bank_i      (prog_pending_buffer_q),
       .ready_o     (prog_ready_lo),
       .busy_o      (prog_busy_lo),
       .bank_valid_o(cm_bank_valid_lo),
@@ -392,6 +421,81 @@ module dice_backend
       .rsp_data_o(mem_rsp_data_lo)
   );
 
+`ifndef SYNTHESIS
+  logic dispatch_busy_prev_q;
+  logic prog_busy_prev_q;
+  logic fdr_valid_prev_q;
+  logic mem_rsp_valid_prev_q;
 
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      dispatch_busy_prev_q <= 1'b0;
+      prog_busy_prev_q     <= 1'b0;
+      fdr_valid_prev_q     <= 1'b0;
+      mem_rsp_valid_prev_q <= 1'b0;
+    end else begin
+      if (!fdr_valid_prev_q && fdr_valid_i) begin
+        $display(
+            "[BE] t=%0t backend start: eblock=%0d cta_id=%0d active_mask=%h loads=%0d stores=%0d lat=%0d",
+            $time, fdr_data_li.schedule_eblock_id, fdr_data_li.schedule_cta_id,
+            fdr_data_li.real_active_mask, peek_num_load_lo, fdr_data_li.metadata.num_stores,
+            fdr_data_li.metadata.lat);
+      end
+
+      if (fdr_valid_i && fdr_ready_o) begin
+        $display("[BE] t=%0t backend accepted FDR packet: eblock=%0d", $time,
+                 fdr_data_li.schedule_eblock_id);
+      end
+
+      if (!dispatch_busy_prev_q && dispatch_busy) begin
+        $display("[BE] t=%0t dispatcher became busy", $time);
+      end
+
+      if (dispatch_busy_prev_q && !dispatch_busy) begin
+        $display("[BE] t=%0t dispatcher became idle", $time);
+      end
+
+      if (load_credit_fire_lo) begin
+        $display("[BE] t=%0t dispatching threads: tids_valid=%b loads_needed=%0d credit_refund=%0d",
+                 $time, disp_tid_valid, load_credit_need_li, load_credit_up_li);
+      end
+
+      if (!prog_busy_prev_q && prog_busy_lo) begin
+        $display("[BE] t=%0t programming CGRA started: buffer=%0d eblock=%0d", $time,
+                 prog_active_buffer_q, prog_active_eblock_q);
+      end
+
+      if (prog_v_li) begin
+        $display("[BE] t=%0t programming pulse issued: buffer=%0d eblock=%0d", $time,
+                 prog_pending_buffer_q, prog_pending_eblock_q);
+      end
+
+      if (prog_busy_prev_q && !prog_busy_lo) begin
+        $display("[BE] t=%0t programming CGRA complete: buffer=%0d eblock=%0d", $time,
+                 prog_active_buffer_q, prog_active_eblock_q);
+      end
+
+      if (|cgra_mem_port_valid_lo) begin
+        $display("[BE] t=%0t CGRA issued memory ops: valid=%b op=%b tid=%0d eblock=%0d", $time,
+                 cgra_mem_port_valid_lo, cgra_mem_port_op_lo, cgra_tid_lo, cgra_e_block_id_lo);
+      end
+
+      if (!mem_rsp_valid_prev_q && mem_rsp_valid_lo) begin
+        $display("[BE] t=%0t memory response returned: tid=%0d eblock=%0d addr=%0d data=%h", $time,
+                 mem_rsp_tid_lo, mem_rsp_e_block_id_lo, mem_rsp_addr_lo, mem_rsp_data_lo);
+      end
+
+      if (eblock_commit_valid_o) begin
+        $display("[BE] t=%0t commit emitted: eblock=%0d hw_cta_pending=%0b", $time,
+                 eblock_commit_id_o, hw_cta_pending_o);
+      end
+
+      fdr_valid_prev_q     <= fdr_valid_i;
+      dispatch_busy_prev_q <= dispatch_busy;
+      prog_busy_prev_q     <= prog_busy_lo;
+      mem_rsp_valid_prev_q <= mem_rsp_valid_lo;
+    end
+  end
+`endif
 
 endmodule

@@ -30,8 +30,8 @@
           "branch_uni": 0,
           "is_return": 0
         },
-        "in_regs_bitmap": 0,
-        "lat": 0,
+        "in_regs_bitmap": 15,
+        "lat": 7,
         "ld_dest_regs": [
           0,
           1,
@@ -40,7 +40,7 @@
         ],
         "num_stores": 0,
         "out_regs_bitmap": 0,
-        "parameter_load": 1,
+        "parameter_load": 0,
         "unrolling_factor": 0
       },
       "pc": 4096
@@ -59,13 +59,13 @@
           "branch_uni": 0,
           "is_return": 0
         },
-        "in_regs_bitmap": 15,
-        "lat": 0,
+        "in_regs_bitmap": 240,
+        "lat": 9,
         "ld_dest_regs": [
-          0,
-          1,
-          2,
-          3
+          4,
+          5,
+          6,
+          7
         ],
         "num_stores": 0,
         "out_regs_bitmap": 0,
@@ -88,16 +88,16 @@
           "branch_uni": 0,
           "is_return": 0
         },
-        "in_regs_bitmap": 240,
-        "lat": 0,
+        "in_regs_bitmap": 255,
+        "lat": 7,
         "ld_dest_regs": [
-          4,
-          5,
-          6,
-          7
+          31,
+          31,
+          31,
+          31
         ],
         "num_stores": 0,
-        "out_regs_bitmap": 0,
+        "out_regs_bitmap": 15,
         "parameter_load": 0,
         "unrolling_factor": 0
       },
@@ -118,36 +118,7 @@
           "is_return": 0
         },
         "in_regs_bitmap": 255,
-        "lat": 0,
-        "ld_dest_regs": [
-          31,
-          31,
-          31,
-          31
-        ],
-        "num_stores": 0,
-        "out_regs_bitmap": 15,
-        "parameter_load": 0,
-        "unrolling_factor": 0
-      },
-      "pc": 4864
-    },
-    {
-      "meta": {
-        "barrier": 0,
-        "bitstream_addr": 2048,
-        "bitstream_length": 213,
-        "branch_meta": {
-          "branch_ena": 0,
-          "branch_jump_target_offset": 0,
-          "branch_neg_pred": 0,
-          "branch_pred_reg": 0,
-          "branch_reconv_offset": 0,
-          "branch_uni": 0,
-          "is_return": 0
-        },
-        "in_regs_bitmap": 255,
-        "lat": 0,
+        "lat": 9,
         "ld_dest_regs": [
           31,
           31,
@@ -159,7 +130,7 @@
         "parameter_load": 0,
         "unrolling_factor": 0
       },
-      "pc": 5120
+      "pc": 4864
     }
   ],
   "runtime": {
@@ -167,35 +138,26 @@
       "expected_writes": []
     },
     "csr_values": {
-      "csrX0": 0,
-      "csrX1": 0,
-      "csrX2": 0,
-      "csrX3": 0,
+      "csrX0": 256,
+      "csrX1": 512,
+      "csrX2": 768,
+      "csrX3": 8,
       "csrX4": 0,
-      "csrX5": 0,
-      "csrX6": 0,
-      "csrX7": 0
+      "csrX5": 1,
+      "csrX6": 2,
+      "csrX7": 3
     }
   },
   "stage_artifacts": [
-    {
-      "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases.bin",
-      "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases_compile_report.json",
-      "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_thread_bases.fasm",
-      "kernel": "load_thread_bases",
-      "notes": [
-        "Bootstraps thread-local base values from memory into GPRs 0..3.",
-        "Current pseudo-compiler implementation uses csrX0..3 for addresses."
-      ]
-    },
     {
       "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a.bin",
       "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a_compile_report.json",
       "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a.fasm",
       "kernel": "load_mul_array_a",
       "notes": [
-        "Uses GPRs 0..3 as load addresses for A-side operand fetch.",
-        "Loaded A operands overwrite GPRs 0..3."
+        "A-side load stage for the staged mul-array flow.",
+        "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
+        "Runtime CSR ABI still reserves affine launch fields for future address generation."
       ]
     },
     {
@@ -204,8 +166,9 @@
       "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
       "kernel": "load_mul_array_b",
       "notes": [
-        "Uses GPRs 4..7 as load addresses for B-side operand fetch.",
-        "Loaded B operands overwrite GPRs 4..7."
+        "B-side load stage for the staged mul-array flow.",
+        "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
+        "Runtime CSR ABI still reserves affine launch fields for future address generation."
       ]
     },
     {
@@ -225,6 +188,7 @@
       "kernel": "store_mul_array",
       "notes": [
         "Uses GPRs 0..3 as store data and GPRs 4..7 as store addresses.",
+        "Store addresses are expected to follow the same affine CSR ABI.",
         "All four memory ports are marked as stores."
       ]
     }
