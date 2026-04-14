@@ -9,8 +9,11 @@ module cta_status_table
     input branch_predict_interface_t branch_predict_info_i,
     input logic                      branch_predict_info_we_i,
 
-    // From Block Retire Table (BRT)
-    input block_retire_status_t brt_info_i,
+    // BRT-owned pending e-block state
+    input logic has_pending_eblock_i,
+
+    // Scheduler-owned live e-block state
+    input logic eblock_in_flight_i,
 
     // From cta controller
     input logic clear_entry_valid_i,
@@ -23,7 +26,8 @@ module cta_status_table
 
   always_comb begin
     cta_status_d = cta_status_q;
-    cta_status_d.has_pending_eblock = brt_info_i.has_pending_eblock;
+    cta_status_d.has_pending_eblock = has_pending_eblock_i;
+    cta_status_d.eblock_in_flight = eblock_in_flight_i;
     if (branch_predict_info_we_i) begin
       if (branch_predict_info_i.valid_edits_bitmap[2])
         cta_status_d.unresolved_control_divergence = branch_predict_info_i.unresolved_control_divergence;

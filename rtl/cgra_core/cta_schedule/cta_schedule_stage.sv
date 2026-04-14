@@ -74,6 +74,7 @@ module cta_schedule_stage
   assign simt_update_ready_o = simt_stack_update_ready;
 
   logic clear_entry_valid;
+  logic has_live_eblock;
 
   // ---- CTA status ----
   dice_cta_status_t cta_status_real;
@@ -132,6 +133,7 @@ module cta_schedule_stage
       .eblock_commit_id_i     (eblock_commit_id_i),
       .eblock_flush_valid_i   (eblock_flush_valid_i),
       .eblock_flush_id_i      (eblock_flush_id_i),
+      .has_live_eblock_o      (has_live_eblock),
       .scheduled_eblock       (schedule_if)
   );
 
@@ -141,7 +143,8 @@ module cta_schedule_stage
       .rst_i                   (rst_i),
       .branch_predict_info_i   (bh_branch_predict_info_i),
       .branch_predict_info_we_i(bh_branch_predict_info_we_i),
-      .brt_info_i              (brt_info_i),
+      .has_pending_eblock_i    (brt_info_i.has_pending_eblock),
+      .eblock_in_flight_i      (has_live_eblock),
       .clear_entry_valid_i     (clear_entry_valid),
       .cta_status_o            (cta_status_real)
   );

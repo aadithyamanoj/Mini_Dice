@@ -24,7 +24,7 @@ module dice_brt
   output logic                               eblock_commit_valid_o,
   output logic [DICE_EBLOCK_ID_WIDTH-1:0]    eblock_commit_id_o,
   input  logic                               eblock_commit_ready_i,
-  output logic [2**DICE_HW_CTA_ID_WIDTH-1:0] hw_cta_pending_o
+  output logic                               hw_cta_pending_o
 );
 
   // =========================================================================
@@ -63,6 +63,7 @@ module dice_brt
   localparam int RETIRE_EVT_W    = 1 + DICE_EBLOCK_ID_WIDTH;
   localparam int RETIRE_EVT_CNT  = DICE_NUM_BANKS + 1;
   localparam int RETIRE_BUNDLE_W = RETIRE_EVT_CNT * RETIRE_EVT_W;
+  localparam int RETIRE_REDUCE_COUNT_W = 2**DICE_HW_CTA_ID_WIDTH;
 
   logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_li;
   logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_words_lo;
@@ -103,6 +104,7 @@ module dice_brt
   logic [RETIRE_EVT_W-1:0] retire_ser_data_lo;
   logic retire_evt_valid_lo;
   logic [DICE_EBLOCK_ID_WIDTH-1:0] retire_evt_e_block_id_lo;
+  logic [RETIRE_REDUCE_COUNT_W-1:0] retire_evt_reduce_count_li;
 
   bsg_parallel_in_serial_out #(
     .width_p(RETIRE_EVT_W),
@@ -122,6 +124,7 @@ module dice_brt
   assign retire_ser_yumi_li       = retire_ser_v_lo;
   assign retire_evt_valid_lo      = retire_ser_v_lo & retire_ser_data_lo[RETIRE_EVT_W-1];
   assign retire_evt_e_block_id_lo = retire_ser_data_lo[DICE_EBLOCK_ID_WIDTH-1:0];
+  assign retire_evt_reduce_count_li = RETIRE_REDUCE_COUNT_W'(1);
 
   // =========================================================================
   // Block Commit Table
@@ -139,7 +142,7 @@ module dice_brt
     // Update interface — one retire event per serializer output
     .update_valid_i       (retire_evt_valid_lo),
     .update_e_block_id_i  (retire_evt_e_block_id_lo),
-    .update_reduce_count_i((2**DICE_HW_CTA_ID_WIDTH)'(1)),
+    .update_reduce_count_i(retire_evt_reduce_count_li),
 
     // Commit interface
     .pop_valid_o     (eblock_commit_valid_o),

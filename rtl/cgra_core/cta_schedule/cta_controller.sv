@@ -56,7 +56,7 @@ module cta_controller
   logic victim_found;
   logic pop_fire;
   assign victim_found = active_cta_valid_i
-                        && !cta_status_i.has_pending_eblock // may not work
+                        && !cta_status_i.eblock_in_flight
                         && cta_status_i.is_return;
 
   // POP FROM ACTIVE CTA TABLE
@@ -76,7 +76,7 @@ module cta_controller
   
 `ifndef SYNTHESIS
   pop_only_completed_p: assert property (@(posedge clk_i) disable iff (rst_i)
-    pop_valid_o |-> (cta_status_i.has_pending_eblock == 1'b0)
+    pop_valid_o |-> (cta_status_i.eblock_in_flight == 1'b0)
   ) else $error("PopOnlyCompleted: Popping CTA with pending eblocks");
 
   pop_valid_known_p: assert property (@(posedge clk_i) disable iff (rst_i)

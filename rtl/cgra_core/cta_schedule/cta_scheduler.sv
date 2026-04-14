@@ -27,6 +27,7 @@ module cta_scheduler
     input logic [DICE_EBLOCK_ID_WIDTH-1:0] eblock_flush_id_i,
 
     // Scheduler outputs
+    output logic                           has_live_eblock_o,
     cta_sched_if.master scheduled_eblock
 );
 
@@ -51,8 +52,11 @@ module cta_scheduler
     scheduled_eblock.data.schedule_eblock_id = (EBLOCK_ID_WIDTH)'(eblock_ptr_q);
     scheduled_eblock.data.schedule_active_mask = stack_top_active_mask_i;
     scheduled_eblock.data.schedule_prefetch_block = cta_branch_resolving;
+    scheduled_eblock.data.schedule_cta_id = active_cta_entry_i.cta_id;
     scheduled_eblock.data.schedule_grid_size = active_cta_entry_i.grid_size;
   end
+
+  assign has_live_eblock_o = |eblock_live_q;
 
 
   // Sequential logic for state updates

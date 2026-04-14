@@ -43,11 +43,11 @@ module branch_handler_no_branches
   logic branch_meta_valid_rise;
   logic update_stack_fire;
 
-  rising_edge_detector u_branch_meta_valid_rise (
-      .clk_i  (clk_i),
-      .rst_i  (rst_i),
-      .sig_i  (branch_meta_valid_i),
-      .rise_o (branch_meta_valid_rise)
+  bsg_edge_detect u_branch_meta_valid_rise (
+      .clk_i   (clk_i),
+      .reset_i (rst_i),
+      .sig_i   (branch_meta_valid_i),
+      .detect_o(branch_meta_valid_rise)
   );
 
   // No prefetching so this is always true
