@@ -339,7 +339,7 @@ module cgra_io_axi4_top
     .flit_width_p                    ( FLIT_WIDTH             ),
     .addr_width_p                    ( ADDR_WIDTH             ),
     .channel_width_p                 ( 16                     ),
-    .num_channels_p                  ( 1                      ),
+    .num_channels_p                  ( 8                      ),
     .lg_fifo_depth_p                 ( LG_FIFO_DEPTH          ),
     .lg_credit_to_token_decimation_p ( LG_CREDIT_TO_TOKEN_DEC ),
     .bypass_twofer_fifo_p            ( BYPASS_TWOFER_FIFO     ),
