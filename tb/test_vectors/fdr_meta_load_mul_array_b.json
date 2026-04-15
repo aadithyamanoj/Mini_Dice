@@ -1,12 +1,12 @@
 {
-  "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
+  "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
   "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b_compile_report.json",
-  "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
+  "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
   "kernel": "load_mul_array_b",
   "notes": [
     "B-side load stage for the staged mul-array flow.",
-    "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
-    "Runtime CSR ABI still reserves affine launch fields for future address generation."
+    "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
+    "Memory responses load into GPRs 4..7."
   ],
   "pgraph_meta_t": {
     "barrier": 0,
@@ -21,8 +21,8 @@
       "branch_uni": 0,
       "is_return": 0
     },
-    "in_regs_bitmap": 240,
-    "lat": 9,
+    "in_regs_bitmap": 0,
+    "lat": 11,
     "ld_dest_regs": [
       4,
       5,

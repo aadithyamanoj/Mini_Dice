@@ -31,25 +31,25 @@ module dice_rf_ctrl
     , input  logic [                       TID_WIDTH-1:0]                          rd_tid_i
     , input  logic [                      TOTAL_REGS-1:0]                          rd_bitmap_i
     , input  logic [                      TOTAL_REGS-1:0]                          wr_bitmap_i
-    , input  logic [                         NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i
-    , input  logic [           $clog2(NUM_MEM_PORTS+1)-1:0]                             num_stores_i
+    , input  logic [                   NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i
+    , input  logic [         $clog2(NUM_MEM_PORTS+1)-1:0]                          num_stores_i
     , output logic [(NUM_PORTS+NUM_CONST)*DATA_WIDTH-1:0]                          rd_data_o
     , output logic                                                                 rf_rd_valid_o
     , output logic [                       TID_WIDTH-1:0]                          tid_o
-    , input  logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_i
-    , output logic [             DICE_EBLOCK_ID_WIDTH-1:0]                         e_block_id_o
+    , input  logic [            DICE_EBLOCK_ID_WIDTH-1:0]                          e_block_id_i
+    , output logic [            DICE_EBLOCK_ID_WIDTH-1:0]                          e_block_id_o
     , output logic [                      TOTAL_REGS-1:0]                          wr_bitmap_o
-    , output logic [                         NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
-    , output logic [           $clog2(NUM_MEM_PORTS+1)-1:0]                             num_stores_o
+    , output logic [                   NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_o
+    , output logic [         $clog2(NUM_MEM_PORTS+1)-1:0]                          num_stores_o
 
     // Predicate outputs
-    , output logic [        NUM_PRED-1:0] pred_o
+    , output logic [NUM_PRED-1:0] pred_o
     , output logic [NUM_TID*NUM_PRED-1:0] pred_all_o
-    , output logic [       NUM_PORTS-1:0] ldst_pop_o
+    , output logic [NUM_PORTS-1:0] ldst_pop_o
     , output logic [NUM_PORTS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_o
-    , output logic                        ldst_special_pop_o
+    , output logic ldst_special_pop_o
     , output logic [DICE_EBLOCK_ID_WIDTH-1:0] ldst_special_pop_e_block_id_o
-    , output logic                        ldst_special_ready_o
+    , output logic ldst_special_ready_o
 
     // Write Interface — CGRA
     , input logic [                          TID_WIDTH-1:0] cgra_tid_i
@@ -60,7 +60,7 @@ module dice_rf_ctrl
     // Write Interface — LDST
     , input  logic [$bits(cache_wr_cmd)-1:0] ldst_wr_i
     , input  logic                           ldst_valid_i
-    , output logic [NUM_PORTS-1:0]          ldst_ready_o
+    , output logic [          NUM_PORTS-1:0] ldst_ready_o
 );
 
   // =========================================================================
@@ -93,7 +93,7 @@ module dice_rf_ctrl
     for (i = 0; i < NUM_PORTS; i++) begin
       assign cgra_wr_li[i].data = cgra_data_i[i*DATA_WIDTH+:DATA_WIDTH];
       assign cgra_wr_li[i].mask = cgra_shifted_bitmap[i];
-      assign cgra_wr_li[i].tid  = cgra_tid_i;
+      assign cgra_wr_li[i].tid = cgra_tid_i;
       assign cgra_wr_li[i].e_block_id = '0;
     end
   endgenerate
@@ -133,7 +133,7 @@ module dice_rf_ctrl
           , .cgra_ready_o()
 
           , .wr_ldst_i(ldst_wr_li[i])
-          , .ldst_valid_i(ldst_gpr_valid)
+          , .ldst_valid_i(ldst_gpr_valid && ldst_wr_li[i].mask)
 
           , .stall_o(stall_o[i])
           , .ldst_pop_o(ldst_pop_o[i])
@@ -329,7 +329,73 @@ module dice_rf_ctrl
     end
   end
 
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin
+    if (!reset_i) begin
+      // if (rd_tid_valid_i) begin
+      //   $display(
+      //       "[BE:dice_rf_ctrl] t=%0t RF read request: tid=%0d eblock=%0d rd_bitmap=%h wr_bitmap=%b ld_dest_regs={%0d,%0d,%0d,%0d} num_stores=%0d",
+      //       $time, rd_tid_i, e_block_id_i, rd_bitmap_i, wr_bitmap_i, ld_dest_regs_i[0],
+      //       ld_dest_regs_i[1], ld_dest_regs_i[2], ld_dest_regs_i[3], num_stores_i);
+      // end
 
+      // if (rf_rd_valid_o) begin
+      //   $display(
+      //       "[BE:dice_rf_ctrl] t=%0t RF read data ready: tid=%0d eblock=%0d gpr_data={%h,%h,%h,%h,%h,%h,%h,%h}",
+      //       $time, tid_o, e_block_id_o, rd_data_o[0*DATA_WIDTH+:DATA_WIDTH],
+      //       rd_data_o[1*DATA_WIDTH+:DATA_WIDTH], rd_data_o[2*DATA_WIDTH+:DATA_WIDTH],
+      //       rd_data_o[3*DATA_WIDTH+:DATA_WIDTH], rd_data_o[4*DATA_WIDTH+:DATA_WIDTH],
+      //       rd_data_o[5*DATA_WIDTH+:DATA_WIDTH], rd_data_o[6*DATA_WIDTH+:DATA_WIDTH],
+      //       rd_data_o[7*DATA_WIDTH+:DATA_WIDTH]);
+      // end
 
+      if (cgra_valid_i && (|cgra_wr_bitmap_i)) begin
+        $display(
+            "[BE:dice_rf_ctrl] t=%0t CGRA writeback input: tid=%0d wr_bitmap=%b data0_7={%h,%h,%h,%h,%h,%h,%h,%h}",
+            $time, cgra_tid_i, cgra_wr_bitmap_i, cgra_data_i[0*DATA_WIDTH+:DATA_WIDTH],
+            cgra_data_i[1*DATA_WIDTH+:DATA_WIDTH], cgra_data_i[2*DATA_WIDTH+:DATA_WIDTH],
+            cgra_data_i[3*DATA_WIDTH+:DATA_WIDTH], cgra_data_i[4*DATA_WIDTH+:DATA_WIDTH],
+            cgra_data_i[5*DATA_WIDTH+:DATA_WIDTH], cgra_data_i[6*DATA_WIDTH+:DATA_WIDTH],
+            cgra_data_i[7*DATA_WIDTH+:DATA_WIDTH]);
+      end
+
+      if (ldst_valid_i) begin
+        $display(
+            "[BE:dice_rf_ctrl] t=%0t LDST writeback input: tid=%0d eblock=%0d wr_bitmap=%b data=%h ready=%b",
+            $time, ldst_convert.tid, ldst_convert.e_block_id, ldst_convert.wr_bitmap,
+            ldst_convert.data, ldst_ready_o);
+      end
+
+      for (int bank = 0; bank < NUM_PORTS; bank++) begin
+        if (rf_wr_en[bank]) begin
+          if (cgra_valid_i && cgra_shifted_bitmap[bank]) begin
+            $display("[BE:dice_rf_ctrl] t=%0t RF write: src=CGRA bank=%0d tid=%0d data=%h", $time,
+                     bank, rf_wr_addr[bank*ADDR_WIDTH+:ADDR_WIDTH],
+                     rf_wr_data[bank*DATA_WIDTH+:DATA_WIDTH]);
+          end else begin
+            $display(
+                "[BE:dice_rf_ctrl] t=%0t RF write: src=LDST bank=%0d tid=%0d eblock=%0d data=%h",
+                $time, bank, rf_wr_addr[bank*ADDR_WIDTH+:ADDR_WIDTH], ldst_pop_e_block_id_o[bank],
+                rf_wr_data[bank*DATA_WIDTH+:DATA_WIDTH]);
+          end
+        end
+      end
+
+      if (special_wr_valid) begin
+        if (cgra_special_valid) begin
+          $display(
+              "[BE:dice_rf_ctrl] t=%0t special-reg write: src=CGRA tid=%0d const_mask=%b pred_mask=%b pred_data=%b",
+              $time, cgra_tid_i, cgra_special.const_mask, cgra_special.pred_mask,
+              cgra_special.pred_data);
+        end else begin
+          $display(
+              "[BE:dice_rf_ctrl] t=%0t special-reg write: src=LDST tid=%0d eblock=%0d const_mask=%b pred_mask=%b pred_data=%b",
+              $time, ldst_special_wb_tid, ldst_special_wb.e_block_id, ldst_special_wb.const_mask,
+              ldst_special_wb.pred_mask, ldst_special_wb.pred_data);
+        end
+      end
+    end
+  end
+`endif
 
 endmodule

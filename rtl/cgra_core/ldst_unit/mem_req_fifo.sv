@@ -10,9 +10,9 @@
 //
 // One transaction in flight at a time (AXI-Lite has no ID fields).
 //
-// The enqueue port accepts pre-formed coalesced-request metadata
-// (base_tid, tid_bitmap, address_map) and stores it verbatim — no
-// reconstruction is done inside the FIFO.
+// The enqueue port stores the AXI address separately from the RF writeback
+// destination. Loads issue enq_addr_i_* on AXI, then write the response back to
+// enq_rsp_addr_i_*; stores ignore the response destination.
 
 `include "dice_define.vh"
 
@@ -47,6 +47,10 @@ module mem_req_fifo
     input logic [AXI_DW-1:0] enq_data_i_1,
     input logic [AXI_DW-1:0] enq_data_i_2,
     input logic [AXI_DW-1:0] enq_data_i_3,
+    input logic [DICE_REG_ADDR_WIDTH-1:0] enq_rsp_addr_i_0,
+    input logic [DICE_REG_ADDR_WIDTH-1:0] enq_rsp_addr_i_1,
+    input logic [DICE_REG_ADDR_WIDTH-1:0] enq_rsp_addr_i_2,
+    input logic [DICE_REG_ADDR_WIDTH-1:0] enq_rsp_addr_i_3,
     input logic enq_op_i_0,  // 0 == ld 1 == st
     input logic enq_op_i_1,
     input logic enq_op_i_2,
@@ -86,7 +90,7 @@ module mem_req_fifo
     output logic                                             rsp_valid_o,
     output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid_o,
     output logic [                 DICE_EBLOCK_ID_WIDTH-1:0] rsp_e_block_id_o,
-    output logic [                               AXI_AW-1:0] rsp_addr_o,
+    output logic [                  DICE_REG_ADDR_WIDTH-1:0] rsp_addr_o,
     output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o
 );
 
@@ -99,6 +103,7 @@ module mem_req_fifo
     logic [DICE_EBLOCK_ID_WIDTH-1:0]                  e_block_id;
     logic [AXI_AW-1:0]                                addr;
     logic [AXI_DW-1:0]                                data;
+    logic [DICE_REG_ADDR_WIDTH-1:0]                    rsp_addr;
     logic                                             op;
   } mem_req_s;
 
@@ -106,6 +111,7 @@ module mem_req_fifo
   logic [ENQ_PORTS_LP-1:0] enq_valid_li;
   logic [ENQ_PORTS_LP-1:0][AXI_AW-1:0] enq_addr_li;
   logic [ENQ_PORTS_LP-1:0][AXI_DW-1:0] enq_data_li;
+  logic [ENQ_PORTS_LP-1:0][DICE_REG_ADDR_WIDTH-1:0] enq_rsp_addr_li;
   logic [ENQ_PORTS_LP-1:0] enq_op_li;
   mem_req_s serial_req_lo, head_req, active_req_q;
   logic [$bits(mem_req_s)-1:0] serial_req_bits_lo, head_req_lo;
@@ -128,6 +134,11 @@ module mem_req_fifo
   assign enq_data_li[2] = enq_data_i_2;
   assign enq_data_li[3] = enq_data_i_3;
 
+  assign enq_rsp_addr_li[0] = enq_rsp_addr_i_0;
+  assign enq_rsp_addr_li[1] = enq_rsp_addr_i_1;
+  assign enq_rsp_addr_li[2] = enq_rsp_addr_i_2;
+  assign enq_rsp_addr_li[3] = enq_rsp_addr_i_3;
+
   assign enq_op_li[0] = enq_op_i_0;
   assign enq_op_li[1] = enq_op_i_1;
   assign enq_op_li[2] = enq_op_i_2;
@@ -142,6 +153,7 @@ module mem_req_fifo
         enq_req_li[i].e_block_id = enq_e_block_id_i;
         enq_req_li[i].addr       = enq_addr_li[i];
         enq_req_li[i].data       = enq_data_li[i];
+        enq_req_li[i].rsp_addr   = enq_rsp_addr_li[i];
         enq_req_li[i].op         = enq_op_li[i];
       end
     end
@@ -186,6 +198,7 @@ module mem_req_fifo
   logic [                 DICE_EBLOCK_ID_WIDTH-1:0] h_e_block_id;
   logic [                               AXI_AW-1:0] h_addr;
   logic [                               AXI_DW-1:0] h_data;
+  logic [                  DICE_REG_ADDR_WIDTH-1:0] h_rsp_addr;
   logic                                             h_op;
   logic                                             rsp_is_gpr;
   logic                                             rsp_bank_ready;
@@ -194,9 +207,10 @@ module mem_req_fifo
   assign h_e_block_id = active_req_q.e_block_id;
   assign h_addr = active_req_q.addr;
   assign h_data = active_req_q.data;
+  assign h_rsp_addr = active_req_q.rsp_addr;
   assign h_op = active_req_q.op;
-  assign rsp_is_gpr = (h_addr < AXI_AW'(DICE_NUM_BANKS));
-  assign rsp_bank_ready = rsp_is_gpr ? rsp_data_ready_i[h_addr[$clog2(
+  assign rsp_is_gpr = (h_rsp_addr < DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS));
+  assign rsp_bank_ready = rsp_is_gpr ? rsp_data_ready_i[h_rsp_addr[$clog2(
       DICE_NUM_BANKS
   )-1:0]] : rsp_special_ready_i;
 
@@ -248,8 +262,7 @@ module mem_req_fifo
   end
 
   // -------------------------------------------------------------------------
-  // Response output — pass stored metadata straight through; place read data
-  // byte at the slot position derived from the stored bitmap.
+  // Response output — AXI data returns with the stored RF destination register.
   // -------------------------------------------------------------------------
   assign rsp_valid_o = (state == ST_WAIT_R) && axi_rvalid_i && rsp_bank_ready;
   assign head_yumi_li = ((state == ST_WAIT_B) && axi_bvalid_i)
@@ -260,7 +273,7 @@ module mem_req_fifo
   always_comb begin
     rsp_tid_o = h_tid;
     rsp_e_block_id_o = h_e_block_id;
-    rsp_addr_o = h_addr;
+    rsp_addr_o = h_rsp_addr;
     rsp_data_o = axi_rdata_i;
   end
 
@@ -312,9 +325,9 @@ module mem_req_fifo
         end
 
         ST_WAIT_R: begin
-          // rsp_valid_o pulses combinatorially this same cycle.
-          // Pop the entry and return to idle.
-          if (axi_rvalid_i) begin
+          // Only consume the AXI read response when the RF writeback path can
+          // accept it. Otherwise keep rready low and hold the request live.
+          if (axi_rvalid_i && rsp_bank_ready) begin
             state <= ST_IDLE;
           end
         end

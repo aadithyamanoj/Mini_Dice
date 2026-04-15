@@ -30,8 +30,8 @@
           "branch_uni": 0,
           "is_return": 0
         },
-        "in_regs_bitmap": 15,
-        "lat": 7,
+        "in_regs_bitmap": 0,
+        "lat": 11,
         "ld_dest_regs": [
           0,
           1,
@@ -59,8 +59,8 @@
           "branch_uni": 0,
           "is_return": 0
         },
-        "in_regs_bitmap": 240,
-        "lat": 9,
+        "in_regs_bitmap": 0,
+        "lat": 11,
         "ld_dest_regs": [
           4,
           5,
@@ -117,6 +117,35 @@
           "branch_uni": 0,
           "is_return": 0
         },
+        "in_regs_bitmap": 0,
+        "lat": 11,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 240,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4864
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 2048,
+        "bitstream_length": 213,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
+          "branch_neg_pred": 0,
+          "branch_pred_reg": 0,
+          "branch_reconv_offset": 0,
+          "branch_uni": 0,
+          "is_return": 0
+        },
         "in_regs_bitmap": 255,
         "lat": 9,
         "ld_dest_regs": [
@@ -130,7 +159,7 @@
         "parameter_load": 0,
         "unrolling_factor": 0
       },
-      "pc": 4864
+      "pc": 5120
     }
   ],
   "runtime": {
@@ -150,31 +179,31 @@
   },
   "stage_artifacts": [
     {
-      "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a.bin",
+      "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a.bin",
       "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a_compile_report.json",
-      "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a.fasm",
+      "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_a.fasm",
       "kernel": "load_mul_array_a",
       "notes": [
         "A-side load stage for the staged mul-array flow.",
-        "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
-        "Runtime CSR ABI still reserves affine launch fields for future address generation."
+        "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
+        "Memory responses load into GPRs 0..3."
       ]
     },
     {
-      "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
+      "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
       "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b_compile_report.json",
-      "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
+      "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
       "kernel": "load_mul_array_b",
       "notes": [
         "B-side load stage for the staged mul-array flow.",
-        "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
-        "Runtime CSR ABI still reserves affine launch fields for future address generation."
+        "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
+        "Memory responses load into GPRs 4..7."
       ]
     },
     {
-      "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin",
+      "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin",
       "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array_compile_report.json",
-      "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.fasm",
+      "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.fasm",
       "kernel": "mul_array",
       "notes": [
         "Consumes GPRs 0..7 as mul operands.",
@@ -182,13 +211,23 @@
       ]
     },
     {
-      "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.bin",
+      "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.bin",
+      "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.fasm",
+      "kernel": "compute_store_addrs",
+      "notes": [
+        "Materializes C-side affine store addresses into GPRs 4..7.",
+        "Uses csrX2 as base, regS_i_0 as tid, csrX3 as thread_stride, and csrX4..7 as lane offsets."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.bin",
       "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array_compile_report.json",
-      "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.fasm",
+      "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.fasm",
       "kernel": "store_mul_array",
       "notes": [
-        "Uses GPRs 0..3 as store data and GPRs 4..7 as store addresses.",
-        "Store addresses are expected to follow the same affine CSR ABI.",
+        "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
+        "This stage is a pure register-to-memory route and does not recompute affine addresses.",
         "All four memory ports are marked as stores."
       ]
     }

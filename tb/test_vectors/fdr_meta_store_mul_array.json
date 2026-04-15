@@ -1,16 +1,16 @@
 {
-  "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.bin",
+  "binary_output_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.bin",
   "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array_compile_report.json",
-  "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.fasm",
+  "fasm_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.fasm",
   "kernel": "store_mul_array",
   "notes": [
-    "Uses GPRs 0..3 as store data and GPRs 4..7 as store addresses.",
-    "Store addresses are expected to follow the same affine CSR ABI.",
+    "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
+    "This stage is a pure register-to-memory route and does not recompute affine addresses.",
     "All four memory ports are marked as stores."
   ],
   "pgraph_meta_t": {
     "barrier": 0,
-    "bitstream_addr": 1536,
+    "bitstream_addr": 2048,
     "bitstream_length": 213,
     "branch_meta": {
       "branch_ena": 0,

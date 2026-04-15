@@ -46,7 +46,7 @@ METADATA_MEM_DATA_WIDTH  = 256 * 8
 # Bitstream fetch/load uses AxiDataWidth=16 in axi4_full_crossbar.sv.
 BITSTREAM_MEM_DATA_WIDTH = 16
 # Bitstream payload size from dice_pkg.sv.
-DICE_BITSTREAM_SIZE      = 1690
+DICE_BITSTREAM_SIZE      = 1700
 NUM_CHUNKS               = (DICE_BITSTREAM_SIZE + BITSTREAM_MEM_DATA_WIDTH - 1) // BITSTREAM_MEM_DATA_WIDTH
 
 # Packed struct widths from current packages
