@@ -115,15 +115,15 @@ module tb_cgra_io_axi4_link_top;
   // DDR physical pins: DUT upstream output → FPGA endpoint downstream input
   // -------------------------------------------------------------------------
   logic       dut_up_clk_r;
-  logic [7:0] dut_up_data_r;
-  logic       dut_up_valid_r;
-  logic       dut_dn_token_r;   // DUT downstream token → FPGA ep token_clk_i
+  logic [15:0] dut_up_data_r;
+  logic        dut_up_valid_r;
+  logic        dut_dn_token_r;   // DUT downstream token → FPGA ep token_clk_i
 
   // -------------------------------------------------------------------------
   // DDR physical pins: FPGA endpoint upstream output → DUT downstream input
   // -------------------------------------------------------------------------
-  logic       ep_up_clk_r;
-  logic [7:0] ep_up_data_r;
+  logic        ep_up_clk_r;
+  logic [15:0] ep_up_data_r;
   logic       ep_up_valid_r;
   logic       ep_dn_token_r;    // FPGA ep downstream token → DUT token_clk_i
 
@@ -245,7 +245,7 @@ module tb_cgra_io_axi4_link_top;
   top_level_io #(
     .flit_width_p                    ( FW ),
     .addr_width_p                    ( AW ),
-    .channel_width_p                 ( 8  ),
+    .channel_width_p                 ( 16 ),
     .num_channels_p                  ( 1  ),
     .bypass_gearbox_p                ( 1  ),
     .bypass_twofer_fifo_p            ( 1  ),

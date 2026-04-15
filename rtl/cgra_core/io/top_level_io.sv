@@ -1,6 +1,7 @@
 module top_level_io
   #(parameter int flit_width_p         = 16
    ,parameter int addr_width_p         = 16
+   ,parameter int data_width_p         = 16
    ,parameter int channel_width_p      = 8
    ,parameter int num_channels_p       = 1
    ,parameter int lg_fifo_depth_p      = 6
@@ -61,7 +62,7 @@ module top_level_io
 
    ,output logic                                         rx_wvalid_o
    ,input  logic                                         rx_wready_i
-   ,output logic [15:0]                                  rx_wdata_o
+   ,output logic [data_width_p-1:0]                      rx_wdata_o
    ,output logic                                         rx_wlast_o
 
    ,output logic                                         rx_arvalid_o
@@ -73,7 +74,7 @@ module top_level_io
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
-   ,output logic [15:0]                                  rx_rdata_o
+   ,output logic [data_width_p-1:0]                      rx_rdata_o
    ,output logic [1:0]                                   rx_rresp_o
    ,output logic                                         rx_rlast_o
 
@@ -91,7 +92,7 @@ module top_level_io
 
    ,input  logic                                         tx_wvalid_i
    ,output logic                                         tx_wready_o
-   ,input  logic [15:0]                                  tx_wdata_i
+   ,input  logic [data_width_p-1:0]                      tx_wdata_i
    ,input  logic                                         tx_wlast_i
 
    ,input  logic                                         tx_arvalid_i
@@ -103,7 +104,7 @@ module top_level_io
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
-   ,input  logic [15:0]                                  tx_rdata_i
+   ,input  logic [data_width_p-1:0]                      tx_rdata_i
    ,input  logic [1:0]                                   tx_rresp_i
    ,input  logic                                         tx_rlast_i
 

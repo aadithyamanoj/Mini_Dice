@@ -98,13 +98,13 @@ module cgra_io_axi4_top
     input  logic        async_token_reset_i,         // Async token counter reset
     input  logic        token_clk_i,                // Token credit clock from FPGA downstream
     output logic        upstream_io_clk_r_o,         // Forwarded clock to FPGA
-    output logic [7:0]  upstream_io_data_r_o,        // DDR data to FPGA (channel_width=8)
+    output logic [15:0] upstream_io_data_r_o,        // DDR data to FPGA (channel_width=16)
     output logic        upstream_io_valid_r_o,       // DDR valid to FPGA
 
     // bsg_link downstream (FPGA SRAM → chip): source-synchronous DDR
     input  logic        downstream_io_link_reset_i,  // IO-domain reset for downstream link
     input  logic        downstream_io_clk_i,         // Forwarded clock from FPGA
-    input  logic [7:0]  downstream_io_data_i,        // DDR data from FPGA
+    input  logic [15:0] downstream_io_data_i,        // DDR data from FPGA
     input  logic        downstream_io_valid_i,       // DDR valid from FPGA
     output logic        downstream_core_token_r_o,   // Token credit back to FPGA upstream
 
@@ -338,7 +338,7 @@ module cgra_io_axi4_top
   top_level_io #(
     .flit_width_p                    ( FLIT_WIDTH             ),
     .addr_width_p                    ( ADDR_WIDTH             ),
-    .channel_width_p                 ( 8                      ),
+    .channel_width_p                 ( 16                     ),
     .num_channels_p                  ( 1                      ),
     .lg_fifo_depth_p                 ( LG_FIFO_DEPTH          ),
     .lg_credit_to_token_decimation_p ( LG_CREDIT_TO_TOKEN_DEC ),
