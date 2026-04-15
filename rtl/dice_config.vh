@@ -15,6 +15,7 @@
 `define DICE_CGRA_MEM_PORTS          4
 
 // Architectural configurations
+`define DICE_DATA_WIDTH              16
 `define DICE_ADDR_WIDTH              16
 `define DICE_MAX_KERNEL_ID           1
 `define DICE_MAX_GRID_SIZE           65536
