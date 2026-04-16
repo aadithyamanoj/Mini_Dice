@@ -91,7 +91,11 @@ module mem_req_fifo
     output logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] rsp_tid_o,
     output logic [                 DICE_EBLOCK_ID_WIDTH-1:0] rsp_e_block_id_o,
     output logic [                  DICE_REG_ADDR_WIDTH-1:0] rsp_addr_o,
-    output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o
+    output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o,
+
+    // Store completion retire — pulses when a store AXI write finishes
+    output logic                                             store_pop_o,
+    output logic [                 DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_o
 );
 
   // -------------------------------------------------------------------------
@@ -269,6 +273,8 @@ module mem_req_fifo
                      || ((state == ST_WAIT_R) && axi_rvalid_i && rsp_bank_ready);
   assign req_fifo_yumi_li = (state == ST_IDLE) && head_v_lo;
   assign pop_o = head_yumi_li;
+  assign store_pop_o = head_yumi_li & h_op;
+  assign store_pop_e_block_id_o = h_e_block_id;
 
   always_comb begin
     rsp_tid_o = h_tid;

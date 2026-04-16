@@ -1,7 +1,8 @@
 module block_commit_table 
     import dice_pkg::*;
 #(
-    parameter int R_W = 14
+    parameter int R_W = 14,
+    parameter int S_W = 14
 ) (
     input  logic                                    clk_i,
     input  logic                                    rst_i,
@@ -10,11 +11,16 @@ module block_commit_table
     input  logic                                    insert_valid_i,
     input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         insert_e_block_id_i,
     input  logic [R_W-1:0]                          insert_pending_reads_i,
+    input  logic [S_W-1:0]                          insert_pending_stores_i,
 
     // Pending read update interface
     input  logic                                    update_valid_i,
     input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         update_e_block_id_i,
     input  logic [2**DICE_HW_CTA_ID_WIDTH-1:0]      update_reduce_count_i,  // max 8
+
+    // Pending store update interface
+    input  logic                                    store_update_valid_i,
+    input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         store_update_e_block_id_i,
     
     // E-block commit interface
     output logic                                    pop_valid_o,
@@ -30,6 +36,7 @@ module block_commit_table
         logic                            valid;
         logic [DICE_EBLOCK_ID_WIDTH-1:0] e_block_id;
         logic [R_W-1:0]                  pending_reads;
+        logic [S_W-1:0]                  pending_stores;
     } table_entry_t;
 
     // Table storage
@@ -51,6 +58,7 @@ module block_commit_table
                 commit_table[i].valid <= 1'b0;
                 commit_table[i].e_block_id <= '0;
                 commit_table[i].pending_reads <= '0;
+                commit_table[i].pending_stores <= '0;
             end
         end else begin
             // Handle insert
@@ -58,12 +66,19 @@ module block_commit_table
                 commit_table[insert_e_block_id_i].valid <= 1'b1;
                 commit_table[insert_e_block_id_i].e_block_id <= insert_e_block_id_i;
                 commit_table[insert_e_block_id_i].pending_reads <= insert_pending_reads_i;
+                commit_table[insert_e_block_id_i].pending_stores <= insert_pending_stores_i;
             end
 
             // Handle pending read count updates (load RF writebacks)
             if (update_valid_i && commit_table[update_e_block_id_i].valid) begin
                 commit_table[update_e_block_id_i].pending_reads <=
                     commit_table[update_e_block_id_i].pending_reads - update_reduce_count_i;
+            end
+
+            // Handle pending store count updates (store AXI completions)
+            if (store_update_valid_i && commit_table[store_update_e_block_id_i].valid) begin
+                commit_table[store_update_e_block_id_i].pending_stores <=
+                    commit_table[store_update_e_block_id_i].pending_stores - S_W'(1);
             end
 
             // Handle commit/pop
@@ -76,8 +91,9 @@ module block_commit_table
     // Check which entries are ready to commit
     always_comb begin
         for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
-            ready_to_commit[i] = commit_table[i].valid &&
-                                (commit_table[i].pending_reads == {{R_W}{1'd0}});
+            ready_to_commit[i] = commit_table[i].valid
+                                & (commit_table[i].pending_reads == '0)
+                                & (commit_table[i].pending_stores == '0);
         end
     end
 
@@ -161,6 +177,15 @@ module block_commit_table
     ) else $error("Error: Pending reads underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
                   update_e_block_id_i, commit_table[update_e_block_id_i].pending_reads,
                   update_reduce_count_i, $time);
+
+    // Pending stores must not underflow on an update
+    assert_no_store_underflow: assert property (
+        @(posedge clk_i) disable iff (rst_i)
+        (store_update_valid_i && commit_table[store_update_e_block_id_i].valid) |->
+        (commit_table[store_update_e_block_id_i].pending_stores >= S_W'(1))
+    ) else $error("Error: Pending stores underflow for entry %0d. Current: %0d at time %0t",
+                  store_update_e_block_id_i,
+                  commit_table[store_update_e_block_id_i].pending_stores, $time);
 `endif // SYNTHESIS
 
 endmodule

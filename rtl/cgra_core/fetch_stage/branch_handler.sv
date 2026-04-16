@@ -180,7 +180,16 @@ module branch_handler
       end
       S_CURR_STACK_SUBMIT: begin
         // Phase 2: non-divergent current branch
-        if (!active_meta.branch_ena) begin
+        if (active_meta.is_return) begin
+          // Return — pop the SIMT stack by setting next_pc to the
+          // reconvergence sentinel ('1), which matches the init
+          // reconvergence_pc and triggers DIV_POP in the stack controller.
+          simt_stack_update_o.update_with_divergence  = 1'b0;
+          simt_stack_update_o.update_next_pc          = '1;
+          simt_stack_update_o.predicate_regs_value    = '0;
+          simt_stack_update_o.branch_not_taken_pc     = '0;
+          simt_stack_update_o.branch_reconvergence_pc = '0;
+        end else if (!active_meta.branch_ena) begin
           // No branch — linear advance
           simt_stack_update_o.update_with_divergence  = 1'b0;
           simt_stack_update_o.update_next_pc          = not_taken_pc;
