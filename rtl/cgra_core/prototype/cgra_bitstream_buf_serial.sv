@@ -1,4 +1,4 @@
-`include "bsg_defines.sv"
+`include "bsg_defines.v"
 
 module cgra_bitstream_buf_serial
   import dice_pkg::*;

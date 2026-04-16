@@ -19,6 +19,14 @@
 //   0x0A    ERROR_INFO        RO    Error address / code (sticky, clears on reset or start)
 //   0x0C    RSVD_6            R/W   Reserved
 //   0x0E    RSVD_7            R/W   Reserved
+//   0x10    CSRX0             RO    Input-only CSR source 0 (from hardware)
+//   0x12    CSRX1             RO    Input-only CSR source 1 (from hardware)
+//   0x14    CSRX2             RO    Input-only CSR source 2 (from hardware)
+//   0x16    CSRX3             RO    Input-only CSR source 3 (from hardware)
+//   0x18    CSRX4             RO    Input-only CSR source 4 (from hardware)
+//   0x1A    CSRX5             RO    Input-only CSR source 5 (from hardware)
+//   0x1C    CSRX6             RO    Input-only CSR source 6 (from hardware)
+//   0x1E    CSRX7             RO    Input-only CSR source 7 (from hardware)
 //
 // AXI4 notes:
 //   - Treats all accesses as single-beat (ignores AWLEN/ARLEN).
@@ -32,6 +40,7 @@
 module cgra_io_csr
   import axi4_xbar_pkg::*;
   import axi_pkg::*;
+  import DE_pkg::*;
 (
   input  logic clk_i,
   input  logic rst_i,
@@ -59,13 +68,25 @@ module cgra_io_csr
   input  logic        hw_stack_overflow_i, // pulse: SIMT stack overflow detected
   input  logic [15:0] hw_stack_depth_i,    // current SIMT stack entries
   input  logic [15:0] hw_error_info_i,     // error address or code (valid on overflow)
-  input  logic [15:0] hw_bsload_cnt_i      // bitstream load word counter
+  input  logic [15:0] hw_bsload_cnt_i,     // bitstream load word counter
+
+  // --------------------------------------------------------------------------
+  // Input-only CSR sources exposed to the CGRA input crossbar
+  // --------------------------------------------------------------------------
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX3_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX4_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
+  input logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i
 );
 
   // --------------------------------------------------------------------------
   // Register indices
   // --------------------------------------------------------------------------
-  localparam int NUM_REGS   = 8;
+  localparam int NUM_REGS   = 16;
   localparam int REG_CTRL   = 0;  // 0x00
   localparam int REG_PC     = 1;  // 0x02
   localparam int REG_STATUS = 2;  // 0x04
@@ -74,6 +95,14 @@ module cgra_io_csr
   localparam int REG_ERROR  = 5;  // 0x0A
   localparam int REG_RSVD6  = 6;  // 0x0C
   localparam int REG_RSVD7  = 7;  // 0x0E
+  localparam int REG_CSRX0  = 8;  // 0x10
+  localparam int REG_CSRX1  = 9;  // 0x12
+  localparam int REG_CSRX2  = 10; // 0x14
+  localparam int REG_CSRX3  = 11; // 0x16
+  localparam int REG_CSRX4  = 12; // 0x18
+  localparam int REG_CSRX5  = 13; // 0x1A
+  localparam int REG_CSRX6  = 14; // 0x1C
+  localparam int REG_CSRX7  = 15; // 0x1E
 
   // --------------------------------------------------------------------------
   // R/W register storage (CTRL, START_PC, RSVD6, RSVD7)
@@ -93,7 +122,7 @@ module cgra_io_csr
   // AXI write path
   // --------------------------------------------------------------------------
   logic              aw_pending_r;
-  logic [2:0]        aw_idx_r;      // register index latched from AW address
+  logic [3:0]        aw_idx_r;      // register index latched from AW address
   mst_id_t           aw_id_r;       // ID to echo on B channel
 
   // AW handshake: accept when no write is already pending
@@ -110,8 +139,8 @@ module cgra_io_csr
     end else begin
       if (axi_req_i.aw_valid && axi_resp_o.aw_ready) begin
         aw_pending_r <= 1'b1;
-        // addr[3:1] selects one of 8 registers (byte-stride 2, drop bit[0])
-        aw_idx_r     <= axi_req_i.aw.addr[3:1];
+        // addr[4:1] selects one of 16 registers (byte-stride 2, drop bit[0])
+        aw_idx_r     <= axi_req_i.aw.addr[4:1];
         aw_id_r      <= axi_req_i.aw.id;
       end else if (aw_pending_r && axi_req_i.w_valid) begin
         aw_pending_r <= 1'b0;
@@ -130,7 +159,7 @@ module cgra_io_csr
   // AXI read path
   // --------------------------------------------------------------------------
   logic        ar_pending_r;
-  logic [2:0]  ar_idx_r;
+  logic [3:0]  ar_idx_r;
   mst_id_t     ar_id_r;
 
   assign axi_resp_o.ar_ready = ~ar_pending_r;
@@ -143,7 +172,7 @@ module cgra_io_csr
     end else begin
       if (axi_req_i.ar_valid && axi_resp_o.ar_ready) begin
         ar_pending_r <= 1'b1;
-        ar_idx_r     <= axi_req_i.ar.addr[3:1];
+        ar_idx_r     <= axi_req_i.ar.addr[4:1];
         ar_id_r      <= axi_req_i.ar.id;
       end else if (ar_pending_r && axi_req_i.r_ready) begin
         ar_pending_r <= 1'b0;
@@ -158,18 +187,26 @@ module cgra_io_csr
   always_comb begin
     rd_data = '0;
     unique case (ar_idx_r)
-      3'(REG_CTRL):   rd_data = ctrl_r;
-      3'(REG_PC):     rd_data = start_pc_r;
-      3'(REG_STATUS): rd_data = {12'b0,
+      4'(REG_CTRL):   rd_data = ctrl_r;
+      4'(REG_PC):     rd_data = start_pc_r;
+      4'(REG_STATUS): rd_data = {12'b0,
                                   stack_overflow_sticky_r,  // [3]
                                   hw_dispatching_i,         // [2]
                                   hw_busy_i,                // [1]
                                   complete_sticky_r};       // [0]
-      3'(REG_BSLOAD): rd_data = hw_bsload_cnt_i;
-      3'(REG_STACK):  rd_data = hw_stack_depth_i;
-      3'(REG_ERROR):  rd_data = error_info_sticky_r;
-      3'(REG_RSVD6):  rd_data = rsvd6_r;
-      3'(REG_RSVD7):  rd_data = rsvd7_r;
+      4'(REG_BSLOAD): rd_data = hw_bsload_cnt_i;
+      4'(REG_STACK):  rd_data = hw_stack_depth_i;
+      4'(REG_ERROR):  rd_data = error_info_sticky_r;
+      4'(REG_RSVD6):  rd_data = rsvd6_r;
+      4'(REG_RSVD7):  rd_data = rsvd7_r;
+      4'(REG_CSRX0):  rd_data = csrX0_i;
+      4'(REG_CSRX1):  rd_data = csrX1_i;
+      4'(REG_CSRX2):  rd_data = csrX2_i;
+      4'(REG_CSRX3):  rd_data = csrX3_i;
+      4'(REG_CSRX4):  rd_data = csrX4_i;
+      4'(REG_CSRX5):  rd_data = csrX5_i;
+      4'(REG_CSRX6):  rd_data = csrX6_i;
+      4'(REG_CSRX7):  rd_data = csrX7_i;
       default:        rd_data = '0;
     endcase
   end
@@ -212,12 +249,12 @@ module cgra_io_csr
       // --- AXI host writes --------------------------------------------------
       if (do_write) begin
         unique case (aw_idx_r)
-          3'(REG_CTRL): begin
+          4'(REG_CTRL): begin
             ctrl_r    <= wr_data;          // start bit set here, clears next cycle
           end
-          3'(REG_PC):   start_pc_r <= wr_data;
-          3'(REG_RSVD6): rsvd6_r  <= wr_data;
-          3'(REG_RSVD7): rsvd7_r  <= wr_data;
+          4'(REG_PC):   start_pc_r <= wr_data;
+          4'(REG_RSVD6): rsvd6_r  <= wr_data;
+          4'(REG_RSVD7): rsvd7_r  <= wr_data;
           default: ;  // RO registers: ignore writes
         endcase
       end

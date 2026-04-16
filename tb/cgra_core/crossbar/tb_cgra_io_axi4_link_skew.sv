@@ -153,12 +153,12 @@ module tb_cgra_io_axi4_link_skew;
   // DDR physical pins — raw outputs from DUT upstream / EP upstream
   // -------------------------------------------------------------------------
   logic       dut_up_clk_r_raw;
-  logic [15:0] dut_up_data_r_raw;
+  logic [7:0]  dut_up_data_r_raw;
   logic        dut_up_valid_r_raw;
   logic        dut_dn_token_r_raw;   // DUT downstream → EP token_clk
 
   logic        ep_up_clk_r_raw;
-  logic [15:0] ep_up_data_r_raw;
+  logic [7:0]  ep_up_data_r_raw;
   logic       ep_up_valid_r_raw;
   logic       ep_dn_token_r_raw;    // EP downstream → DUT token_clk
 
@@ -169,12 +169,12 @@ module tb_cgra_io_axi4_link_skew;
   // EP→DUT path: EP upstream output, delayed, → DUT downstream input
   // -------------------------------------------------------------------------
   logic       dut_up_clk_r_d;
-  logic [15:0] dut_up_data_r_d;
+  logic [7:0]  dut_up_data_r_d;
   logic        dut_up_valid_r_d;
   logic        ep_dn_token_r_d;     // delayed token back to DUT
 
   logic        ep_up_clk_r_d;
-  logic [15:0] ep_up_data_r_d;
+  logic [7:0]  ep_up_data_r_d;
   logic       ep_up_valid_r_d;
   logic       dut_dn_token_r_d;    // delayed token back to EP
 
@@ -184,7 +184,7 @@ module tb_cgra_io_axi4_link_skew;
   assign #(TOKEN_WIRE_DELAY_NS ) ep_dn_token_r_d   = ep_dn_token_r_raw;
 
   generate
-    for (genvar i = 0; i < 16; i++) begin : dut_data_delay
+    for (genvar i = 0; i < 8; i++) begin : dut_data_delay
       assign #(DATA_BASE_NS + i * DATA_SKEW_STEP_NS) dut_up_data_r_d[i]
              = dut_up_data_r_raw[i];
     end
@@ -196,7 +196,7 @@ module tb_cgra_io_axi4_link_skew;
   assign #(TOKEN_WIRE_DELAY_NS ) dut_dn_token_r_d  = dut_dn_token_r_raw;
 
   generate
-    for (genvar j = 0; j < 16; j++) begin : ep_data_delay
+    for (genvar j = 0; j < 8; j++) begin : ep_data_delay
       assign #(DATA_BASE_NS + j * DATA_SKEW_STEP_NS) ep_up_data_r_d[j]
              = ep_up_data_r_raw[j];
     end
@@ -308,7 +308,7 @@ module tb_cgra_io_axi4_link_skew;
   top_level_io #(
     .flit_width_p                    ( FW ),
     .addr_width_p                    ( AW ),
-    .channel_width_p                 ( 16 ),
+    .channel_width_p                 ( 8  ),
     .num_channels_p                  ( 1  ),
     .bypass_gearbox_p                ( 1  ),
     .bypass_twofer_fifo_p            ( 1  ),
@@ -592,11 +592,11 @@ module tb_cgra_io_axi4_link_skew;
     // 8 loads instead of 4: more transactions = more clock drift accumulated
     begin
       logic [15:0] got_data;
+      logic [15:0] expected;
       for (int i = 0; i < 8; i++) begin
         cgra_load(MEM_BASE + 16'(i * 2));
         wait_rsp(got_data);
         // SRAM[1] was written by T2, rest are initial values
-        automatic logic [15:0] expected;
         expected = (i == 1) ? 16'hBEEF : 16'(16'hA000 + i);
         check16(got_data, expected,
                 $sformatf("T3: back-to-back load SRAM[%0d]", i));

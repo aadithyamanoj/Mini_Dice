@@ -33,7 +33,7 @@ module cgra_io_axi4_top
     parameter int LG_FIFO_DEPTH          = 6,  // bsg_link credit-FIFO depth (log2)
     parameter int LG_CREDIT_TO_TOKEN_DEC = 3,  // bsg_link token decimation (log2)
     parameter int BYPASS_TWOFER_FIFO     = 0,  // 1 = bypass twofer FIFO (use in sim)
-    parameter int BYPASS_GEARBOX         = 0,  // 1 = bypass PISO/SIPO gearbox (use in sim)
+    parameter int BYPASS_GEARBOX         = 1,  // bypass PISO/SIPO gearbox (piso_ratio=1, always bypassed)
     parameter int USE_HARDENED_FIFO      = 0   // 1 = use hardened FIFO cells
 )(
     input  logic clk_i,
@@ -98,13 +98,13 @@ module cgra_io_axi4_top
     input  logic        async_token_reset_i,         // Async token counter reset
     input  logic        token_clk_i,                // Token credit clock from FPGA downstream
     output logic        upstream_io_clk_r_o,         // Forwarded clock to FPGA
-    output logic [15:0] upstream_io_data_r_o,        // DDR data to FPGA (channel_width=16)
+    output logic [7:0]  upstream_io_data_r_o,        // DDR data to FPGA (channel_width=8, DDR)
     output logic        upstream_io_valid_r_o,       // DDR valid to FPGA
 
     // bsg_link downstream (FPGA SRAM → chip): source-synchronous DDR
     input  logic        downstream_io_link_reset_i,  // IO-domain reset for downstream link
     input  logic        downstream_io_clk_i,         // Forwarded clock from FPGA
-    input  logic [15:0] downstream_io_data_i,        // DDR data from FPGA
+    input  logic [7:0]  downstream_io_data_i,        // DDR data from FPGA (channel_width=8, DDR)
     input  logic        downstream_io_valid_i,       // DDR valid from FPGA
     output logic        downstream_core_token_r_o,   // Token credit back to FPGA upstream
 
@@ -293,6 +293,7 @@ module cgra_io_axi4_top
     .enq_valid_i_3    ( enq_valid_i_3    ),
     .enq_ready_o      ( enq_ready_o      ),
     .enq_tid_i        ( enq_tid_i        ),
+    .enq_e_block_id_i ( '0               ),  // not used in crossbar test
     .enq_addr_i_0     ( enq_addr_i_0     ),
     .enq_addr_i_1     ( enq_addr_i_1     ),
     .enq_addr_i_2     ( enq_addr_i_2     ),
@@ -301,6 +302,10 @@ module cgra_io_axi4_top
     .enq_data_i_1     ( enq_data_i_1     ),
     .enq_data_i_2     ( enq_data_i_2     ),
     .enq_data_i_3     ( enq_data_i_3     ),
+    .enq_rsp_addr_i_0 ( '0               ),  // not used in crossbar test
+    .enq_rsp_addr_i_1 ( '0               ),
+    .enq_rsp_addr_i_2 ( '0               ),
+    .enq_rsp_addr_i_3 ( '0               ),
     .enq_op_i_0       ( enq_op_i_0       ),
     .enq_op_i_1       ( enq_op_i_1       ),
     .enq_op_i_2       ( enq_op_i_2       ),
@@ -322,12 +327,16 @@ module cgra_io_axi4_top
     .axi_rresp_i      ( fifo_rresp       ),
     .axi_rvalid_i     ( fifo_rvalid      ),
     .axi_rready_o     ( fifo_rready      ),
-    .rsp_data_ready_i ( rsp_data_ready_i ),
+    .rsp_data_ready_i ( {DICE_NUM_BANKS{rsp_data_ready_i}} ),  // replicate 1-bit to all banks
+    .rsp_special_ready_i ( 1'b1          ),  // not used in crossbar test
     .pop_o            ( pop_o            ),
     .rsp_valid_o      ( rsp_valid_o      ),
     .rsp_tid_o        ( rsp_tid_o        ),
-    .rsp_addr_o       ( rsp_addr_o       ),
-    .rsp_data_o       ( rsp_data_o       )
+    .rsp_e_block_id_o        (            ),  // not used in crossbar test
+    .rsp_addr_o              ( rsp_addr_o       ),
+    .rsp_data_o              ( rsp_data_o       ),
+    .store_pop_o             (            ),  // not used in crossbar test
+    .store_pop_e_block_id_o  (            )   // not used in crossbar test
   );
 
   // --------------------------------------------------------------------------
@@ -338,8 +347,8 @@ module cgra_io_axi4_top
   top_level_io #(
     .flit_width_p                    ( FLIT_WIDTH             ),
     .addr_width_p                    ( ADDR_WIDTH             ),
-    .channel_width_p                 ( 16                     ),
-    .num_channels_p                  ( 8                      ),
+    .channel_width_p                 ( 8                      ),
+    .num_channels_p                  ( 1                      ),
     .lg_fifo_depth_p                 ( LG_FIFO_DEPTH          ),
     .lg_credit_to_token_decimation_p ( LG_CREDIT_TO_TOKEN_DEC ),
     .bypass_twofer_fifo_p            ( BYPASS_TWOFER_FIFO     ),
