@@ -10,15 +10,20 @@ module dice_brt
   input  logic                               dispatch_busy_i,
   input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    fdr_e_block_id_i,
   input  logic [13:0]                        fdr_pending_reads_i,
+  input  logic [13:0]                        fdr_pending_stores_i,
 
   // Latched dispatch e_block_id — exposed for use by dice_cgra_rf
   output logic [DICE_EBLOCK_ID_WIDTH-1:0]    dispatch_e_block_id_o,
 
-  // Retire signals from dice_cgra_rf
+  // Retire signals from dice_cgra_rf (load completions)
   input  logic [DICE_NUM_BANKS-1:0]                           ldst_pop_i,
   input  logic [DICE_NUM_BANKS-1:0][DICE_EBLOCK_ID_WIDTH-1:0] ldst_pop_e_block_id_i,
   input  logic                                                 ldst_special_pop_i,
   input  logic [DICE_EBLOCK_ID_WIDTH-1:0]                     ldst_special_pop_e_block_id_i,
+
+  // Store retire signals from mem_req_fifo
+  input  logic                               store_retire_valid_i,
+  input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    store_retire_e_block_id_i,
 
   // Commit interface
   output logic                               eblock_commit_valid_o,
@@ -33,6 +38,7 @@ module dice_brt
 
   logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
   logic [13:0]                     dispatch_pending_reads;
+  logic [13:0]                     dispatch_pending_stores;
   logic                            bct_insert_valid_r;
 
   // Latch e-block metadata whenever the dispatcher accepts a new e-block.
@@ -40,9 +46,11 @@ module dice_brt
     if (rst_i) begin
       dispatch_e_block_id    <= '0;
       dispatch_pending_reads <= '0;
+      dispatch_pending_stores <= '0;
     end else if (fdr_valid_i && ~dispatch_busy_i) begin
       dispatch_e_block_id    <= fdr_e_block_id_i;
       dispatch_pending_reads <= fdr_pending_reads_i;
+      dispatch_pending_stores <= fdr_pending_stores_i;
     end
   end
 
@@ -82,9 +90,11 @@ module dice_brt
   assign retire_bundle_words_lo = retire_bundle_bits_lo;
   assign retire_bundle_valid_li = |ldst_pop_i | ldst_special_pop_i;
 
+  localparam int RETIRE_BUDLE_DEPTH = NUM_MEM_PORTS * DICE_NUM_MAX_THREADS_PER_CORE;
+
   bsg_fifo_1r1w_small #(
     .width_p(RETIRE_BUNDLE_W),
-    .els_p  (LDST_BUF_DEPTH)
+    .els_p  (RETIRE_BUDLE_DEPTH)
   ) retire_bundle_fifo (
     .clk_i  (clk_i),
     .reset_i(rst_i),
@@ -135,14 +145,19 @@ module dice_brt
     .rst_i(rst_i),
 
     // Insert interface
-    .insert_valid_i        (bct_insert_valid_r),
-    .insert_e_block_id_i   (dispatch_e_block_id),
-    .insert_pending_reads_i(dispatch_pending_reads),
+    .insert_valid_i         (bct_insert_valid_r),
+    .insert_e_block_id_i    (dispatch_e_block_id),
+    .insert_pending_reads_i (dispatch_pending_reads),
+    .insert_pending_stores_i(dispatch_pending_stores),
 
-    // Update interface — one retire event per serializer output
+    // Read update interface — one retire event per serializer output
     .update_valid_i       (retire_evt_valid_lo),
     .update_e_block_id_i  (retire_evt_e_block_id_lo),
     .update_reduce_count_i(retire_evt_reduce_count_li),
+
+    // Store update interface — direct from mem_req_fifo (one at a time)
+    .store_update_valid_i      (store_retire_valid_i),
+    .store_update_e_block_id_i (store_retire_e_block_id_i),
 
     // Commit interface
     .pop_valid_o     (eblock_commit_valid_o),

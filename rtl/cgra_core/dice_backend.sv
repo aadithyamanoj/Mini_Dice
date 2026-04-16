@@ -122,6 +122,7 @@ module dice_backend
   logic                                cgra_credit_ready_lo;
   logic                                load_credit_fire_lo;
   logic [ $clog2(NUM_MEM_PORTS+1)-1:0] peek_num_load_lo;
+  logic [ $clog2(NUM_MEM_PORTS+1)-1:0] fdr_payload_num_load_lo;
   logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_up_li;
   logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_need_li;
 
@@ -159,9 +160,14 @@ module dice_backend
   // Latched dispatch e_block_id (driven by dice_brt, also consumed by dice_cgra_rf)
   logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
 
-  // Precomputed pending reads passed into dice_brt
+  // Precomputed pending reads/stores passed into dice_brt
   logic [                    13:0] fdr_pending_reads_li;
+  logic [                    13:0] fdr_pending_stores_li;
   logic                            fdr_accept_li;
+
+  // Store completion from mem_req_fifo
+  logic                            store_pop_lo;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_lo;
 
   assign fdr_data_li = fdr_data_i;
   assign fdr_active_li = fdr_accept_li ? fdr_data_li : fdr_active_q;
@@ -186,15 +192,15 @@ module dice_backend
   assign peek_num_load_lo = gen_num_loads(
       fdr_active_li.metadata.ld_dest_regs, fdr_active_li.metadata.num_stores
   );
+  assign fdr_payload_num_load_lo = gen_num_loads(
+      fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores
+  );
   assign mem_stage_lo = (peek_num_load_lo != '0) || (fdr_active_li.metadata.num_stores != '0);
   assign mem_dispatch_ready_lo = (mem_dispatch_cooldown_q == '0);
   assign dispatch_issue_req_lo = (|disp_tid_valid) && !prog_busy_lo
                                   && (!mem_stage_lo || mem_dispatch_ready_lo);
-  assign fdr_pending_reads_li = 14'($countones(
-      fdr_data_li.real_active_mask
-  ) * gen_num_loads(
-      fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores
-  ));
+  assign fdr_pending_reads_li = 14'($countones(fdr_data_li.real_active_mask) * fdr_payload_num_load_lo);
+  assign fdr_pending_stores_li = 14'($countones(fdr_data_li.real_active_mask) * fdr_data_li.metadata.num_stores);
   assign cgra_cm0_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign cgra_cm1_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign prog_handshake_li = prog_pending_q & prog_ready_lo;
@@ -270,19 +276,24 @@ module dice_backend
       .rst_i(rst_i),
 
       // Dispatcher handshake
-      .fdr_valid_i        (fdr_accept_li),
-      .dispatch_busy_i    (dispatch_busy),
-      .fdr_e_block_id_i   (DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id)),
-      .fdr_pending_reads_i(fdr_pending_reads_li),
+      .fdr_valid_i         (fdr_accept_li),
+      .dispatch_busy_i     (dispatch_busy),
+      .fdr_e_block_id_i    (DICE_EBLOCK_ID_WIDTH'(fdr_data_li.schedule_eblock_id)),
+      .fdr_pending_reads_i (fdr_pending_reads_li),
+      .fdr_pending_stores_i(fdr_pending_stores_li),
 
       // Latched e_block_id (also consumed by dice_cgra_rf)
       .dispatch_e_block_id_o(dispatch_e_block_id),
 
-      // Retire signals from dice_cgra_rf
+      // Retire signals from dice_cgra_rf (load completions)
       .ldst_pop_i                   (ldst_pop_lo),
       .ldst_pop_e_block_id_i        (ldst_pop_e_block_id_lo),
       .ldst_special_pop_i           (ldst_special_pop_lo),
       .ldst_special_pop_e_block_id_i(ldst_special_pop_e_block_id_lo),
+
+      // Store retire signals from mem_req_fifo
+      .store_retire_valid_i      (store_pop_lo),
+      .store_retire_e_block_id_i (store_pop_e_block_id_lo),
 
       // Commit interface
       .eblock_commit_valid_o(eblock_commit_valid_o),
@@ -398,11 +409,14 @@ module dice_backend
       .mem_rsp_addr_o_1(cgra_mem_rsp_addr_lo_1),
       .mem_rsp_addr_o_2(cgra_mem_rsp_addr_lo_2),
       .mem_rsp_addr_o_3(cgra_mem_rsp_addr_lo_3),
-      .ld_dest_regs_i(fdr_active_li.metadata.ld_dest_regs),
-      .num_stores_i(fdr_active_li.metadata.num_stores),
+      .ld_dest_regs_i(fdr_active_q.metadata.ld_dest_regs),
+      .num_stores_i(fdr_active_q.metadata.num_stores),
 
       // CGRA latency from instruction metadata
-      .latency_i(fdr_active_li.metadata.lat),
+      // Use registered fdr_active_q to break combinational loop:
+      // fdr_active_li -> latency_i -> shift_reg out_data -> cgra_v_lo -> fdr_ready_o -> fdr_accept_li -> fdr_active_li
+      .latency_i(fdr_active_q.metadata.lat),
+      .shift_clear_i(fdr_accept_li),  // clear shift-reg ring buffers on eblock transition
 
       // RF read interface (from dispatcher)
       .rd_tid_valid_i(rd_tid_valid),
@@ -411,7 +425,7 @@ module dice_backend
       .rd_tid_i      (rd_tid),
       .e_block_id_i  (dispatch_e_block_id),
       .rd_bitmap_i   (full_reg_bitmap_lo),
-      .wr_bitmap_i   (fdr_active_li.metadata.out_regs_bitmap),
+      .wr_bitmap_i   (fdr_active_q.metadata.out_regs_bitmap),
 
       // LDST write back interface
       .ldst_wr_i   (ldst_wr_li),
@@ -477,7 +491,10 @@ module dice_backend
       .rsp_tid_o(mem_rsp_tid_lo),
       .rsp_e_block_id_o(mem_rsp_e_block_id_lo),
       .rsp_addr_o(mem_rsp_addr_lo),
-      .rsp_data_o(mem_rsp_data_lo)
+      .rsp_data_o(mem_rsp_data_lo),
+
+      .store_pop_o(store_pop_lo),
+      .store_pop_e_block_id_o(store_pop_e_block_id_lo)
   );
 
 `ifndef SYNTHESIS
@@ -495,15 +512,19 @@ module dice_backend
     end else begin
       if (!fdr_valid_prev_q && fdr_valid_i) begin
         $display(
-            "[BE:dice_backend] t=%0t backend start: eblock=%0d cta_id=%0d active_mask=%h loads=%0d stores=%0d lat=%0d",
+            "[BE:dice_backend] t=%0t FDR payload visible: eblock=%0d cta_id=%0d active_mask=%h loads=%0d stores=%0d lat=%0d ready=%0b dispatch_busy=%0b prog_busy=%0b prog_pending=%0b cgra_v=%0b pipe_empty=%0b",
             $time, fdr_data_li.schedule_eblock_id, fdr_data_li.schedule_cta_id,
-            fdr_data_li.real_active_mask, peek_num_load_lo, fdr_data_li.metadata.num_stores,
-            fdr_data_li.metadata.lat);
+            fdr_data_li.real_active_mask, fdr_payload_num_load_lo,
+            fdr_data_li.metadata.num_stores, fdr_data_li.metadata.lat, fdr_ready_o,
+            dispatch_busy, prog_busy_lo, prog_pending_q, cgra_v_lo, cgra_pipeline_empty_lo);
       end
 
       if (fdr_valid_i && fdr_ready_o) begin
-        $display("[BE:dice_backend] t=%0t backend accepted FDR packet: eblock=%0d", $time,
-                 fdr_data_li.schedule_eblock_id);
+        $display(
+            "[BE:dice_backend] t=%0t backend accepted FDR packet: eblock=%0d loads=%0d stores=%0d lat=%0d pending_reads=%0d pending_stores=%0d",
+            $time, fdr_data_li.schedule_eblock_id, fdr_payload_num_load_lo,
+            fdr_data_li.metadata.num_stores, fdr_data_li.metadata.lat,
+            fdr_pending_reads_li, fdr_pending_stores_li);
       end
 
       if (!dispatch_busy_prev_q && dispatch_busy) begin
@@ -552,6 +573,15 @@ module dice_backend
         $display("[BE:dice_backend] t=%0t commit emitted: eblock=%0d hw_cta_pending=%0b", $time,
                  eblock_commit_id_o, hw_cta_pending_o);
       end
+
+      // Watchdog: print fdr_ready_o blockers when stalled
+      // if (fdr_valid_i && !fdr_ready_o && !dispatch_busy
+      //     && !prog_busy_lo && !prog_pending_q) begin
+      //   $display(
+      //       "[BE:watchdog] t=%0t STALL cgra_v=%0b pipe_empty=%0b pipe_count=%0d",
+      //       $time, cgra_v_lo, cgra_pipeline_empty_lo,
+      //       cgra_pipeline_count_q);
+      // end
 
       fdr_valid_prev_q     <= fdr_valid_i;
       dispatch_busy_prev_q <= dispatch_busy;

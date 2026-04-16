@@ -53,6 +53,7 @@ module dice_cgra_rf
     input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
     input logic [$clog2(NUM_MEM_PORTS+1)-1:0] num_stores_i,
     input logic [7:0] latency_i,
+    input logic       shift_clear_i,  // clear shift-reg ring buffers on eblock transition
 
     input  logic                                             rd_tid_valid_i,
     output logic                                             rd_tid_ready_o,
@@ -218,6 +219,7 @@ module dice_cgra_rf
   ) TID_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(cgra_tid_li)
       , .out_data(cgra_tid_lo)
@@ -229,6 +231,7 @@ module dice_cgra_rf
   ) WB_MAP_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(wr_bitmap_reg_li)
       , .out_data(cgra_wr_bitmap_li)
@@ -240,6 +243,7 @@ module dice_cgra_rf
   ) EBLOCK_ID_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(e_block_id_li)
       , .out_data(e_block_id_lo)
@@ -251,6 +255,7 @@ module dice_cgra_rf
   ) LDST_PORT_VALID_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(rf_rd_valid_lo ? mem_port_valid_li : '0)
       , .out_data(mem_port_valid_lo)
@@ -262,6 +267,7 @@ module dice_cgra_rf
   ) LDST_PORT_OP_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(rf_rd_valid_lo ? mem_port_op_li : '0)
       , .out_data(mem_port_op_lo)
@@ -273,6 +279,7 @@ module dice_cgra_rf
   ) LDST_RSP_ADDR_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(mem_rsp_addr_li)
       , .out_data(mem_rsp_addr_lo)
@@ -284,6 +291,7 @@ module dice_cgra_rf
   ) VALID_SHIFT (
       .clk_i(clk_i)
       , .reset_i(reset_i)
+      , .clear_i(shift_clear_i)
       , .latency(cgra_lat)
       , .in_data(rf_rd_valid_lo)
       , .out_data(cgra_valid_lo)

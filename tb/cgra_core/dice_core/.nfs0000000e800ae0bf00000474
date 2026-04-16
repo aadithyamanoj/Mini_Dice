@@ -417,8 +417,7 @@ module tb_dice_core;
       $finish;
     end
 
-    $display("FAIL: dice_core runtime checks reported an error (see AXI WRITE VERIFICATION DIFF above)");
-    $fatal(1, "FAIL: AXI write mismatch - see diff above");
+    $fatal(1, "FAIL: dice_core runtime checks reported an error");
   end
 
 

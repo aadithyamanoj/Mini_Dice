@@ -1,9 +1,12 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -27,7 +30,9 @@ std::unordered_map<std::uint32_t, std::string> g_meta_words;
 std::unordered_map<std::uint32_t, std::string> g_bitstream_words;
 std::uint32_t g_csr_values[8] = {};
 std::vector<ExpectedWrite> g_expected_writes;
-std::size_t g_observed_write_idx = 0;
+std::vector<bool> g_expected_matched;
+std::vector<ExpectedWrite> g_actual_writes;  // all observed AXI writes
+std::uint32_t g_observed_write_count = 0;
 std::uint32_t g_error_count = 0;
 std::string g_init_error;
 
@@ -237,7 +242,9 @@ void load_runtime_json(const std::string& path) {
   }
 
   g_expected_writes.clear();
-  g_observed_write_idx = 0;
+  g_expected_matched.clear();
+  g_actual_writes.clear();
+  g_observed_write_count = 0;
   g_error_count = 0;
 
   const std::regex write_re(
@@ -253,6 +260,7 @@ void load_runtime_json(const std::string& path) {
     expected.strb = match[3].matched ? parse_u32(match[3].str()) : 0x3;
     g_expected_writes.push_back(expected);
   }
+  g_expected_matched.assign(g_expected_writes.size(), false);
 }
 
 std::uint32_t meta_read16(std::uint32_t byte_addr) {
@@ -289,7 +297,9 @@ void dice_core_tb_init(
   g_bitstream_words.clear();
   std::fill(std::begin(g_csr_values), std::end(g_csr_values), 0u);
   g_expected_writes.clear();
-  g_observed_write_idx = 0;
+  g_expected_matched.clear();
+  g_actual_writes.clear();
+  g_observed_write_count = 0;
   g_error_count = 0;
 
   try {
@@ -344,28 +354,138 @@ void dice_core_tb_record_axi_write(
     unsigned int addr,
     unsigned int data,
     unsigned int strb) {
+  const std::uint32_t d = data & 0xFFFFu;
+  const std::uint32_t s = strb & 0x3u;
+
+  g_actual_writes.push_back({addr, d, s});
+
   if (g_expected_writes.empty()) {
     return;
   }
 
-  if (g_observed_write_idx >= g_expected_writes.size()) {
-    ++g_error_count;
-    return;
+  ++g_observed_write_count;
+
+  for (std::size_t i = 0; i < g_expected_writes.size(); ++i) {
+    if (g_expected_matched[i]) {
+      continue;
+    }
+    const ExpectedWrite& exp = g_expected_writes[i];
+    if (exp.addr == addr && exp.data == d && exp.strb == s) {
+      g_expected_matched[i] = true;
+      return;
+    }
   }
 
-  const ExpectedWrite& expected = g_expected_writes[g_observed_write_idx];
-  if (expected.addr != addr || expected.data != (data & 0xFFFFu) ||
-      expected.strb != (strb & 0x3u)) {
-    ++g_error_count;
-  }
-  ++g_observed_write_idx;
+  ++g_error_count;
+  fprintf(stderr, "[AXI-CHK] UNEXPECTED write: addr=0x%04x data=0x%04x strb=0x%x\n",
+          addr, d, s);
 }
 
 unsigned int dice_core_tb_check_done() {
-  if (!g_expected_writes.empty() &&
-      g_observed_write_idx != g_expected_writes.size()) {
-    ++g_error_count;
+  std::size_t missing_count = 0;
+  if (!g_expected_writes.empty()) {
+    for (std::size_t i = 0; i < g_expected_writes.size(); ++i) {
+      if (!g_expected_matched[i]) {
+        ++g_error_count;
+        ++missing_count;
+      }
+    }
   }
+
+  if (g_error_count != 0) {
+    fprintf(stderr, "\n========== AXI WRITE VERIFICATION DIFF ==========\n");
+    fprintf(stderr, "Expected %zu writes, observed %zu writes, %u errors\n",
+            g_expected_writes.size(), g_actual_writes.size(), g_error_count);
+
+    // Print expected writes with match status
+    fprintf(stderr, "\n--- Expected writes ---\n");
+    fprintf(stderr, "%4s  %6s  %6s  %4s  %s\n",
+            "idx", "addr", "data", "strb", "status");
+    for (std::size_t i = 0; i < g_expected_writes.size(); ++i) {
+      const auto& e = g_expected_writes[i];
+      fprintf(stderr, "[%3zu] 0x%04x  0x%04x  0x%x   %s\n",
+              i, e.addr, e.data, e.strb,
+              g_expected_matched[i] ? "OK" : "MISSING");
+    }
+
+    // Print actual writes, flagging unexpected ones
+    fprintf(stderr, "\n--- Actual writes (in order) ---\n");
+    fprintf(stderr, "%4s  %6s  %6s  %4s  %s\n",
+            "idx", "addr", "data", "strb", "status");
+    for (std::size_t i = 0; i < g_actual_writes.size(); ++i) {
+      const auto& a = g_actual_writes[i];
+      // Check if this write matches any expected entry
+      bool matched = false;
+      for (std::size_t j = 0; j < g_expected_writes.size(); ++j) {
+        const auto& e = g_expected_writes[j];
+        if (e.addr == a.addr && e.data == a.data && e.strb == a.strb) {
+          matched = true;
+          break;
+        }
+      }
+      fprintf(stderr, "[%3zu] 0x%04x  0x%04x  0x%x   %s\n",
+              i, a.addr, a.data, a.strb,
+              matched ? "OK" : "UNEXPECTED");
+    }
+
+    // Side-by-side diff sorted by address for easy comparison
+    fprintf(stderr, "\n--- Per-address diff (sorted by addr) ---\n");
+    fprintf(stderr, "%6s | %12s | %12s | %s\n",
+            "addr", "expected", "actual", "status");
+    fprintf(stderr, "-------+--------------+--------------+--------\n");
+
+    // Build address->data maps
+    std::map<std::uint32_t, std::uint32_t> exp_by_addr;
+    std::map<std::uint32_t, std::uint32_t> act_by_addr;
+    for (const auto& e : g_expected_writes) exp_by_addr[e.addr] = e.data;
+    for (const auto& a : g_actual_writes) act_by_addr[a.addr] = a.data;
+
+    // Collect all addresses
+    std::set<std::uint32_t> all_addrs;
+    for (const auto& kv : exp_by_addr) all_addrs.insert(kv.first);
+    for (const auto& kv : act_by_addr) all_addrs.insert(kv.first);
+
+    for (std::uint32_t addr : all_addrs) {
+      auto eit = exp_by_addr.find(addr);
+      auto ait = act_by_addr.find(addr);
+      char exp_str[16] = "---";
+      char act_str[16] = "---";
+      const char* status = "OK";
+
+      if (eit != exp_by_addr.end()) snprintf(exp_str, sizeof(exp_str), "0x%04x", eit->second);
+      if (ait != act_by_addr.end()) snprintf(act_str, sizeof(act_str), "0x%04x", ait->second);
+
+      if (eit == exp_by_addr.end()) {
+        status = "EXTRA";
+      } else if (ait == act_by_addr.end()) {
+        status = "MISSING";
+      } else if (eit->second != ait->second) {
+        status = "MISMATCH";
+      }
+
+      // Only print mismatches and problems to reduce noise
+      if (eit == exp_by_addr.end() || ait == act_by_addr.end() ||
+          eit->second != ait->second) {
+        fprintf(stderr, "0x%04x | %12s | %12s | %s\n",
+                addr, exp_str, act_str, status);
+      }
+    }
+
+    // Print summary of matching entries
+    std::size_t match_count = 0;
+    for (std::uint32_t addr : all_addrs) {
+      auto eit = exp_by_addr.find(addr);
+      auto ait = act_by_addr.find(addr);
+      if (eit != exp_by_addr.end() && ait != act_by_addr.end() &&
+          eit->second == ait->second) {
+        ++match_count;
+      }
+    }
+    fprintf(stderr, "\n%zu/%zu addresses match, %zu mismatches/missing/extra\n",
+            match_count, all_addrs.size(), all_addrs.size() - match_count);
+    fprintf(stderr, "===================================================\n\n");
+  }
+
   return g_error_count == 0 ? 1u : 0u;
 }
 

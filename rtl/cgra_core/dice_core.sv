@@ -64,17 +64,7 @@ module dice_core
   logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_lo;
   logic [AxiDataWidth-1:0] cm_wr_data_lo;
   logic cm_wr_valid_lo;
-`ifdef DICE_RF_DEBUG
-  logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_rd_data_lo;
-  logic [DICE_NUM_PRED-1:0] dbg_pred_lo;
-  logic [(DICE_NUM_BANKS+DICE_NUM_CONST)*DICE_REG_DATA_WIDTH-1:0] dbg_rf_launch_data_lo;
-  logic [DICE_NUM_PRED-1:0] dbg_pred_launch_lo;
-  logic [((DICE_NUM_BANKS+DICE_NUM_PRED+1)*DICE_REG_DATA_WIDTH)-1:0] dbg_cgra_data_lo;
-  logic [DICE_TOTAL_REGS-1:0] dbg_cgra_wr_bitmap_lo;
-  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] dbg_cgra_tid_lo;
-  logic dbg_cgra_valid_lo;
-  logic dbg_rf_rd_valid_lo;
-`endif
+
 
   assign frontend_brt_info.has_pending_eblock = hw_cta_pending_lo;
 
