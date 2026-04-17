@@ -19,26 +19,81 @@ Usage:
 
 import argparse
 import json
+import math
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 
+SCRIPT_PATH = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_PATH.parents[2]
+RTL_ROOT = REPO_ROOT / "rtl"
+
+
+def sv_clog2(value: int) -> int:
+    if value <= 1:
+        return 0
+    return math.ceil(math.log2(value))
+
+
+def _strip_sv_comment(text: str) -> str:
+    return text.split("//", 1)[0].strip()
+
+
+def _load_sv_defines(path: Path) -> dict[str, int]:
+    defines: dict[str, int] = {}
+    define_re = re.compile(r"^\s*`define\s+(\w+)\s+(.+?)\s*$")
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = _strip_sv_comment(raw_line)
+        if not line:
+            continue
+        match = define_re.match(line)
+        if not match:
+            continue
+        name, value_text = match.groups()
+        defines[name] = int(value_text.strip(), 0)
+
+    return defines
+
+
+def _load_pkg_parameter(path: Path, name: str) -> int:
+    param_re = re.compile(
+        rf"\bparameter\s+int\s+{re.escape(name)}\s*=\s*([^;]+);"
+    )
+    text = path.read_text(encoding="utf-8")
+    match = param_re.search(text)
+    if not match:
+        raise KeyError(f"Could not find parameter {name} in {path}")
+    return int(_strip_sv_comment(match.group(1)), 0)
+
+
+RTL_DEFINES = _load_sv_defines(RTL_ROOT / "dice_config.vh")
+
 # =====================================================================
-# Bit-width constants (from current dice_config.vh / dice_pkg.sv /
-# dice_frontend_pkg.sv)
+# Bit-width constants (sourced from current dice_config.vh / dice_pkg.sv /
+# dice_frontend_pkg.sv instead of being hard-coded)
 # =====================================================================
-DICE_ADDR_WIDTH      = 16
-DICE_CTA_ID_WIDTH    = 16   # clog2(65536)
-DICE_TID_WIDTH       = 4    # clog2(16)
-PR_INDEX_WIDTH       = 1    # clog2(2)
-PGRAPH_OFFSET_WIDTH  = 5    # clog2(32)
+DICE_ADDR_WIDTH = RTL_DEFINES["DICE_ADDR_WIDTH"]
+DICE_MAX_GRID_SIZE = RTL_DEFINES["DICE_MAX_GRID_SIZE"]
+DICE_NUM_MAX_THREADS_PER_CORE = RTL_DEFINES["DICE_NUM_MAX_THREADS_PER_CORE"]
+DICE_GPR_NUM = RTL_DEFINES["DICE_GPR_NUM"]
+DICE_PR_NUM = RTL_DEFINES["DICE_PR_NUM"]
+DICE_CR_NUM = RTL_DEFINES["DICE_CR_NUM"]
+DICE_CGRA_MEM_PORTS = RTL_DEFINES["DICE_CGRA_MEM_PORTS"]
+DICE_MAX_PGRAPHS = RTL_DEFINES["DICE_MAX_PGRAPHS"]
+
+DICE_CTA_ID_WIDTH = sv_clog2(DICE_MAX_GRID_SIZE)
+DICE_TID_WIDTH = sv_clog2(DICE_NUM_MAX_THREADS_PER_CORE)
+PR_INDEX_WIDTH = sv_clog2(DICE_PR_NUM)
+PGRAPH_OFFSET_WIDTH = sv_clog2(DICE_MAX_PGRAPHS)
 BITSTREAM_LENGTH_WIDTH = 8
-REG_NUM              = 18   # 8 GPR + 2 PR + 8 CR
-REG_INDEX_WIDTH      = 5    # clog2(18)
-LD_DEST_COUNT        = 4    # one ld_dest entry per CGRA memory port
-NUM_STORES_WIDTH     = 3    # clog2(CGRA_MEM_PORTS+1) for 0..4 stores
-THREAD_COUNT_WIDTH   = DICE_TID_WIDTH + 1
+REG_NUM = DICE_GPR_NUM + DICE_PR_NUM + DICE_CR_NUM
+REG_INDEX_WIDTH = sv_clog2(REG_NUM)
+LD_DEST_COUNT = DICE_CGRA_MEM_PORTS
+NUM_STORES_WIDTH = sv_clog2(DICE_CGRA_MEM_PORTS + 1)
+THREAD_COUNT_WIDTH = DICE_TID_WIDTH + 1
 
 # Memory configuration from current TB / RTL
 # Metadata local memory uses WORD_SIZE=256 bytes in tb_dice_core.sv.
@@ -46,7 +101,7 @@ METADATA_MEM_DATA_WIDTH  = 256 * 8
 # Bitstream fetch/load uses AxiDataWidth=16 in axi4_full_crossbar.sv.
 BITSTREAM_MEM_DATA_WIDTH = 16
 # Bitstream payload size from dice_pkg.sv.
-DICE_BITSTREAM_SIZE      = 1700
+DICE_BITSTREAM_SIZE = _load_pkg_parameter(RTL_ROOT / "dice_pkg.sv", "DICE_BITSTREAM_SIZE")
 NUM_CHUNKS               = (DICE_BITSTREAM_SIZE + BITSTREAM_MEM_DATA_WIDTH - 1) // BITSTREAM_MEM_DATA_WIDTH
 
 # Packed struct widths from current packages

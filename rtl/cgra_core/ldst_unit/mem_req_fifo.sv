@@ -20,7 +20,7 @@ module mem_req_fifo
   import dice_pkg::*;
   import DE_pkg::*;
 #(
-    parameter int DEPTH = 64,
+    parameter int DEPTH = DICE_NUM_MAX_THREADS_PER_CORE * NUM_MEM_PORTS,
     localparam int ENQ_PORTS_LP = 4,
     localparam int AXI_AW = 16,
     localparam int AXI_DW = 16
@@ -94,8 +94,8 @@ module mem_req_fifo
     output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o,
 
     // Store completion retire — pulses when a store AXI write finishes
-    output logic                                             store_pop_o,
-    output logic [                 DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_o
+    output logic                            store_pop_o,
+    output logic [DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_o
 );
 
   // -------------------------------------------------------------------------
@@ -107,7 +107,7 @@ module mem_req_fifo
     logic [DICE_EBLOCK_ID_WIDTH-1:0]                  e_block_id;
     logic [AXI_AW-1:0]                                addr;
     logic [AXI_DW-1:0]                                data;
-    logic [DICE_REG_ADDR_WIDTH-1:0]                    rsp_addr;
+    logic [DICE_REG_ADDR_WIDTH-1:0]                   rsp_addr;
     logic                                             op;
   } mem_req_s;
 

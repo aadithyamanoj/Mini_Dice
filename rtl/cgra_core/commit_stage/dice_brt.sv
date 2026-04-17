@@ -9,8 +9,8 @@ module dice_brt
   input  logic                               fdr_valid_i,
   input  logic                               dispatch_busy_i,
   input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    fdr_e_block_id_i,
-  input  logic [13:0]                        fdr_pending_reads_i,
-  input  logic [13:0]                        fdr_pending_stores_i,
+  input  logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_reads_i,
+  input  logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_stores_i,
 
   // Latched dispatch e_block_id — exposed for use by dice_cgra_rf
   output logic [DICE_EBLOCK_ID_WIDTH-1:0]    dispatch_e_block_id_o,
@@ -37,9 +37,9 @@ module dice_brt
   // =========================================================================
 
   logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
-  logic [13:0]                     dispatch_pending_reads;
-  logic [13:0]                     dispatch_pending_stores;
-  logic                            bct_insert_valid_r;
+  logic [PENDING_MEM_COUNT_WIDTH-1:0] dispatch_pending_reads;
+  logic [PENDING_MEM_COUNT_WIDTH-1:0] dispatch_pending_stores;
+  logic                               bct_insert_valid_r;
 
   // Latch e-block metadata whenever the dispatcher accepts a new e-block.
   always_ff @(posedge clk_i) begin
@@ -140,7 +140,10 @@ module dice_brt
   // Block Commit Table
   // =========================================================================
 
-  block_commit_table u_block_commit_table (
+  block_commit_table #(
+    .R_W(PENDING_MEM_COUNT_WIDTH),
+    .S_W(PENDING_MEM_COUNT_WIDTH)
+  ) u_block_commit_table (
     .clk_i(clk_i),
     .rst_i(rst_i),
 

@@ -67,8 +67,8 @@ module dice_backend_area
     input logic                            bct_insert_valid_i,          // PLACEHOLDER
     input logic [DICE_HW_CTA_ID_WIDTH-1:0] bct_insert_hw_cta_id_i,      // PLACEHOLDER
     input logic [DICE_EBLOCK_ID_WIDTH-1:0] bct_insert_e_block_id_i,     // PLACEHOLDER
-    input logic [                    13:0] bct_insert_pending_reads_i,  // PLACEHOLDER
-    input logic [                    13:0] bct_insert_pending_writes_i, // PLACEHOLDER
+    input logic [PENDING_MEM_COUNT_WIDTH-1:0] bct_insert_pending_reads_i,  // PLACEHOLDER
+    input logic [PENDING_MEM_COUNT_WIDTH-1:0] bct_insert_pending_writes_i, // PLACEHOLDER
 
     // BCT update interface
     input logic                               bct_update_valid_i,        // PLACEHOLDER

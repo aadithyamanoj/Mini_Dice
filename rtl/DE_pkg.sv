@@ -7,7 +7,6 @@ package DE_pkg;
 // =========================================================
 // Dispatcher architecture constants
 // =========================================================
-parameter int NUM_CREDITS      = 100;
 
 parameter int NUM_SCOREBOARDS  = 1;
 parameter int NUM_LANES        = 1;
@@ -31,6 +30,10 @@ parameter int DICE_TOTAL_REGS = DICE_NUM_REGS + DICE_NUM_CONST + DICE_NUM_PRED;
 parameter int DICE_REG_ADDR_WIDTH = $clog2(DICE_TOTAL_REGS);
 parameter int LDST_BUF_DEPTH = 8;
 localparam int EBLOCK_ID_W = $clog2(`DICE_NUM_RETIRE_TABLE_ENTRIES + 4);
+
+parameter int NUM_CREDITS      = `DICE_NUM_MAX_THREADS_PER_CORE * NUM_MEM_PORTS;
+parameter int PENDING_MEM_COUNT_WIDTH = $clog2(NUM_CREDITS + 1);
+
 typedef struct packed {
     logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
     logic [EBLOCK_ID_W-1:0] e_block_id;

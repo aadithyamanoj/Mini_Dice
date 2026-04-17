@@ -95,6 +95,7 @@ module dispatcher
     // Dispatch output signals (declared before use)
     logic [DICE_TID_WIDTH-1:0] dispatch_tid_0;
     logic dispatch_valid_0;
+    logic dispatch_pipeline_idle;
 
     // ============================================================
     // Component Instantiations
@@ -262,7 +263,6 @@ module dispatcher
 
     //flag of if current valid tids are checking collision
     logic is_checking_collision, is_checking_collision_next; //flag of current tids is checking collision and have not been pushed to ready fifo yet
-    logic dispatch_pipeline_idle;
     always_ff@(posedge clk_i) begin
         if (rst) begin
             is_checking_collision <= 1'b0;

@@ -128,8 +128,8 @@ module dice_core_syn
     input logic                            bct_insert_valid_i,
     input logic [DICE_HW_CTA_ID_WIDTH-1:0] bct_insert_hw_cta_id_i,
     input logic [DICE_EBLOCK_ID_WIDTH-1:0] bct_insert_e_block_id_i,
-    input logic [                    13:0] bct_insert_pending_reads_i,
-    input logic [                    13:0] bct_insert_pending_writes_i,
+    input logic [PENDING_MEM_COUNT_WIDTH-1:0] bct_insert_pending_reads_i,
+    input logic [PENDING_MEM_COUNT_WIDTH-1:0] bct_insert_pending_writes_i,
 
     // BCT update interface
     input logic                               bct_update_valid_i,

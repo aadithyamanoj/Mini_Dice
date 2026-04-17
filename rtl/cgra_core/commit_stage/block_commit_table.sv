@@ -1,8 +1,9 @@
 module block_commit_table 
-    import dice_pkg::*;
+    import dice_pkg::*,
+           DE_pkg::*;
 #(
-    parameter int R_W = 14,
-    parameter int S_W = 14
+    parameter int R_W = PENDING_MEM_COUNT_WIDTH,
+    parameter int S_W = PENDING_MEM_COUNT_WIDTH
 ) (
     input  logic                                    clk_i,
     input  logic                                    rst_i,

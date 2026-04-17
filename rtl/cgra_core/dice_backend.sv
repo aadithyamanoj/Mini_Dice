@@ -161,8 +161,8 @@ module dice_backend
   logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
 
   // Precomputed pending reads/stores passed into dice_brt
-  logic [                    13:0] fdr_pending_reads_li;
-  logic [                    13:0] fdr_pending_stores_li;
+  logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_reads_li;
+  logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_stores_li;
   logic                            fdr_accept_li;
 
   // Store completion from mem_req_fifo
@@ -199,8 +199,12 @@ module dice_backend
   assign mem_dispatch_ready_lo = (mem_dispatch_cooldown_q == '0);
   assign dispatch_issue_req_lo = (|disp_tid_valid) && !prog_busy_lo
                                   && (!mem_stage_lo || mem_dispatch_ready_lo);
-  assign fdr_pending_reads_li = 14'($countones(fdr_data_li.real_active_mask) * fdr_payload_num_load_lo);
-  assign fdr_pending_stores_li = 14'($countones(fdr_data_li.real_active_mask) * fdr_data_li.metadata.num_stores);
+  assign fdr_pending_reads_li = PENDING_MEM_COUNT_WIDTH'(
+      $countones(fdr_data_li.real_active_mask) * fdr_payload_num_load_lo
+  );
+  assign fdr_pending_stores_li = PENDING_MEM_COUNT_WIDTH'(
+      $countones(fdr_data_li.real_active_mask) * fdr_data_li.metadata.num_stores
+  );
   assign cgra_cm0_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign cgra_cm1_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign prog_handshake_li = prog_pending_q & prog_ready_lo;
