@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """
-gen_memfile.py — Convert JSON test vectors to $readmemh-compatible .mem files.
+gen_memfile.py — Convert JSON test vectors into dice_core test collateral.
 
-Packs pgraph_meta_t and dice_cta_desc_t structs into hex memory files
-matching SystemVerilog packed struct bit layout (MSB-first).
+Emits:
+  - `*_cta_desc.mem`
+  - `*_meta.mem`
+  - `*_bitstream.mem`
+  - `*_runtime.json`
+
+The `.mem` files are `$readmemh`-compatible and match the current
+SystemVerilog packed struct bit layout. The runtime sidecar carries the
+remaining non-readmem collateral needed by `dice_core.sv`, namely mandatory
+CSR launch values and optional expected AXI writes.
 
 Usage:
     python3 gen_memfile.py kernel_simple.json [--mem-data-width 2048] [--output-dir .]
@@ -11,34 +19,110 @@ Usage:
 
 import argparse
 import json
+import math
+import re
 import sys
 from pathlib import Path
+from typing import Any
 
 
+SCRIPT_PATH = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_PATH.parents[2]
+RTL_ROOT = REPO_ROOT / "rtl"
+
+
+def sv_clog2(value: int) -> int:
+    if value <= 1:
+        return 0
+    return math.ceil(math.log2(value))
+
+
+def _strip_sv_comment(text: str) -> str:
+    return text.split("//", 1)[0].strip()
+
+
+def _load_sv_defines(path: Path) -> dict[str, int]:
+    defines: dict[str, int] = {}
+    define_re = re.compile(r"^\s*`define\s+(\w+)\s+(.+?)\s*$")
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = _strip_sv_comment(raw_line)
+        if not line:
+            continue
+        match = define_re.match(line)
+        if not match:
+            continue
+        name, value_text = match.groups()
+        defines[name] = int(value_text.strip(), 0)
+
+    return defines
+
+
+def _load_pkg_parameter(path: Path, name: str) -> int:
+    param_re = re.compile(
+        rf"\bparameter\s+int\s+{re.escape(name)}\s*=\s*([^;]+);"
+    )
+    text = path.read_text(encoding="utf-8")
+    match = param_re.search(text)
+    if not match:
+        raise KeyError(f"Could not find parameter {name} in {path}")
+    return int(_strip_sv_comment(match.group(1)), 0)
+
+
+RTL_DEFINES = _load_sv_defines(RTL_ROOT / "dice_config.vh")
+
 # =====================================================================
-# Bit-width constants (from dice_config.vh)
+# Bit-width constants (sourced from current dice_config.vh / dice_pkg.sv /
+# dice_frontend_pkg.sv instead of being hard-coded)
 # =====================================================================
-DICE_ADDR_WIDTH      = 32
-DICE_KERNEL_ID_WIDTH = 16   # clog2(65536)
-DICE_CTA_ID_WIDTH    = 16   # clog2(65536)
-DICE_TID_WIDTH       = 9    # clog2(512)
-DICE_SMEM_SIZE_WIDTH = 14   # clog2(16384)
-PR_INDEX_WIDTH       = 3    # clog2(8)
-PGRAPH_OFFSET_WIDTH  = 8    # clog2(256)
+DICE_ADDR_WIDTH = RTL_DEFINES["DICE_ADDR_WIDTH"]
+DICE_MAX_GRID_SIZE = RTL_DEFINES["DICE_MAX_GRID_SIZE"]
+DICE_NUM_MAX_THREADS_PER_CORE = RTL_DEFINES["DICE_NUM_MAX_THREADS_PER_CORE"]
+DICE_GPR_NUM = RTL_DEFINES["DICE_GPR_NUM"]
+DICE_PR_NUM = RTL_DEFINES["DICE_PR_NUM"]
+DICE_CR_NUM = RTL_DEFINES["DICE_CR_NUM"]
+DICE_CGRA_MEM_PORTS = RTL_DEFINES["DICE_CGRA_MEM_PORTS"]
+DICE_MAX_PGRAPHS = RTL_DEFINES["DICE_MAX_PGRAPHS"]
+
+DICE_CTA_ID_WIDTH = sv_clog2(DICE_MAX_GRID_SIZE)
+DICE_TID_WIDTH = sv_clog2(DICE_NUM_MAX_THREADS_PER_CORE)
+PR_INDEX_WIDTH = sv_clog2(DICE_PR_NUM)
+PGRAPH_OFFSET_WIDTH = sv_clog2(DICE_MAX_PGRAPHS)
 BITSTREAM_LENGTH_WIDTH = 8
-REG_NUM              = 32   # 16+8+8
-REG_INDEX_WIDTH      = 5    # clog2(32)
-LD_DEST_COUNT        = 3    # clog2(CGRA_MEM_PORTS-1)+1 = clog2(3)+1 = 3
-NUM_STORES_WIDTH     = 3    # clog2(CGRA_MEM_PORTS-1)+1
+REG_NUM = DICE_GPR_NUM + DICE_PR_NUM + DICE_CR_NUM
+REG_INDEX_WIDTH = sv_clog2(REG_NUM)
+LD_DEST_COUNT = DICE_CGRA_MEM_PORTS
+NUM_STORES_WIDTH = sv_clog2(DICE_CGRA_MEM_PORTS + 1)
+THREAD_COUNT_WIDTH = DICE_TID_WIDTH + 1
 
-# Bitstream memory configuration
-# WORD_SIZE in TB's VX_local_mem for bitstream = 64 bytes → 512 bits
-# VX_MEM_DATA_WIDTH = L3_LINE_SIZE * 8 = 64 * 8 = 512 bits (chunk size)
-VX_MEM_DATA_WIDTH    = 512
-BITSTREAM_MEM_DATA_WIDTH = VX_MEM_DATA_WIDTH  # 512 bits = 64 bytes
-# DICE_BITSTREAM_SIZE = 2048 bits (from dice_pkg.sv)
-DICE_BITSTREAM_SIZE  = 2048
-NUM_CHUNKS           = (DICE_BITSTREAM_SIZE + VX_MEM_DATA_WIDTH - 1) // VX_MEM_DATA_WIDTH  # = 4
+# Memory configuration from current TB / RTL
+# Metadata local memory uses WORD_SIZE=256 bytes in tb_dice_core.sv.
+METADATA_MEM_DATA_WIDTH  = 256 * 8
+# Bitstream fetch/load uses AxiDataWidth=16 in axi4_full_crossbar.sv.
+BITSTREAM_MEM_DATA_WIDTH = 16
+# Bitstream payload size from dice_pkg.sv.
+DICE_BITSTREAM_SIZE = _load_pkg_parameter(RTL_ROOT / "dice_pkg.sv", "DICE_BITSTREAM_SIZE")
+NUM_CHUNKS               = (DICE_BITSTREAM_SIZE + BITSTREAM_MEM_DATA_WIDTH - 1) // BITSTREAM_MEM_DATA_WIDTH
+
+# Packed struct widths from current packages
+BRANCH_META_WIDTH = 1 + 1 + PR_INDEX_WIDTH + 1 + 1 + PGRAPH_OFFSET_WIDTH + PGRAPH_OFFSET_WIDTH
+PGRAPH_META_WIDTH = (
+    DICE_ADDR_WIDTH
+    + BITSTREAM_LENGTH_WIDTH
+    + 2
+    + 8
+    + REG_NUM
+    + REG_NUM
+    + (LD_DEST_COUNT * REG_INDEX_WIDTH)
+    + NUM_STORES_WIDTH
+    + BRANCH_META_WIDTH
+    + 1
+    + 1
+)
+GRID_SIZE_WIDTH = 3 * (DICE_CTA_ID_WIDTH + 1)
+CTA_ID_WIDTH_TOTAL = 3 * DICE_CTA_ID_WIDTH
+KERNEL_DESC_WIDTH = GRID_SIZE_WIDTH + THREAD_COUNT_WIDTH + DICE_ADDR_WIDTH
+CTA_DESC_WIDTH = KERNEL_DESC_WIDTH + CTA_ID_WIDTH_TOTAL
 
 
 def parse_int(val):
@@ -81,7 +165,7 @@ class BitPacker:
 # =====================================================================
 
 def pack_branch_meta(bm):
-    """Pack branch_meta_t (23 bits)."""
+    """Pack current branch_meta_t."""
     p = BitPacker()
     p.push(parse_int(bm["branch_ena"]),              1)
     p.push(parse_int(bm["branch_uni"]),              1)
@@ -94,7 +178,7 @@ def pack_branch_meta(bm):
 
 
 def pack_pgraph_meta(meta):
-    """Pack pgraph_meta_t (157 bits)."""
+    """Pack current pgraph_meta_t."""
     p = BitPacker()
     p.push(parse_int(meta["bitstream_addr"]),    DICE_ADDR_WIDTH)
     p.push(parse_int(meta["bitstream_length"]),  BITSTREAM_LENGTH_WIDTH)
@@ -103,7 +187,7 @@ def pack_pgraph_meta(meta):
     p.push(parse_int(meta["in_regs_bitmap"]),    REG_NUM)
     p.push(parse_int(meta["out_regs_bitmap"]),   REG_NUM)
 
-    # ld_dest_regs: packed [2:0][4:0] = 3 entries of 5 bits each
+    # ld_dest_regs: packed [3:0][REG_INDEX_WIDTH-1:0] = 4 entries
     ld_regs = meta["ld_dest_regs"]
     for i in range(LD_DEST_COUNT):
         val = parse_int(ld_regs[i]) if i < len(ld_regs) else 0
@@ -122,7 +206,7 @@ def pack_pgraph_meta(meta):
 
 
 def pack_grid_size(gs):
-    """Pack dice_grid_size_t: 3 × (CTA_ID_WIDTH+1) = 51 bits."""
+    """Pack dice_grid_size_t."""
     p = BitPacker()
     p.push(parse_int(gs["x"]), DICE_CTA_ID_WIDTH + 1)
     p.push(parse_int(gs["y"]), DICE_CTA_ID_WIDTH + 1)
@@ -130,17 +214,8 @@ def pack_grid_size(gs):
     return p
 
 
-def pack_cta_size(cs):
-    """Pack dice_cta_size_t: 3 × (TID_WIDTH+1) = 30 bits."""
-    p = BitPacker()
-    p.push(parse_int(cs["x"]), DICE_TID_WIDTH + 1)
-    p.push(parse_int(cs["y"]), DICE_TID_WIDTH + 1)
-    p.push(parse_int(cs["z"]), DICE_TID_WIDTH + 1)
-    return p
-
-
 def pack_cta_id(cid):
-    """Pack dice_cta_id_t: 3 × CTA_ID_WIDTH = 48 bits."""
+    """Pack dice_cta_id_t."""
     p = BitPacker()
     p.push(parse_int(cid["x"]), DICE_CTA_ID_WIDTH)
     p.push(parse_int(cid["y"]), DICE_CTA_ID_WIDTH)
@@ -149,24 +224,37 @@ def pack_cta_id(cid):
 
 
 def pack_kernel_desc(kd):
-    """Pack dice_kernel_desc_t (175 bits)."""
-    p = BitPacker()
-    p.push(parse_int(kd["kernel_id"]), DICE_KERNEL_ID_WIDTH)
+    """Pack current dice_kernel_desc_t.
 
+    Current package shape:
+      - grid_size
+      - thread_count
+      - start_pc
+
+    For compatibility with older JSON vectors, if `thread_count` is absent and
+    `cta_size` is present, we derive `thread_count = x * y * z`.
+    """
+    p = BitPacker()
     gs = pack_grid_size(kd["grid_size"])
     p.push(gs.value, gs.total_bits)
-
-    cs = pack_cta_size(kd["cta_size"])
-    p.push(cs.value, cs.total_bits)
-
-    p.push(parse_int(kd["smem_per_cta"]), DICE_SMEM_SIZE_WIDTH)
-    p.push(parse_int(kd["start_pc"]),     DICE_ADDR_WIDTH)
-    p.push(parse_int(kd["arg_ptr"]),      DICE_ADDR_WIDTH)
+    if "thread_count" in kd:
+        thread_count = parse_int(kd["thread_count"])
+    elif "cta_size" in kd:
+        cta_size = kd["cta_size"]
+        thread_count = (
+            parse_int(cta_size["x"])
+            * parse_int(cta_size["y"])
+            * parse_int(cta_size["z"])
+        )
+    else:
+        raise KeyError("kernel_desc must provide 'thread_count' or legacy 'cta_size'")
+    p.push(thread_count, THREAD_COUNT_WIDTH)
+    p.push(parse_int(kd["start_pc"]), DICE_ADDR_WIDTH)
     return p
 
 
 def pack_cta_desc(desc):
-    """Pack dice_cta_desc_t (223 bits)."""
+    """Pack current dice_cta_desc_t."""
     p = BitPacker()
 
     kd = pack_kernel_desc(desc["kernel_desc"])
@@ -185,8 +273,8 @@ def pack_cta_desc(desc):
 def compute_mem_addr(pc, mem_data_width):
     """Compute the memory word address from a byte PC.
 
-    meta_fetch.sv does: addr = pc >> $clog2(VX_MEM_DATA_WIDTH / 8)
-    where VX_MEM_DATA_WIDTH is in bits and the shift converts byte-address
+    meta_fetch.sv does: addr = pc >> $clog2(METADATA_MEM_DATA_WIDTH / 8)
+    where METADATA_MEM_DATA_WIDTH is in bits and the shift converts byte-address
     to word-address.
     """
     word_bytes = mem_data_width // 8
@@ -198,7 +286,7 @@ def generate_meta_mem(pgraph_list, mem_data_width, output_path):
     with open(output_path, 'w') as f:
         f.write(f"// Auto-generated metadata memory file\n")
         f.write(f"// Memory data width: {mem_data_width} bits\n")
-        f.write(f"// pgraph_meta_t packed width: 157 bits\n\n")
+        f.write(f"// pgraph_meta_t packed width: {PGRAPH_META_WIDTH} bits\n\n")
 
         for entry in pgraph_list:
             pc = parse_int(entry["pc"])
@@ -228,29 +316,35 @@ def generate_cta_desc_mem(cta_desc, output_path):
         f.write(f"// Auto-generated CTA descriptor ($readmemh format)\n")
         f.write(f"// dice_cta_desc_t packed width: {packed.total_bits} bits "
                 f"(padded to {pad_width} bits)\n")
-        f.write(f"// kernel_id={kd['kernel_id']}, "
-                f"grid_size=({kd['grid_size']['x']},{kd['grid_size']['y']},{kd['grid_size']['z']}), "
-                f"cta_size=({kd['cta_size']['x']},{kd['cta_size']['y']},{kd['cta_size']['z']})\n")
-        f.write(f"// smem_per_cta={kd['smem_per_cta']}, "
-                f"start_pc={kd['start_pc']}, arg_ptr={kd['arg_ptr']}\n")
+        if "thread_count" in kd:
+            thread_count = kd["thread_count"]
+        else:
+            cta_size = kd.get("cta_size", {"x": 1, "y": 1, "z": 1})
+            thread_count = (
+                parse_int(cta_size["x"])
+                * parse_int(cta_size["y"])
+                * parse_int(cta_size["z"])
+            )
+        f.write(f"// grid_size=({kd['grid_size']['x']},{kd['grid_size']['y']},{kd['grid_size']['z']}), "
+                f"thread_count={thread_count}, start_pc={kd['start_pc']}\n")
         f.write(f"// cta_id=({cid['x']},{cid['y']},{cid['z']})\n\n")
         f.write(f"@00000000 {hex_data}\n")
 
     print(f"  Wrote {output_path} ({packed.total_bits} bits, padded to {pad_width})")
 
 
-def generate_bitstream_mem(pgraph_list, output_path):
+def generate_bitstream_mem(pgraph_list, stage_artifacts, output_path):
     """Generate bitstream.mem file with test-pattern data.
 
     For each pgraph entry, writes NUM_CHUNKS memory words at consecutive
     addresses starting from bitstream_addr.  The memory word width matches
-    BITSTREAM_MEM_DATA_WIDTH (4096 bits = 512 bytes), mirroring the
-    VX_local_mem WORD_SIZE=512 in the testbench.
+    BITSTREAM_MEM_DATA_WIDTH (currently 16 bits), matching the frontend
+    bitstream-fetch AXI data width.
 
     If a pgraph entry has a "bitstream_data" list (hex strings), those are
     used verbatim.  Otherwise an incremental counting pattern is generated.
     """
-    word_bytes = BITSTREAM_MEM_DATA_WIDTH // 8  # 512
+    word_bytes = BITSTREAM_MEM_DATA_WIDTH // 8
 
     with open(output_path, 'w') as f:
         f.write(f"// Auto-generated bitstream memory file\n")
@@ -262,6 +356,7 @@ def generate_bitstream_mem(pgraph_list, output_path):
             bs_addr = parse_int(entry["meta"]["bitstream_addr"])
             bs_len = parse_int(entry["meta"]["bitstream_length"])
             explicit_data = entry["meta"].get("bitstream_data", None)
+            stage_binary_words = _load_stage_bitstream_words(stage_artifacts, entry_idx)
 
             # Word address = byte address / word_bytes
             base_word_addr = bs_addr // word_bytes
@@ -277,15 +372,15 @@ def generate_bitstream_mem(pgraph_list, output_path):
                     raw = explicit_data[chunk_idx].replace("0x", "").replace("0X", "")
                     hex_chars = BITSTREAM_MEM_DATA_WIDTH // 4
                     hex_data = raw.zfill(hex_chars)[-hex_chars:]
+                elif stage_binary_words and chunk_idx < len(stage_binary_words):
+                    hex_data = stage_binary_words[chunk_idx]
                 else:
                     # Generate counting pattern:
-                    # Each 32-bit word = (entry_idx << 24) | (chunk_idx << 16) | byte_offset
+                    # Each memory word carries a compact deterministic pattern.
                     pattern = 0
-                    for b in range(word_bytes // 4):
-                        word32 = ((entry_idx & 0xFF) << 24) | \
-                                 ((chunk_idx & 0xFF) << 16) | \
-                                 (b & 0xFFFF)
-                        pattern = (pattern << 32) | word32
+                    pattern_word = ((entry_idx & 0xFF) << 8) | (chunk_idx & 0xFF)
+                    for _ in range(max(1, word_bytes // 2)):
+                        pattern = (pattern << 16) | pattern_word
                     hex_chars = BITSTREAM_MEM_DATA_WIDTH // 4
                     hex_data = format(pattern, f'0{hex_chars}x')
 
@@ -297,6 +392,98 @@ def generate_bitstream_mem(pgraph_list, output_path):
           f"{NUM_CHUNKS} chunks each)")
 
 
+def _load_stage_bitstream_words(stage_artifacts: Any, stage_idx: int) -> list[str] | None:
+    if not isinstance(stage_artifacts, list) or stage_idx >= len(stage_artifacts):
+        return None
+
+    stage_info = stage_artifacts[stage_idx]
+    if not isinstance(stage_info, dict):
+        return None
+
+    binary_output_path = stage_info.get("binary_output_path")
+    if not isinstance(binary_output_path, str) or binary_output_path == "":
+        return None
+
+    binary_path = Path(binary_output_path)
+    if not binary_path.exists():
+        return None
+
+    raw_bytes = binary_path.read_bytes()
+    words = []
+    for byte_idx in range(0, len(raw_bytes), 2):
+        lo_byte = raw_bytes[byte_idx]
+        hi_byte = raw_bytes[byte_idx + 1] if byte_idx + 1 < len(raw_bytes) else 0
+        words.append(f"{(hi_byte << 8) | lo_byte:04x}")
+    return words
+
+
+def _normalize_csr_values(raw_values: Any) -> dict[str, int]:
+    if raw_values is None:
+        raise ValueError("runtime.csr_values is required and must provide csrX0..csrX7")
+    if not isinstance(raw_values, dict):
+        raise ValueError("runtime.csr_values must be a JSON object")
+
+    normalized: dict[str, int] = {}
+    for idx in range(8):
+        key = f"csrX{idx}"
+        if key not in raw_values:
+            raise ValueError(f"runtime.csr_values is missing required key '{key}'")
+        normalized[key] = parse_int(raw_values[key])
+    return normalized
+
+
+def _normalize_mem_entries(entries: Any) -> list[dict[str, int]]:
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        raise ValueError("AXI memory entry list must be a JSON array")
+
+    normalized: list[dict[str, int]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError("Each AXI memory entry must be a JSON object")
+        if "addr" not in entry or "data" not in entry:
+            raise ValueError("Each AXI memory entry must include 'addr' and 'data'")
+        normalized_entry = {
+            "addr": parse_int(entry["addr"]),
+            "data": parse_int(entry["data"]),
+        }
+        if "strb" in entry:
+            normalized_entry["strb"] = parse_int(entry["strb"])
+        if "count" in entry:
+            normalized_entry["count"] = parse_int(entry["count"])
+        normalized.append(normalized_entry)
+    return normalized
+
+
+def generate_runtime_sidecar(data: dict[str, Any], output_path: Path) -> None:
+    """Generate sidecar JSON for dice_core runtime inputs and expectations."""
+    runtime = data.get("runtime", {})
+    if runtime is None:
+        runtime = {}
+    if not isinstance(runtime, dict):
+        raise ValueError("runtime must be a JSON object when present")
+
+    axi = runtime.get("axi", {})
+    if axi is None:
+        axi = {}
+    if not isinstance(axi, dict):
+        raise ValueError("runtime.axi must be a JSON object when present")
+
+    payload = {
+        "csr_values": _normalize_csr_values(runtime.get("csr_values")),
+        "axi": {
+            "expected_writes": _normalize_mem_entries(axi.get("expected_writes")),
+        },
+    }
+
+    with output_path.open("w", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+
+    print(f"  Wrote {output_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Convert JSON test vectors to $readmemh .mem files")
@@ -305,8 +492,8 @@ def main():
                         help="Output directory (default: same as JSON file)")
     args = parser.parse_args()
 
-    # Memory data width is fixed at 2048 bits (256-byte words)
-    mem_data_width = 2048
+    # Metadata local memory width is fixed by tb_dice_core.sv.
+    mem_data_width = METADATA_MEM_DATA_WIDTH
 
     json_path = Path(args.json_file)
     if not json_path.exists():
@@ -335,7 +522,15 @@ def main():
     # Generate bitstream memory file
     if "pgraph_metadata" in data:
         bs_path = output_dir / f"{stem}_bitstream.mem"
-        generate_bitstream_mem(data["pgraph_metadata"], bs_path)
+        generate_bitstream_mem(
+            data["pgraph_metadata"],
+            data.get("stage_artifacts"),
+            bs_path,
+        )
+
+    # Generate runtime sidecar for CSR and AXI collateral.
+    runtime_path = output_dir / f"{stem}_runtime.json"
+    generate_runtime_sidecar(data, runtime_path)
 
     print("Done.")
 

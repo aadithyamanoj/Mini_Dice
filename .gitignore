@@ -1,0 +1,35 @@
+# VCS
+simv
+simv.daidir/
+csrc/
+build/
+
+# Verilator
+obj_dir/
+
+# Verdi
+verdi/
+verdiLog/
+novas_dump.log
+novas.conf
+novas.rc
+sysBusyP*
+sysProgressP*
+
+# Simulation artifacts
+*.fsdb
+*.fsdb.*
+*.vpd
+*.vcd
+*.log
+*.key
+
+# Synthesis
+*.db
+*.DB
+*.sdb
+
+# OS / Editor
+.DS_Store
+*.swp
+*~

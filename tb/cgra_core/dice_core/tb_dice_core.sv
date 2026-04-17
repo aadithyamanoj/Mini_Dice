@@ -1,284 +1,425 @@
-// `timescale 1ns/1ps
+`timescale 1ns / 1ps
+
+import "DPI-C" context function void dice_core_tb_init(
+  input string cta_desc_mem_file,
+  input string meta_mem_file,
+  input string bitstream_mem_file,
+  input string runtime_json_file
+);
+import "DPI-C" context function int unsigned dice_core_tb_has_init_error();
+import "DPI-C" context function string dice_core_tb_get_init_error();
+import "DPI-C" context function int unsigned dice_core_tb_get_cta_desc_word(
+  input int unsigned word_idx
+);
+import "DPI-C" context function int unsigned dice_core_tb_get_csr(input int unsigned csr_idx);
+import "DPI-C" context function int unsigned dice_core_tb_meta_read16(input int unsigned byte_addr);
+import "DPI-C" context function int unsigned dice_core_tb_bitstream_read16(
+  input int unsigned byte_addr
+);
+import "DPI-C" context function int unsigned dice_core_tb_axi_read16(input int unsigned addr);
+import "DPI-C" context function void dice_core_tb_record_axi_write(
+  input int unsigned addr,
+  input int unsigned data,
+  input int unsigned strb
+);
+import "DPI-C" context function int unsigned dice_core_tb_check_done();
+
 `include "dice_define.vh"
 
 module tb_dice_core;
   import dice_pkg::*;
   import dice_frontend_pkg::*;
-  import VX_gpu_pkg::*;
-
-  // =========================================================================
-  // Parameters
-  // =========================================================================
-  localparam int TimeoutCycles = 1000;
-  localparam int ClkPeriod     = 10;
-
-  // Test vector configuration
-  localparam string TEST_VECTOR_FILE = "kernel_simple";
-  localparam int    MEM_DATA_WIDTH   = 2048; // Must match metacache_mem_if DATA_SIZE * 8
-
-  // =========================================================================
-  // Signals
-  // =========================================================================
-  logic clk;
-  logic reset;
+  import DE_pkg::*;
+  import axi4_xbar_pkg::*;
 
 
-  // =========================================================================
-  // Interfaces
-  // =========================================================================
-  cta_dispatch_if cta_dispatch_if_inst();
-  cta_complete_if cta_complete_if_inst();
-
-  VX_mem_bus_if #(
-      .DATA_SIZE(256), //change
-      .TAG_WIDTH(DICE_ADDR_WIDTH)
-  ) metacache_mem_if [1] ();
-
-  VX_mem_bus_if #(
-      .DATA_SIZE(VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8), // 512 bits = 64 bytes
-      .TAG_WIDTH(DICE_ADDR_WIDTH)
-  ) bitstream_cache_mem_if [1] ();
+  initial begin
+    $fsdbDumpfile("waveform.fsdb");
+    $fsdbDumpvars(0, tb_dice_core, "+struct", "+mda");
+  end
 
 
+  localparam int ClkPeriod = 10;
+  localparam int TimeoutCycles = 50000;
+  localparam int MetaBeatBytes = AxiDataWidth / 8;
+  localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
+  localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
+  localparam string DefaultTestVector = "full_mul_array_test_vector";
+  localparam string DefaultTestVectorDir = "tb/test_vectors";
 
-  // =========================================================================
-  // Memory Instantiation
-  // =========================================================================
-  VX_local_mem #(
-    .SIZE      (1 << 26),
-    .NUM_REQS  (1),
-    .NUM_BANKS (1),
-    .ADDR_WIDTH(19),
-    .WORD_SIZE (256),
-    .TAG_WIDTH (DICE_ADDR_WIDTH),
-    .OUT_BUF   (0)
-  ) u_meta_mem (
-      .clk        (clk),
-      .reset      (reset),
-      .mem_bus_if (metacache_mem_if)
-  );
-
-  VX_local_mem #(
-    .SIZE      (1 << 26),
-    .NUM_REQS  (1),
-    .NUM_BANKS (1),
-    .ADDR_WIDTH(19),
-    .WORD_SIZE (VX_gpu_pkg::VX_MEM_DATA_WIDTH / 8),
-    .TAG_WIDTH (DICE_ADDR_WIDTH),
-    .OUT_BUF   (0)
-  ) u_bitstream_mem (
-      .clk        (clk),
-      .reset      (reset),
-      .mem_bus_if (bitstream_cache_mem_if)
-  );
-
-
-  // =========================================================================
-  // Timeout Counter
-  // =========================================================================
+  logic clk_i;
+  logic rst_i;
   int cycle_count;
-  always_ff @(posedge clk or posedge reset) begin
-    if (reset) cycle_count <= 0;
-    else begin
+
+  string test_vector_name;
+  string test_vector_stem;
+  string test_vector_dir;
+  string cta_desc_mem_file;
+  string meta_mem_file;
+  string bitstream_mem_file;
+  string runtime_json_file;
+
+  cta_if cta_if_inst ();
+
+  slv_req_t                                        mfetch_req_o;
+  slv_resp_t                                       mfetch_resp_i;
+  slv_req_t                                        bsfetch_req_o;
+  slv_resp_t                                       bsfetch_resp_i;
+
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX0_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX1_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX2_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX3_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX4_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX5_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX6_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] csrX7_i;
+
+  logic                                            cgra_prog_dout_o;
+  logic                                            cgra_prog_we_o;
+
+  logic           [       DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o;
+  logic                                            axi_awvalid_o;
+  logic                                            axi_awready_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] axi_wdata_o;
+  logic           [                           1:0] axi_wstrb_o;
+  logic                                            axi_wvalid_o;
+  logic                                            axi_wready_i;
+  logic           [                           1:0] axi_bresp_i;
+  logic                                            axi_bvalid_i;
+  logic                                            axi_bready_o;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] axi_araddr_o;
+  logic                                            axi_arvalid_o;
+  logic                                            axi_arready_i;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] axi_rdata_i;
+  logic           [                           1:0] axi_rresp_i;
+  logic                                            axi_rvalid_i;
+  logic                                            axi_rready_o;
+
+  logic                                            mfetch_active_q;
+  logic           [           DICE_ADDR_WIDTH-1:0] mfetch_addr_q;
+  logic           [                           7:0] mfetch_len_q;
+  logic           [                           7:0] mfetch_beat_idx_q;
+  logic           [ $bits(mfetch_req_o.ar.id)-1:0] mfetch_id_q;
+
+  logic                                            bsfetch_active_q;
+  logic           [           DICE_ADDR_WIDTH-1:0] bsfetch_addr_q;
+  logic           [                           7:0] bsfetch_len_q;
+  logic           [                           7:0] bsfetch_beat_idx_q;
+  logic           [$bits(bsfetch_req_o.ar.id)-1:0] bsfetch_id_q;
+
+  logic                                            aw_seen_q;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] awaddr_q;
+  logic                                            w_seen_q;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] wdata_q;
+  logic           [                           1:0] wstrb_q;
+
+  dice_cta_desc_t                                  launch_desc;
+
+  dice_core u_dut (
+      .clk_i(clk_i),
+      .rst_i(rst_i),
+      .cta_if_inst(cta_if_inst),
+      .mfetch_req_o(mfetch_req_o),
+      .mfetch_resp_i(mfetch_resp_i),
+      .bsfetch_req_o(bsfetch_req_o),
+      .bsfetch_resp_i(bsfetch_resp_i),
+      .csrX0_i(csrX0_i),
+      .csrX1_i(csrX1_i),
+      .csrX2_i(csrX2_i),
+      .csrX3_i(csrX3_i),
+      .csrX4_i(csrX4_i),
+      .csrX5_i(csrX5_i),
+      .csrX6_i(csrX6_i),
+      .csrX7_i(csrX7_i),
+      .cgra_prog_dout_o(cgra_prog_dout_o),
+      .cgra_prog_we_o(cgra_prog_we_o),
+      .axi_awaddr_o(axi_awaddr_o),
+      .axi_awvalid_o(axi_awvalid_o),
+      .axi_awready_i(axi_awready_i),
+      .axi_wdata_o(axi_wdata_o),
+      .axi_wstrb_o(axi_wstrb_o),
+      .axi_wvalid_o(axi_wvalid_o),
+      .axi_wready_i(axi_wready_i),
+      .axi_bresp_i(axi_bresp_i),
+      .axi_bvalid_i(axi_bvalid_i),
+      .axi_bready_o(axi_bready_o),
+      .axi_araddr_o(axi_araddr_o),
+      .axi_arvalid_o(axi_arvalid_o),
+      .axi_arready_i(axi_arready_i),
+      .axi_rdata_i(axi_rdata_i),
+      .axi_rresp_i(axi_rresp_i),
+      .axi_rvalid_i(axi_rvalid_i),
+      .axi_rready_o(axi_rready_o)
+  );
+
+  initial begin
+    clk_i = 1'b0;
+    forever #(ClkPeriod / 2) clk_i = ~clk_i;
+  end
+
+  always_ff @(posedge clk_i or posedge rst_i) begin
+    if (rst_i) begin
+      cycle_count <= 0;
+    end else begin
       cycle_count <= cycle_count + 1;
       if (cycle_count >= TimeoutCycles) begin
-         $error("TIMEOUT");
-         $finish;
+        $fatal(1, "TIMEOUT after %0d cycles", TimeoutCycles);
       end
     end
   end
 
-  // =========================================================================
-  // DUT Instantiation
-  // =========================================================================
-  dice_core u_dut (
-      .clk_i                   (clk),
-      .rst_i                   (reset),
-      .cta_dispatch_if_inst    (cta_dispatch_if_inst),
-      .cta_complete_if_inst    (cta_complete_if_inst),
-      .metacache_mem_if        (metacache_mem_if[0]),
-      .bitstream_cache_mem_if  (bitstream_cache_mem_if[0])
-  );
-  // =========================================================================
-  // Memory/Cache Instantiation
-  // =========================================================================
-  /*
-  smem #(
-    .DATA_W(256),
-    .ADDR_W(MEM_ADDR_WIDTH),
-    .TAG_W(MEM_TAG_WIDTH)
-  ) mem_inst (
-    .clk(clk),
-    .rst(rst),
-    .mem_req_valid(mem_req_valid),
-    .mem_req_ready(mem_req_ready),
-    .mem_req_rw(mem_req_rw),
-    .mem_req_addr(mem_req_addr),
-    .mem_req_data(mem_req_data),
-    .mem_req_byteen(mem_req_byteen),
-    .mem_req_tag(mem_req_tag),
-    .mem_rsp_valid(mem_rsp_valid),
-    .mem_rsp_ready(mem_rsp_ready),
-    .mem_rsp_data(mem_rsp_data),
-    .mem_rsp_tag(mem_rsp_tag)
-  );
+  function automatic bit has_path_component(input string path);
+    if (path.len() == 0) begin
+      return 1'b0;
+    end
 
-  VX_cache_top #(
-        .NUM_REQS(1),          
-        .LINE_SIZE(CACHE_LINE_SIZE), 
-        .NUM_BANKS(1),         
-        .TAG_WIDTH(OUTCMD_TAG_WIDTH),
-        .WORD_SIZE(CACHE_LINE_SIZE), 
-        .MEM_TAG_WIDTH(MEM_TAG_WIDTH)
-    ) cache_inst (
-        .clk(clk),
-        .reset(rst),
+    if (path.getc(0) == "/") begin
+      return 1'b1;
+    end
 
-        .core_req_valid('{outcmd_valid}),
-        .core_req_rw('{outcmd_write_enable}),
-        .core_req_byteen('{~outcmd_write_mask}), 
-        .core_req_addr('{outcmd_address[DICE_ADDR_WIDTH-1 : BASE_ADDRESS_OFFSET]}),     
-        .core_req_data('{outcmd_write_data}),   
-        .core_req_tag('{core_req_tag}),
-        .core_req_ready('{core_req_ready}),
-        .core_req_flags('{default: 0}),
+    for (int idx = 0; idx < path.len(); idx++) begin
+      if (path.getc(idx) == "/") begin
+        return 1'b1;
+      end
+    end
 
-        .core_rsp_valid('{core_rsp_valid}),
-        .core_rsp_data('{core_rsp_data}), 
-        .core_rsp_tag('{core_rsp_tag}),
-        .core_rsp_ready('{core_rsp_ready}),
+    return 1'b0;
+  endfunction
 
-        .mem_req_valid('{mem_req_valid}),
-        .mem_req_rw('{mem_req_rw}),
-        .mem_req_byteen('{mem_req_byteen}),
-        .mem_req_addr('{mem_req_addr}),
-        .mem_req_data('{mem_req_data}),
-        .mem_req_tag('{mem_req_tag}),
-        .mem_req_ready('{mem_req_ready}), 
-
-        .mem_rsp_valid('{mem_rsp_valid}), 
-        .mem_rsp_data('{mem_rsp_data}),
-        .mem_rsp_tag('{mem_rsp_tag}),
-        .mem_rsp_ready('{mem_rsp_ready})
-    );
-  */
-  // =========================================================================
-  // Clock Generation
-  // =========================================================================
-  initial begin
-    clk = 1'b0;
-    forever #(ClkPeriod / 2) clk = ~clk;
-  end
-
-  // =========================================================================
-  // Helper Tasks
-  // =========================================================================
-
-  //Initializes inputs to the DUT
-  task automatic init_inputs();
-    cta_dispatch_if_inst.valid = 1'b0;
-    cta_dispatch_if_inst.data  = '0;
-    cta_complete_if_inst.ready = 1'b1;
+  task automatic init_paths();
+    begin
+      if (!$value$plusargs("TEST_VECTOR=%s", test_vector_name)) begin
+        test_vector_name = DefaultTestVector;
+      end
+      if (has_path_component(test_vector_name)) begin
+        test_vector_stem = test_vector_name;
+      end else begin
+        if (!$value$plusargs("TEST_VECTOR_DIR=%s", test_vector_dir)) begin
+          test_vector_dir = DefaultTestVectorDir;
+        end
+        test_vector_stem = {test_vector_dir, "/", test_vector_name};
+      end
+      cta_desc_mem_file  = {test_vector_stem, "_cta_desc.mem"};
+      meta_mem_file      = {test_vector_stem, "_meta.mem"};
+      bitstream_mem_file = {test_vector_stem, "_bitstream.mem"};
+      runtime_json_file  = {test_vector_stem, "_runtime.json"};
+    end
   endtask
 
-  //Resets the DUT
+  task automatic init_collateral();
+    logic [CTA_DESC_WORDS*32-1:0] packed_desc;
+    begin
+      packed_desc = '0;
+      dice_core_tb_init(cta_desc_mem_file, meta_mem_file, bitstream_mem_file, runtime_json_file);
+      if (dice_core_tb_has_init_error()) begin
+        $fatal(1, "[TB] DPI init failed: %s", dice_core_tb_get_init_error());
+      end
+
+      for (int word_idx = 0; word_idx < CTA_DESC_WORDS; word_idx++) begin
+        packed_desc[word_idx*32+:32] = dice_core_tb_get_cta_desc_word(word_idx);
+      end
+      launch_desc = dice_cta_desc_t'(packed_desc[CTA_DESC_BITS-1:0]);
+
+      csrX0_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(0));
+      csrX1_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(1));
+      csrX2_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(2));
+      csrX3_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(3));
+      csrX4_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(4));
+      csrX5_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(5));
+      csrX6_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(6));
+      csrX7_i = DICE_REG_DATA_WIDTH'(dice_core_tb_get_csr(7));
+
+      $display("[TB] Using test vector stem: %s", test_vector_stem);
+      $display("[TB] CTA start_pc=%0d grid=(%0d,%0d,%0d) thread_count=%0d cta_id=(%0d,%0d,%0d)",
+               launch_desc.kernel_desc.start_pc, launch_desc.kernel_desc.grid_size.x,
+               launch_desc.kernel_desc.grid_size.y, launch_desc.kernel_desc.grid_size.z,
+               launch_desc.kernel_desc.thread_count, launch_desc.cta_id.x, launch_desc.cta_id.y,
+               launch_desc.cta_id.z);
+    end
+  endtask
+
   task automatic reset_dut();
-    reset = 1'b1;
-    repeat (10) @(posedge clk);
-    reset = 1'b0;
+    begin
+      rst_i = 1'b1;
+
+      cta_if_inst.dispatch_valid = 1'b0;
+      cta_if_inst.dispatch_data = '0;
+      cta_if_inst.complete_ready = 1'b1;
+
+      csrX0_i = '0;
+      csrX1_i = '0;
+      csrX2_i = '0;
+      csrX3_i = '0;
+      csrX4_i = '0;
+      csrX5_i = '0;
+      csrX6_i = '0;
+      csrX7_i = '0;
+
+      repeat (10) @(posedge clk_i);
+      rst_i = 1'b0;
+      @(posedge clk_i);
+    end
   endtask
 
-  //Dispatches CTA into the core with specified description
   task automatic dispatch_cta(input dice_cta_desc_t desc);
-    cta_dispatch_if_inst.valid = 1'b1;
-    cta_dispatch_if_inst.data  = desc;
-
-    do begin
-      @(posedge clk);
-    end while (!cta_dispatch_if_inst.ready);
-
-    cta_dispatch_if_inst.valid = 1'b0;
+    begin
+      cta_if_inst.dispatch_valid = 1'b1;
+      cta_if_inst.dispatch_data  = desc;
+      do begin
+        @(posedge clk_i);
+      end while (!cta_if_inst.dispatch_ready);
+      cta_if_inst.dispatch_valid = 1'b0;
+    end
   endtask
 
-  // Load CTA descriptor from generated .mem file (produced by gen_memfile.py)
-  localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
-  localparam int CTA_DESC_PAD  = ((CTA_DESC_BITS + 3) / 4) * 4; // nibble-aligned
+  always_comb begin
+    mfetch_resp_i = '0;
+    mfetch_resp_i.ar_ready = !mfetch_active_q;
+    if (mfetch_active_q) begin
+      mfetch_resp_i.r_valid = 1'b1;
+      mfetch_resp_i.r.id = mfetch_id_q;
+      mfetch_resp_i.r.data = AxiDataWidth'(
+          dice_core_tb_meta_read16(int'(mfetch_addr_q) + int'(mfetch_beat_idx_q) * MetaBeatBytes));
+      mfetch_resp_i.r.last = (mfetch_beat_idx_q == mfetch_len_q);
+    end
+  end
 
-  task automatic load_cta_desc(
-    input  string          mem_file,
-    output dice_cta_desc_t desc
-  );
-    logic [CTA_DESC_PAD-1:0] cta_mem [0:0];
-    $display("Loading CTA descriptor from %s", mem_file);
-    $readmemh(mem_file, cta_mem);
-    desc = dice_cta_desc_t'(cta_mem[0][CTA_DESC_BITS-1:0]);
-    $display("  kernel_id=%0d, grid=(%0d,%0d,%0d), cta_size=(%0d,%0d,%0d), cta_id=(%0d,%0d,%0d)",
-             desc.kernel_desc.kernel_id,
-             desc.kernel_desc.grid_size.x, desc.kernel_desc.grid_size.y, desc.kernel_desc.grid_size.z,
-             desc.kernel_desc.cta_size.x,  desc.kernel_desc.cta_size.y,  desc.kernel_desc.cta_size.z,
-             desc.cta_id.x, desc.cta_id.y, desc.cta_id.z);
-  endtask
+  always_ff @(posedge clk_i or posedge rst_i) begin
+    if (rst_i) begin
+      mfetch_active_q <= 1'b0;
+      mfetch_addr_q <= '0;
+      mfetch_len_q <= '0;
+      mfetch_beat_idx_q <= '0;
+      mfetch_id_q <= '0;
+    end else begin
+      if (mfetch_req_o.ar_valid && mfetch_resp_i.ar_ready) begin
+        mfetch_active_q <= 1'b1;
+        mfetch_addr_q <= DICE_ADDR_WIDTH'(mfetch_req_o.ar.addr);
+        mfetch_len_q <= mfetch_req_o.ar.len;
+        mfetch_beat_idx_q <= '0;
+        mfetch_id_q <= mfetch_req_o.ar.id;
+      end else if (mfetch_resp_i.r_valid && mfetch_req_o.r_ready) begin
+        if (mfetch_resp_i.r.last) begin
+          mfetch_active_q <= 1'b0;
+        end else begin
+          mfetch_beat_idx_q <= mfetch_beat_idx_q + 1'b1;
+        end
+      end
+    end
+  end
 
+  always_comb begin
+    bsfetch_resp_i = '0;
+    bsfetch_resp_i.ar_ready = !bsfetch_active_q;
+    if (bsfetch_active_q) begin
+      bsfetch_resp_i.r_valid = 1'b1;
+      bsfetch_resp_i.r.id = bsfetch_id_q;
+      bsfetch_resp_i.r.data =
+          AxiDataWidth'(dice_core_tb_bitstream_read16(
+                        int'(bsfetch_addr_q) + int'(bsfetch_beat_idx_q) * MetaBeatBytes));
+      bsfetch_resp_i.r.last = (bsfetch_beat_idx_q == bsfetch_len_q);
+    end
+  end
 
-  // Load metadata .mem file into VX_local_mem via $readmemh backdoor
-  task automatic load_metadata(string mem_file);
-    $display("Loading metadata from %s", mem_file);
-    $readmemh(mem_file, u_meta_mem.g_data_store[0].lmem_store.ram);
-  endtask
+  always_ff @(posedge clk_i or posedge rst_i) begin
+    if (rst_i) begin
+      bsfetch_active_q <= 1'b0;
+      bsfetch_addr_q <= '0;
+      bsfetch_len_q <= '0;
+      bsfetch_beat_idx_q <= '0;
+      bsfetch_id_q <= '0;
+    end else begin
+      if (bsfetch_req_o.ar_valid && bsfetch_resp_i.ar_ready) begin
+        bsfetch_active_q <= 1'b1;
+        bsfetch_addr_q <= DICE_ADDR_WIDTH'(bsfetch_req_o.ar.addr);
+        bsfetch_len_q <= bsfetch_req_o.ar.len;
+        bsfetch_beat_idx_q <= '0;
+        bsfetch_id_q <= bsfetch_req_o.ar.id;
+      end else if (bsfetch_resp_i.r_valid && bsfetch_req_o.r_ready) begin
+        if (bsfetch_resp_i.r.last) begin
+          bsfetch_active_q <= 1'b0;
+        end else begin
+          bsfetch_beat_idx_q <= bsfetch_beat_idx_q + 1'b1;
+        end
+      end
+    end
+  end
 
-  // Load bitstream .mem file into VX_local_mem via $readmemh backdoor
-  task automatic load_bitstream(string mem_file);
-    $display("Loading bitstream from %s", mem_file);
-    $readmemh(mem_file, u_bitstream_mem.g_data_store[0].lmem_store.ram);
-  endtask
+  always_ff @(posedge clk_i or posedge rst_i) begin
+    if (rst_i) begin
+      aw_seen_q <= 1'b0;
+      awaddr_q <= '0;
+      w_seen_q <= 1'b0;
+      wdata_q <= '0;
+      wstrb_q <= '0;
+      axi_awready_i <= 1'b0;
+      axi_wready_i <= 1'b0;
+      axi_bvalid_i <= 1'b0;
+      axi_bresp_i <= 2'b00;
+      axi_arready_i <= 1'b0;
+      axi_rvalid_i <= 1'b0;
+      axi_rdata_i <= '0;
+      axi_rresp_i <= 2'b00;
+    end else begin
+      axi_awready_i <= 1'b1;
+      axi_wready_i  <= 1'b1;
+      axi_arready_i <= !axi_rvalid_i;
 
-  // Load all .mem files from a test vector and dispatch CTA
-  // NOTE: .mem files must be pre-generated by `make gen` before running sim
-  task automatic dispatch_cta_with_metadata(
-    input string json_basename  // e.g., "kernel_simple"
-  );
-    dice_cta_desc_t desc;
+      if (axi_awvalid_o && axi_awready_i) begin
+        aw_seen_q <= 1'b1;
+        awaddr_q  <= axi_awaddr_o;
+      end
 
-    // 1) Load generated metadata into memory backdoor
-    load_metadata($sformatf("%s_meta.mem", json_basename));
+      if (axi_wvalid_o && axi_wready_i) begin
+        w_seen_q <= 1'b1;
+        wdata_q  <= axi_wdata_o;
+        wstrb_q  <= axi_wstrb_o;
+      end
 
-    // 2) Load generated bitstream data into memory backdoor
-    load_bitstream($sformatf("%s_bitstream.mem", json_basename));
+      if (!axi_bvalid_i && aw_seen_q && w_seen_q) begin
+        dice_core_tb_record_axi_write(int'(awaddr_q), int'(wdata_q), int'(wstrb_q));
+        axi_bvalid_i <= 1'b1;
+        aw_seen_q <= 1'b0;
+        w_seen_q <= 1'b0;
+      end else if (axi_bvalid_i && axi_bready_o) begin
+        axi_bvalid_i <= 1'b0;
+      end
 
-    // 3) Load CTA descriptor from generated .mem file
-    load_cta_desc($sformatf("%s_cta_desc.mem", json_basename), desc);
+      if (!axi_rvalid_i && axi_arvalid_o && axi_arready_i) begin
+        axi_rvalid_i <= 1'b1;
+        axi_rdata_i  <= DICE_REG_DATA_WIDTH'(dice_core_tb_axi_read16(int'(axi_araddr_o)));
+      end else if (axi_rvalid_i && axi_rready_o) begin
+        axi_rvalid_i <= 1'b0;
+      end
+    end
+  end
 
-    // 4) Dispatch the CTA
-    $display("[dispatch_cta_with_metadata] Dispatching CTA for %s", json_basename);
-    dispatch_cta(desc);
-  endtask
-
-
-  // =========================================================================
-  // Stimulus
-  // =========================================================================
   initial begin
-    $display("dice_core testbench");
+    int unsigned check_ok;
 
-    init_inputs();
+    $display("tb_dice_core");
+
+    init_paths();
     reset_dut();
+    init_collateral();
 
-    repeat (10) @(posedge clk);
+    repeat (10) @(posedge clk_i);
+    dispatch_cta(launch_desc);
 
-    // Load metadata, bitstream, CTA descriptor from test vector and dispatch
-    dispatch_cta_with_metadata(TEST_VECTOR_FILE);
+    wait (cta_if_inst.complete_valid === 1'b1);
+    $display("[TB] CTA complete observed at cycle %0d", cycle_count);
+    repeat (5) @(posedge clk_i);
 
-    repeat (100) @(posedge clk);
+    check_ok = dice_core_tb_check_done();
+    if (check_ok != 0) begin
+      $display("PASS: dice_core completed and DPI checks passed");
+      $finish;
+    end
 
-    $display("TB Done");
-    $finish;
+    $display("FAIL: dice_core runtime checks reported an error (see AXI WRITE VERIFICATION DIFF above)");
+    $fatal(1, "FAIL: AXI write mismatch - see diff above");
   end
 
-`ifdef FSDB
-  initial begin
-    $fsdbDumpfile("tb_dice_core.fsdb");
-    $fsdbDumpvars(0, tb_dice_core, "+struct", "+mda"); //include structs and multi-dimensional arrays
-  end
-`endif
 
 endmodule
