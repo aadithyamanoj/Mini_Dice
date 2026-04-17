@@ -120,20 +120,22 @@ module dice_backend
   //credit signals
 
   logic                                cgra_credit_ready_lo;
+  logic                                mem_bundle_credit_ready_lo;
   logic                                load_credit_fire_lo;
+  logic                                mem_bundle_credit_fire_lo;
   logic [ $clog2(NUM_MEM_PORTS+1)-1:0] peek_num_load_lo;
   logic [ $clog2(NUM_MEM_PORTS+1)-1:0] fdr_payload_num_load_lo;
   logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_up_li;
   logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_need_li;
+  logic                                mem_bundle_credit_up_li;
+  logic                                mem_bundle_credit_need_li;
 
   logic                                mem_req_fifo_ready_lo;
   logic                                mem_req_fifo_pop_lo;
+  logic                                mem_req_bundle_pop_lo;
   logic                                mem_stage_lo;
-  logic                                mem_dispatch_ready_lo;
   logic                                dispatch_issue_req_lo;
   logic                                disp_pop;
-  localparam int MemDispatchCooldownWidth = $clog2(NUM_MEM_PORTS + 1);
-  logic [MemDispatchCooldownWidth-1:0] mem_dispatch_cooldown_q;
 
   localparam int CgraPipeCountWidth = $clog2(DICE_NUM_MAX_THREADS_PER_CORE + 1) + 1;
   logic [  CgraPipeCountWidth-1:0] cgra_pipeline_count_q;
@@ -196,9 +198,7 @@ module dice_backend
       fdr_data_li.metadata.ld_dest_regs, fdr_data_li.metadata.num_stores
   );
   assign mem_stage_lo = (peek_num_load_lo != '0) || (fdr_active_li.metadata.num_stores != '0);
-  assign mem_dispatch_ready_lo = (mem_dispatch_cooldown_q == '0);
-  assign dispatch_issue_req_lo = (|disp_tid_valid) && !prog_busy_lo
-                                  && (!mem_stage_lo || mem_dispatch_ready_lo);
+  assign dispatch_issue_req_lo = (|disp_tid_valid) && !prog_busy_lo;
   assign fdr_pending_reads_li = PENDING_MEM_COUNT_WIDTH'(
       $countones(fdr_data_li.real_active_mask) * fdr_payload_num_load_lo
   );
@@ -261,16 +261,6 @@ module dice_backend
     end
   end
 
-  always_ff @(posedge clk_i) begin
-    if (rst_i) begin
-      mem_dispatch_cooldown_q <= '0;
-    end else if (disp_pop && mem_stage_lo) begin
-      mem_dispatch_cooldown_q <= MemDispatchCooldownWidth'(NUM_MEM_PORTS - 1);
-    end else if (mem_dispatch_cooldown_q != '0) begin
-      mem_dispatch_cooldown_q <= mem_dispatch_cooldown_q - 1'b1;
-    end
-  end
-
   // =========================================================================
   // Block Retire Table (BCT insert pipeline + retire FIFO + serializer + BCT)
   // =========================================================================
@@ -310,7 +300,6 @@ module dice_backend
   // Dispatcher
   // =========================================================================
 
-  assign disp_pop = load_credit_fire_lo;
   assign rd_tid_valid = disp_tid_valid & {NUM_LANES{disp_pop}};
 
   dispatcher u_dispatcher (
@@ -333,13 +322,17 @@ module dice_backend
 
 
   // =========================================================================
-  // Load credit counter
+  // Dispatch credit counters
+  // load_credit_* caps outstanding load work.
+  // mem_bundle_credit_* reserves slots in the pre-PISO wide bundle FIFO.
   // =========================================================================
 
   assign load_credit_up_li = {{($bits(load_credit_up_li) - 1) {1'b0}}, mem_req_fifo_pop_lo};
   assign load_credit_need_li = {
     {($bits(load_credit_need_li) - $bits(peek_num_load_lo)) {1'b0}}, peek_num_load_lo
   };
+  assign mem_bundle_credit_up_li = mem_req_bundle_pop_lo;
+  assign mem_bundle_credit_need_li = mem_stage_lo;
 
   dice_ready_to_credit_flow_converter #(
       .credit_initial_p(NUM_CREDITS),
@@ -348,11 +341,25 @@ module dice_backend
   ) credit_ctrl (
       .clk_i(clk_i),
       .reset_i(rst_i),
-      .v_i(dispatch_issue_req_lo),
+      .v_i(dispatch_issue_req_lo & (!mem_stage_lo || mem_bundle_credit_ready_lo)),
       .ready_o(cgra_credit_ready_lo),
       .v_o(load_credit_fire_lo),
       .credit_i(load_credit_up_li),
       .credit_need_i(load_credit_need_li)
+  );
+
+  dice_ready_to_credit_flow_converter #(
+      .credit_initial_p(MEM_REQ_BUNDLE_FIFO_DEPTH),
+      .credit_max_val_p(MEM_REQ_BUNDLE_FIFO_DEPTH),
+      .max_step_p(1)
+  ) mem_bundle_credit_ctrl (
+      .clk_i(clk_i),
+      .reset_i(rst_i),
+      .v_i(dispatch_issue_req_lo & (!mem_stage_lo || cgra_credit_ready_lo)),
+      .ready_o(mem_bundle_credit_ready_lo),
+      .v_o(mem_bundle_credit_fire_lo),
+      .credit_i(mem_bundle_credit_up_li),
+      .credit_need_i(mem_bundle_credit_need_li)
   );
 
 
@@ -490,6 +497,7 @@ module dice_backend
 
       .rsp_data_ready_i(ldst_ready_lo),
       .rsp_special_ready_i(ldst_special_ready_lo),
+      .bundle_pop_o(mem_req_bundle_pop_lo),
       .pop_o(mem_req_fifo_pop_lo),
       .rsp_valid_o(mem_rsp_valid_lo),
       .rsp_tid_o(mem_rsp_tid_lo),
@@ -500,6 +508,8 @@ module dice_backend
       .store_pop_o(store_pop_lo),
       .store_pop_e_block_id_o(store_pop_e_block_id_lo)
   );
+
+  assign disp_pop = load_credit_fire_lo & mem_bundle_credit_fire_lo;
 
 `ifndef SYNTHESIS
   logic dispatch_busy_prev_q;
@@ -539,11 +549,11 @@ module dice_backend
         $display("[BE:dice_backend] t=%0t dispatcher became idle", $time);
       end
 
-      if (load_credit_fire_lo) begin
+      if (disp_pop) begin
         $display(
-            "[BE:dice_backend] t=%0t dispatching threads: tids_valid=%b loads_needed=%0d credit_refund=%0d mem_stage=%0b mem_cooldown=%0d",
+            "[BE:dice_backend] t=%0t dispatching threads: tids_valid=%b loads_needed=%0d load_credit_refund=%0d mem_stage=%0b bundle_refund=%0b load_ready=%0b bundle_ready=%0b",
             $time, disp_tid_valid, load_credit_need_li, load_credit_up_li, mem_stage_lo,
-            mem_dispatch_cooldown_q);
+            mem_bundle_credit_up_li, cgra_credit_ready_lo, mem_bundle_credit_ready_lo);
       end
 
       if (!prog_busy_prev_q && prog_busy_lo) begin

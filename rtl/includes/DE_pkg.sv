@@ -33,6 +33,7 @@ localparam int EBLOCK_ID_W = $clog2(`DICE_NUM_RETIRE_TABLE_ENTRIES + 4);
 
 parameter int NUM_CREDITS      = `DICE_NUM_MAX_THREADS_PER_CORE * NUM_MEM_PORTS;
 parameter int PENDING_MEM_COUNT_WIDTH = $clog2(NUM_CREDITS + 1);
+parameter int MEM_REQ_BUNDLE_FIFO_DEPTH = NUM_MEM_PORTS + 1;
 
 typedef struct packed {
     logic [$clog2(`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;

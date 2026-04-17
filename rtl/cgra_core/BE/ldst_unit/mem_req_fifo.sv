@@ -1,8 +1,10 @@
 // mem_req_fifo.sv
 //
-// Depth-16 synchronous FIFO that serializes per-thread memory requests from
-// the CGRA (via dice_backend shift-register outputs) onto an AXI-Lite master
-// port, then drives the dice_backend mem_rsp_* writeback inputs.
+// Request buffering path for per-thread CGRA memory ops.
+//
+// A small wide bundle FIFO absorbs each thread's 4-port CGRA burst, then a
+// PISO serializes those requests into the deeper single-request FIFO that
+// fronts the AXI-Lite master.
 //
 // Flow:
 //   LOAD  : enqueue → issue AR → wait RVALID → pulse rsp_valid_o → pop
@@ -21,6 +23,7 @@ module mem_req_fifo
   import DE_pkg::*;
 #(
     parameter int DEPTH = DICE_NUM_MAX_THREADS_PER_CORE * NUM_MEM_PORTS,
+    parameter int BUNDLE_FIFO_DEPTH = MEM_REQ_BUNDLE_FIFO_DEPTH,
     localparam int ENQ_PORTS_LP = 4,
     localparam int AXI_AW = 16,
     localparam int AXI_DW = 16
@@ -93,6 +96,9 @@ module mem_req_fifo
     output logic [                  DICE_REG_ADDR_WIDTH-1:0] rsp_addr_o,
     output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o,
 
+    // Pulses when one wide-bundle FIFO entry is handed to the PISO. The
+    // backend uses this to refund ingress bundle credits.
+    output logic                            bundle_pop_o,
     // Store completion retire — pulses when a store AXI write finishes
     output logic                            store_pop_o,
     output logic [DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_o
@@ -111,14 +117,28 @@ module mem_req_fifo
     logic                                             op;
   } mem_req_s;
 
-  mem_req_s [ENQ_PORTS_LP-1:0] enq_req_li;
+  typedef struct packed {
+    logic [ENQ_PORTS_LP-1:0]                           valid;
+    logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
+    logic [DICE_EBLOCK_ID_WIDTH-1:0]                  e_block_id;
+    logic [ENQ_PORTS_LP-1:0][AXI_AW-1:0]              addr;
+    logic [ENQ_PORTS_LP-1:0][AXI_DW-1:0]              data;
+    logic [ENQ_PORTS_LP-1:0][DICE_REG_ADDR_WIDTH-1:0] rsp_addr;
+    logic [ENQ_PORTS_LP-1:0]                          op;
+  } mem_req_bundle_s;
+
+  mem_req_bundle_s bundle_req_li, bundle_head;
+  mem_req_s [ENQ_PORTS_LP-1:0] piso_data_li;
   logic [ENQ_PORTS_LP-1:0] enq_valid_li;
   logic [ENQ_PORTS_LP-1:0][AXI_AW-1:0] enq_addr_li;
   logic [ENQ_PORTS_LP-1:0][AXI_DW-1:0] enq_data_li;
   logic [ENQ_PORTS_LP-1:0][DICE_REG_ADDR_WIDTH-1:0] enq_rsp_addr_li;
   logic [ENQ_PORTS_LP-1:0] enq_op_li;
   mem_req_s serial_req_lo, head_req, active_req_q;
+  logic [$bits(mem_req_bundle_s)-1:0] bundle_head_lo;
   logic [$bits(mem_req_s)-1:0] serial_req_bits_lo, head_req_lo;
+  logic bundle_fifo_ready_lo;
+  logic bundle_head_v_lo, bundle_fifo_yumi_li;
   logic piso_v_lo, piso_yumi_li, piso_ready_lo;
   logic req_fifo_ready_lo;
   logic head_v_lo, head_yumi_li, req_fifo_yumi_li;
@@ -149,19 +169,43 @@ module mem_req_fifo
   assign enq_op_li[3] = enq_op_i_3;
 
   always_comb begin
+    bundle_req_li = '0;
     for (int i = 0; i < ENQ_PORTS_LP; i++) begin
-      enq_req_li[i] = '0;
-      if (enq_valid_li[i]) begin
-        enq_req_li[i].valid      = 1'b1;
-        enq_req_li[i].tid        = enq_tid_i;
-        enq_req_li[i].e_block_id = enq_e_block_id_i;
-        enq_req_li[i].addr       = enq_addr_li[i];
-        enq_req_li[i].data       = enq_data_li[i];
-        enq_req_li[i].rsp_addr   = enq_rsp_addr_li[i];
-        enq_req_li[i].op         = enq_op_li[i];
-      end
+      bundle_req_li.valid[i]    = enq_valid_li[i];
+      bundle_req_li.addr[i]     = enq_addr_li[i];
+      bundle_req_li.data[i]     = enq_data_li[i];
+      bundle_req_li.rsp_addr[i] = enq_rsp_addr_li[i];
+      bundle_req_li.op[i]       = enq_op_li[i];
+    end
+
+    bundle_req_li.tid        = enq_tid_i;
+    bundle_req_li.e_block_id = enq_e_block_id_i;
+
+    for (int i = 0; i < ENQ_PORTS_LP; i++) begin
+      piso_data_li[i]             = '0;
+      piso_data_li[i].valid       = bundle_head.valid[i];
+      piso_data_li[i].tid         = bundle_head.tid;
+      piso_data_li[i].e_block_id  = bundle_head.e_block_id;
+      piso_data_li[i].addr        = bundle_head.addr[i];
+      piso_data_li[i].data        = bundle_head.data[i];
+      piso_data_li[i].rsp_addr    = bundle_head.rsp_addr[i];
+      piso_data_li[i].op          = bundle_head.op[i];
     end
   end
+
+  bsg_fifo_1r1w_small #(
+      .width_p($bits(mem_req_bundle_s)),
+      .els_p  (BUNDLE_FIFO_DEPTH)
+  ) bundle_fifo (
+      .clk_i  (clk_i),
+      .reset_i(rst_i),
+      .v_i    (|enq_valid_li),
+      .ready_o(bundle_fifo_ready_lo),
+      .data_i (bundle_req_li),
+      .v_o    (bundle_head_v_lo),
+      .data_o (bundle_head_lo),
+      .yumi_i (bundle_fifo_yumi_li)
+  );
 
   bsg_parallel_in_serial_out #(
       .width_p($bits(mem_req_s)),
@@ -169,17 +213,20 @@ module mem_req_fifo
   ) enq_serializer (
       .clk_i(clk_i),
       .reset_i(rst_i),
-      .valid_i(|enq_valid_li),
-      .data_i(enq_req_li),
+      .valid_i(bundle_head_v_lo),
+      .data_i(piso_data_li),
       .ready_and_o(piso_ready_lo),
       .valid_o(piso_v_lo),
       .data_o(serial_req_bits_lo),
       .yumi_i(piso_yumi_li)
   );
 
+  assign bundle_head = bundle_head_v_lo ? bundle_head_lo : '0;
   assign serial_req_lo = piso_v_lo ? serial_req_bits_lo : '0;
   assign head_req      = head_v_lo ? head_req_lo : '0;
-  assign enq_ready_o   = piso_ready_lo & (&rsp_data_ready_i) & rsp_special_ready_i;
+  assign enq_ready_o   = bundle_fifo_ready_lo;
+  assign bundle_fifo_yumi_li = bundle_head_v_lo & piso_ready_lo;
+  assign bundle_pop_o = bundle_fifo_yumi_li;
 
   bsg_fifo_1r1w_small #(
       .width_p($bits(mem_req_s)),
