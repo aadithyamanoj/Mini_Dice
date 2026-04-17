@@ -131,7 +131,6 @@ module dice_backend
   logic                                mem_bundle_credit_need_li;
 
   logic                                mem_req_fifo_ready_lo;
-  logic                                mem_req_fifo_pop_lo;
   logic                                mem_req_bundle_pop_lo;
   logic                                mem_stage_lo;
   logic                                dispatch_issue_req_lo;
@@ -327,7 +326,7 @@ module dice_backend
   // mem_bundle_credit_* reserves slots in the pre-PISO wide bundle FIFO.
   // =========================================================================
 
-  assign load_credit_up_li = {{($bits(load_credit_up_li) - 1) {1'b0}}, mem_req_fifo_pop_lo};
+  assign load_credit_up_li = {{($bits(load_credit_up_li) - 1) {1'b0}}, mem_rsp_valid_lo};
   assign load_credit_need_li = {
     {($bits(load_credit_need_li) - $bits(peek_num_load_lo)) {1'b0}}, peek_num_load_lo
   };
@@ -498,7 +497,7 @@ module dice_backend
       .rsp_data_ready_i(ldst_ready_lo),
       .rsp_special_ready_i(ldst_special_ready_lo),
       .bundle_pop_o(mem_req_bundle_pop_lo),
-      .pop_o(mem_req_fifo_pop_lo),
+      .pop_o(),
       .rsp_valid_o(mem_rsp_valid_lo),
       .rsp_tid_o(mem_rsp_tid_lo),
       .rsp_e_block_id_o(mem_rsp_e_block_id_lo),
