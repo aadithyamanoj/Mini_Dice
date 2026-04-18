@@ -1,5 +1,5 @@
 module axi_link_tx
-  #(parameter int flit_width_p          = 16
+  #(parameter int flit_width_p          = 32
    ,parameter int addr_width_p          = 16
    ,parameter int link_fifo_els_p       = 8
    ,parameter int aw_desc_fifo_els_p    = 2
@@ -23,7 +23,7 @@ module axi_link_tx
 
    ,input  logic                    wvalid_i
    ,output logic                    wready_o
-   ,input  logic [15:0]             wdata_i
+   ,input  logic [31:0]             wdata_i
    ,input  logic                    wlast_i
 
    ,input  logic                    arvalid_i
@@ -35,7 +35,7 @@ module axi_link_tx
 
    ,input  logic                    rvalid_i
    ,output logic                    rready_o
-   ,input  logic [15:0]             rdata_i
+   ,input  logic [31:0]             rdata_i
    ,input  logic [1:0]              rresp_i
    ,input  logic                    rlast_i
 
@@ -49,7 +49,7 @@ module axi_link_tx
    );
 
   // --------------------------------------------------------------------------
-  // Combined transport packets over a 16-bit flit link.
+  // Combined transport packets over a 32-bit flit link.
   //
   // Opcode mapping:
   //   3'b000 = WRITE_REQ
@@ -57,15 +57,20 @@ module axi_link_tx
   //   3'b010 = READ_RESP
   //   3'b011 = WRITE_RESP
   //
+  // Header flit layout (32 bits):
+  //   [31:29] = opcode
+  //   [28:16] = packet length (beats)
+  //   [15:0]  = address (request packets only; 16'b0 for responses)
+  //
   // AXI semantics are preserved at the module boundary:
   //   requests  : AW, W, AR
   //   responses : R, B
   //
-  // Only the transport is simplified:
-  //   WRITE_REQ  = header(len) + address + len W beats
-  //   READ_REQ   = header(len) + address
-  //   READ_RESP  = header(len) + len R beats + padded RRESP flit
-  //   WRITE_RESP = header(1)   + padded BRESP flit
+  // Transport:
+  //   WRITE_REQ  = header(opcode,len,addr) + len W beats
+  //   READ_REQ   = header(opcode,len,addr)
+  //   READ_RESP  = header(opcode,len,0)    + len R beats + padded RRESP flit
+  //   WRITE_RESP = header(opcode,1,0)      + padded BRESP flit
   //
   // Strict FIFO assumption:
   //   No AXI IDs or reorder logic exist here. Associations rely purely on
@@ -73,8 +78,8 @@ module axi_link_tx
   // --------------------------------------------------------------------------
 
   initial begin
-    if (flit_width_p != 16)
-      $error("axi_link_tx requires flit_width_p=16, got %0d", flit_width_p);
+    if (flit_width_p != 32)
+      $error("axi_link_tx requires flit_width_p=32, got %0d", flit_width_p);
     if (addr_width_p != 16)
       $error("axi_link_tx requires addr_width_p=16, got %0d", addr_width_p);
   end
@@ -96,9 +101,8 @@ module axi_link_tx
   typedef enum logic [2:0] {
     TX_IDLE    = 3'd0,
     TX_HEADER  = 3'd1,
-    TX_ADDR    = 3'd2,
-    TX_DATA    = 3'd3,
-    TX_RESP    = 3'd4
+    TX_DATA    = 3'd2,
+    TX_RESP    = 3'd3
   } tx_state_e;
 
   localparam int beat_count_width_lp = 13;
@@ -143,9 +147,9 @@ module axi_link_tx
   logic [beat_count_width_lp-1:0] w_len_data_lo;
 
   logic                     w_data_push_v_li, w_data_push_ready_lo;
-  logic [15:0]              w_data_push_data_li;
+  logic [31:0]              w_data_push_data_li;
   logic                     w_data_v_lo, w_data_yumi_li;
-  logic [15:0]              w_data_lo;
+  logic [31:0]              w_data_lo;
 
   logic                     r_desc_push_v_li, r_desc_push_ready_lo;
   logic [r_desc_width_lp-1:0] r_desc_push_data_li;
@@ -153,9 +157,9 @@ module axi_link_tx
   logic [r_desc_width_lp-1:0] r_desc_data_lo;
 
   logic                     r_data_push_v_li, r_data_push_ready_lo;
-  logic [15:0]              r_data_push_data_li;
+  logic [31:0]              r_data_push_data_li;
   logic                     r_data_v_lo, r_data_yumi_li;
-  logic [15:0]              r_data_lo;
+  logic [31:0]              r_data_lo;
 
   logic                     b_resp_push_v_li, b_resp_push_ready_lo;
   logic [1:0]               b_resp_push_data_li;
@@ -216,7 +220,7 @@ module axi_link_tx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (32),
     .els_p              (w_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -248,7 +252,7 @@ module axi_link_tx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (32),
     .els_p              (r_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -397,8 +401,7 @@ module axi_link_tx
 
   assign w_accept_loaded_beats = w_accept_active_r ? w_accept_beats_left_r : w_len_data_lo;
   assign wready_o = w_data_push_ready_lo
-                    && (w_accept_active_r || w_len_v_lo)
-                    && (!( !w_accept_active_r) || w_len_v_lo);
+                    && (w_accept_active_r || w_len_v_lo);
   assign w_accept = wvalid_i && wready_o;
   assign w_data_push_v_li    = w_accept;
   assign w_data_push_data_li = wdata_i;
@@ -505,8 +508,7 @@ module axi_link_tx
   // Link serializer
   // --------------------------------------------------------------------------
   // The serializer is intentionally simple:
-  //   TX_HEADER emits the packet header flit
-  //   TX_ADDR   emits the address flit for request packets that carry one
+  //   TX_HEADER emits the 32-bit header flit {opcode, beats, addr}
   //   TX_DATA   streams W or R payload beats from the corresponding FIFO
   //   TX_RESP   emits the padded RRESP/BRESP flit when required
   //
@@ -598,18 +600,11 @@ module axi_link_tx
       unique case (state_r)
         TX_HEADER: begin
           case (cur_kind_r)
-            pkt_kind_e'(PKT_WR_REQ):  state_n = TX_ADDR;
-            pkt_kind_e'(PKT_RD_REQ):  state_n = TX_ADDR;
+            pkt_kind_e'(PKT_WR_REQ):  state_n = TX_DATA;
+            pkt_kind_e'(PKT_RD_REQ):  state_n = TX_IDLE;
             pkt_kind_e'(PKT_RD_RESP): state_n = TX_DATA;
             default:                  state_n = TX_RESP;
           endcase
-        end
-
-        TX_ADDR: begin
-          if (cur_kind_r == pkt_kind_e'(PKT_WR_REQ))
-            state_n = TX_DATA;
-          else
-            state_n = TX_IDLE;
         end
 
         TX_DATA: begin
@@ -668,16 +663,11 @@ module axi_link_tx
       TX_HEADER: begin
         link_tx_v_o = 1'b1;
         unique case (cur_kind_r)
-          pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ, cur_beats_r};
-          pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = {OP_READ_REQ,  cur_beats_r};
-          pkt_kind_e'(PKT_RD_RESP): link_tx_data_o = {OP_READ_RESP, cur_beats_r};
-          default:                  link_tx_data_o = {OP_WRITE_RESP, beat_count_width_lp'(1)};
+          pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ,  cur_beats_r, cur_addr_r};
+          pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = {OP_READ_REQ,   cur_beats_r, cur_addr_r};
+          pkt_kind_e'(PKT_RD_RESP): link_tx_data_o = {OP_READ_RESP,  cur_beats_r, 16'b0};
+          default:                  link_tx_data_o = {OP_WRITE_RESP, beat_count_width_lp'(1), 16'b0};
         endcase
-      end
-
-      TX_ADDR: begin
-        link_tx_v_o    = 1'b1;
-        link_tx_data_o = cur_addr_r;
       end
 
       TX_DATA: begin
@@ -693,7 +683,7 @@ module axi_link_tx
 
       TX_RESP: begin
         link_tx_v_o    = 1'b1;
-        link_tx_data_o = {14'b0, cur_resp_r};
+        link_tx_data_o = {30'b0, cur_resp_r};
       end
 
       default: begin

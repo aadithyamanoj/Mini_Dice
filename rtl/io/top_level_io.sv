@@ -1,7 +1,7 @@
 module top_level_io
-  #(parameter int flit_width_p         = 16
+  #(parameter int flit_width_p         = 32
    ,parameter int addr_width_p         = 16
-   ,parameter int channel_width_p      = 8
+   ,parameter int channel_width_p      = 16
    ,parameter int num_channels_p       = 1
    ,parameter int lg_fifo_depth_p      = 6
    ,parameter int lg_credit_to_token_decimation_p = 3
@@ -32,13 +32,10 @@ module top_level_io
    ,input logic                                          reset_i
 
    // bsg_link upstream reset/control.
-   ,input  logic                                         io_master_clk_i
-   ,input  logic                                         upstream_io_link_reset_i
    ,input  logic                                         async_token_reset_i
    ,input  logic [num_channels_p-1:0]                    token_clk_i
 
-   // bsg_link downstream reset/control.
-   ,input  logic [num_channels_p-1:0]                    downstream_io_link_reset_i
+   // bsg_link downstream physical IO.
    ,input  logic [num_channels_p-1:0]                    downstream_io_clk_i
    ,input  logic [num_channels_p*channel_width_p-1:0]    downstream_io_data_i
    ,input  logic [num_channels_p-1:0]                    downstream_io_valid_i
@@ -61,7 +58,7 @@ module top_level_io
 
    ,output logic                                         rx_wvalid_o
    ,input  logic                                         rx_wready_i
-   ,output logic [15:0]                                  rx_wdata_o
+   ,output logic [31:0]                                  rx_wdata_o
    ,output logic                                         rx_wlast_o
 
    ,output logic                                         rx_arvalid_o
@@ -73,7 +70,7 @@ module top_level_io
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
-   ,output logic [15:0]                                  rx_rdata_o
+   ,output logic [31:0]                                  rx_rdata_o
    ,output logic [1:0]                                   rx_rresp_o
    ,output logic                                         rx_rlast_o
 
@@ -91,7 +88,7 @@ module top_level_io
 
    ,input  logic                                         tx_wvalid_i
    ,output logic                                         tx_wready_o
-   ,input  logic [15:0]                                  tx_wdata_i
+   ,input  logic [31:0]                                  tx_wdata_i
    ,input  logic                                         tx_wlast_i
 
    ,input  logic                                         tx_arvalid_i
@@ -103,7 +100,7 @@ module top_level_io
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
-   ,input  logic [15:0]                                  tx_rdata_i
+   ,input  logic [31:0]                                  tx_rdata_i
    ,input  logic [1:0]                                   tx_rresp_i
    ,input  logic                                         tx_rlast_i
 
@@ -116,11 +113,11 @@ module top_level_io
   // top_level_io
   // --------------------------------------------------------------------------
   // Full top-level IO subsystem:
-  //   AXI source/sink side <-> axi_link_tx/rx <-> 16-bit core-side link flits
+  //   AXI source/sink side <-> axi_link_tx/rx <-> 32-bit core-side link flits
   //   <-> bsg_link_ddr_upstream/downstream <-> physical DDR/tokens
   //
   // The bsg_link blocks provide the actual source-synchronous DDR physical
-  // transport. axi_link_tx and axi_link_rx sit directly on the 16-bit core-side
+  // transport. axi_link_tx and axi_link_rx sit directly on the 32-bit core-side
   // ready/valid boundary exported by those bsg_link blocks.
   //
   // Ordering model:
@@ -159,7 +156,7 @@ module top_level_io
   ) link_downstream_i (
     .core_clk_i        (core_clk_i),
     .core_link_reset_i (reset_i),
-    .io_link_reset_i   (downstream_io_link_reset_i),
+    .io_link_reset_i   ({num_channels_p{reset_i}}),
     .core_data_o       (link_rx_core_data_lo),
     .core_valid_o      (link_rx_core_valid_lo),
     .core_yumi_i       (link_rx_core_yumi_li),
@@ -272,8 +269,8 @@ module top_level_io
     .core_data_i        (link_tx_core_data_li),
     .core_valid_i       (link_tx_core_valid_li),
     .core_ready_o       (link_tx_core_ready_lo),
-    .io_clk_i           (io_master_clk_i),
-    .io_link_reset_i    (upstream_io_link_reset_i),
+    .io_clk_i           (core_clk_i),
+    .io_link_reset_i    (reset_i),
     .async_token_reset_i(async_token_reset_i),
     .io_clk_r_o         (upstream_io_clk_r_o),
     .io_data_r_o        (upstream_io_data_lo),
