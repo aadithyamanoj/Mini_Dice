@@ -117,19 +117,22 @@ def _bitmap_from_indices(*indices: int) -> int:
     return bitmap
 
 
-def _no_branch_meta() -> dict[str, int]:
+def _no_branch_meta(*, is_return: bool = False) -> dict[str, int]:
     """Return a pgraph branch_meta_t payload for straight-line execution.
 
     For these staged mul-array kernels there is no control-flow operation, so
     `branch_ena=0` cleanly disables the branch handler semantics. The remaining
     fields are set to zero as benign don't-care values.
+
+    Set `is_return=True` on the final stage of a kernel so the CTA scheduler
+    sees the return signal and marks the CTA complete after that eblock commits.
     """
     return {
         "branch_ena": 0,
         "branch_uni": 0,
         "branch_pred_reg": 0,
         "branch_neg_pred": 0,
-        "is_return": 0,
+        "is_return": int(is_return),
         "branch_jump_target_offset": 0,
         "branch_reconv_offset": 0,
     }
@@ -282,6 +285,7 @@ def _pgraph_payload_for_kernel(
     kernel: str,
     build_dir: Path,
     bitstream_addr: int,
+    is_last_stage: bool = False,
 ) -> dict[str, Any]:
     report_path = _report_path(build_dir, kernel)
     report = _load_compile_report(report_path)
@@ -305,7 +309,7 @@ def _pgraph_payload_for_kernel(
             "num_stores": spec["num_stores"],
             "unrolling_factor": spec["unrolling_factor"],
             "lat": _latency_from_report(report, kernel),
-            "branch_meta": _no_branch_meta(),
+            "branch_meta": _no_branch_meta(is_return=is_last_stage),
             "barrier": 0,
             "parameter_load": spec["parameter_load"],
         },
@@ -356,6 +360,7 @@ def _build_coalesced_test_vector(
             kernel=kernel,
             build_dir=build_dir,
             bitstream_addr=bitstream_addr,
+            is_last_stage=(idx == len(kernels) - 1),
         )
         stage_artifacts.append(
             {
