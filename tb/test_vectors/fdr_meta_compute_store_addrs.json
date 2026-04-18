@@ -1,0 +1,36 @@
+{
+  "binary_output_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.bin",
+  "compile_report_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs_compile_report.json",
+  "fasm_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.fasm",
+  "kernel": "compute_store_addrs",
+  "notes": [
+    "Materializes C-side affine store addresses into GPRs 4..7.",
+    "Uses csrX2 as base, regS_i_0 as tid, csrX3 as thread_stride, and csrX4..7 as lane offsets."
+  ],
+  "pgraph_meta_t": {
+    "barrier": 0,
+    "bitstream_addr": 1536,
+    "bitstream_length": 213,
+    "branch_meta": {
+      "branch_ena": 0,
+      "branch_jump_target_offset": 0,
+      "branch_neg_pred": 0,
+      "branch_pred_reg": 0,
+      "branch_reconv_offset": 0,
+      "branch_uni": 0,
+      "is_return": 0
+    },
+    "in_regs_bitmap": 0,
+    "lat": 11,
+    "ld_dest_regs": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "num_stores": 0,
+    "out_regs_bitmap": 240,
+    "parameter_load": 0,
+    "unrolling_factor": 0
+  }
+}

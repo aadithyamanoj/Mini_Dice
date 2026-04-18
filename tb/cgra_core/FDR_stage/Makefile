@@ -14,6 +14,7 @@ VERILATOR_FLAGS += -Wno-UNUSEDPARAM           # Allow unused parameters in param
 VERILATOR_FLAGS += -Wno-WIDTHEXPAND           # Suppress implicit width expansion warnings (zero/sign extend)
 VERILATOR_FLAGS += -Wno-WIDTHTRUNC            # Suppress implicit truncation warnings (upper bits dropped)
 VERILATOR_FLAGS += -Wno-ASCRANGE              # Allow ascending bit ranges (e.g., [0:31])
+VERILATOR_FLAGS += -Wno-DECLFILENAME          # Allow package name to differ from filename (crossbar pkg co-located)
 VERILATOR_FLAGS += --top-module $(TOP_MODULE) # Explicitly set design root module
 
 lint:

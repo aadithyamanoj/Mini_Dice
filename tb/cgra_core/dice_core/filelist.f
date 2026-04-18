@@ -91,3 +91,4 @@ ${DICE_HOME}/rtl/cgra_core/dice_core.sv
 // ==== Testbench ====
 
 ${DICE_HOME}/tb/cgra_core/dice_core/tb_dice_core.sv
+${DICE_HOME}/tb/cgra_core/dice_core/tb_dice_core_interface.sv

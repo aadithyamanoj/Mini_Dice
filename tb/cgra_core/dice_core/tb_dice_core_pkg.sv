@@ -1,6 +1,7 @@
+import dice_pkg::*;
+import dice_frontend_pkg::*;
+
 module tb_dice_core_pkg();
-  import dice_pkg::*;
-  import dice_frontend_pkg::*;
 
   // =========================================================================
   // Randomization Class - MAYBE MOVE THIS TO A SEPARATE FILE

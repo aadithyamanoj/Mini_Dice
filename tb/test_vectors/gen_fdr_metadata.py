@@ -23,6 +23,7 @@ FULL_MUL_ARRAY_KERNEL_STAGES = (
     "load_mul_array_a",
     "load_mul_array_b",
     "mul_array",
+    "compute_store_addrs",
     "store_mul_array",
 )
 
@@ -137,7 +138,7 @@ def _no_branch_meta() -> dict[str, int]:
 def _stage_spec(kernel: str) -> dict[str, Any]:
     if kernel == "load_mul_array_a":
         return {
-            "in_regs_bitmap": _bitmap_from_indices(0, 1, 2, 3),
+            "in_regs_bitmap": 0,
             "out_regs_bitmap": 0,
             "ld_dest_regs": [0, 1, 2, 3],
             "num_stores": 0,
@@ -145,13 +146,13 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "parameter_load": 0,
             "notes": [
                 "A-side load stage for the staged mul-array flow.",
-                "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
-                "Runtime CSR ABI still reserves affine launch fields for future address generation.",
+                "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
+                "Memory responses load into GPRs 0..3.",
             ],
         }
     if kernel == "load_mul_array_b":
         return {
-            "in_regs_bitmap": _bitmap_from_indices(4, 5, 6, 7),
+            "in_regs_bitmap": 0,
             "out_regs_bitmap": 0,
             "ld_dest_regs": [4, 5, 6, 7],
             "num_stores": 0,
@@ -159,8 +160,8 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "parameter_load": 0,
             "notes": [
                 "B-side load stage for the staged mul-array flow.",
-                "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
-                "Runtime CSR ABI still reserves affine launch fields for future address generation.",
+                "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
+                "Memory responses load into GPRs 4..7.",
             ],
         }
     if kernel == "mul_array":
@@ -176,6 +177,19 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
                 "Assumes result writeback targets GPRs 0..3.",
             ],
         }
+    if kernel == "compute_store_addrs":
+        return {
+            "in_regs_bitmap": 0,
+            "out_regs_bitmap": _bitmap_from_indices(4, 5, 6, 7),
+            "ld_dest_regs": [UNUSED_LD_DEST_REG] * 4,
+            "num_stores": 0,
+            "unrolling_factor": 0,
+            "parameter_load": 0,
+            "notes": [
+                "Materializes C-side affine store addresses into GPRs 4..7.",
+                "Uses csrX2 as base, regS_i_0 as tid, csrX3 as thread_stride, and csrX4..7 as lane offsets.",
+            ],
+        }
     if kernel == "store_mul_array":
         return {
             "in_regs_bitmap": _bitmap_from_indices(0, 1, 2, 3, 4, 5, 6, 7),
@@ -185,8 +199,8 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "unrolling_factor": 0,
             "parameter_load": 0,
             "notes": [
-                "Uses GPRs 0..3 as store data and GPRs 4..7 as store addresses.",
-                "Store addresses are expected to follow the same affine CSR ABI.",
+                "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
+                "This stage is a pure register-to-memory route and does not recompute affine addresses.",
                 "All four memory ports are marked as stores.",
             ],
         }

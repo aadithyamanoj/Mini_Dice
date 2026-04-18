@@ -58,12 +58,18 @@ module tb_dice_cgra_subs_vector_mul;
   logic                           prog_dout_o;
   logic                           prog_we_o;
 
-  logic [7:0] ext_data_i [0:15];
-  logic [7:0] ext_data_o [0:15];
-  logic       ext_pred_i [0:1];
-  logic       ext_pred_o [0:1];
-  logic [7:0] mem_data_o;
-  logic [7:0] mem_addr_o;
+  logic [15:0] ext_data_i [0:15];
+  logic [15:0] ext_data_o [0:15];
+  logic        ext_pred_i [0:1];
+  logic        ext_pred_o [0:1];
+  logic [15:0] mem_data_o_0;
+  logic [15:0] mem_addr_o_0;
+  logic [15:0] mem_data_o_1;
+  logic [15:0] mem_addr_o_1;
+  logic [15:0] mem_data_o_2;
+  logic [15:0] mem_addr_o_2;
+  logic [15:0] mem_data_o_3;
+  logic [15:0] mem_addr_o_3;
 
   integer cycle_count;
 
@@ -123,8 +129,14 @@ module tb_dice_cgra_subs_vector_mul;
       .ext_pred_i_1(ext_pred_i[1]),
       .ext_pred_o_0(ext_pred_o[0]),
       .ext_pred_o_1(ext_pred_o[1]),
-      .mem_data_o(mem_data_o),
-      .mem_addr_o(mem_addr_o)
+      .mem_data_o_0(mem_data_o_0),
+      .mem_addr_o_0(mem_addr_o_0),
+      .mem_data_o_1(mem_data_o_1),
+      .mem_addr_o_1(mem_addr_o_1),
+      .mem_data_o_2(mem_data_o_2),
+      .mem_addr_o_2(mem_addr_o_2),
+      .mem_data_o_3(mem_data_o_3),
+      .mem_addr_o_3(mem_addr_o_3)
   );
 
   initial begin
@@ -246,9 +258,9 @@ module tb_dice_cgra_subs_vector_mul;
   endtask
 
   task automatic test_mul_array_directed_functionality();
-    logic [7:0] a_values [0:3];
-    logic [7:0] b_values [0:3];
-    logic [7:0] expected_values [0:3];
+    logic [15:0] a_values [0:3];
+    logic [15:0] b_values [0:3];
+    logic [15:0] expected_values [0:3];
     begin
       $display("[TB] Running directed vector-multiply test");
       load_directed_case(a_values, b_values, expected_values);
@@ -260,9 +272,9 @@ module tb_dice_cgra_subs_vector_mul;
   endtask
 
   task automatic test_mul_array_randomized();
-    logic [7:0] a_values [0:3];
-    logic [7:0] b_values [0:3];
-    logic [7:0] expected_values [0:3];
+    logic [15:0] a_values [0:3];
+    logic [15:0] b_values [0:3];
+    logic [15:0] expected_values [0:3];
     int case_idx;
     begin
       $display("[TB] Running randomized vector-multiply test");

@@ -129,6 +129,7 @@ module cta_schedule_stage
       .stack_top_valid_i      (stack_top_valid),
       .cta_next_pc_i          (stack_top_next_pc),
       .stack_top_active_mask_i(stack_top_active_mask),
+      .simt_update_ready_i    (simt_stack_update_ready),
       .eblock_commit_valid_i  (eblock_commit_valid_i),
       .eblock_commit_id_i     (eblock_commit_id_i),
       .eblock_flush_valid_i   (eblock_flush_valid_i),

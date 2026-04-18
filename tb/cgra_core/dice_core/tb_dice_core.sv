@@ -40,7 +40,7 @@ module tb_dice_core;
 
 
   localparam int ClkPeriod = 10;
-  localparam int TimeoutCycles = 50000;
+  localparam int TimeoutCycles = 10000;
   localparam int MetaBeatBytes = AxiDataWidth / 8;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;

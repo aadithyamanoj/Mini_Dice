@@ -5,8 +5,8 @@
   "kernel": "load_mul_array_a",
   "notes": [
     "A-side load stage for the staged mul-array flow.",
-    "Current bitstream routes GPR-backed address values onto mem_addr_o_0..3.",
-    "Runtime CSR ABI still reserves affine launch fields for future address generation."
+    "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
+    "Memory responses load into GPRs 0..3."
   ],
   "pgraph_meta_t": {
     "barrier": 0,
@@ -21,8 +21,8 @@
       "branch_uni": 0,
       "is_return": 0
     },
-    "in_regs_bitmap": 15,
-    "lat": 7,
+    "in_regs_bitmap": 0,
+    "lat": 11,
     "ld_dest_regs": [
       0,
       1,

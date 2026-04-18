@@ -5,6 +5,7 @@
 +incdir+${DICE_HOME}/rtl/interfaces
 +incdir+${DICE_HOME}/rtl/cgra_core/regfile
 +incdir+${DICE_HOME}/rtl/dice_ram
++incdir+${DICE_HOME}/rtl/cgra_core/axi/include
 
 // ==== DICE configs and packages ====
 ${DICE_HOME}/rtl/dice_config.vh
@@ -21,6 +22,10 @@ ${DICE_HOME}/rtl/interfaces/fdr_if.sv
 // ==== DICE RAM primitives ====
 ${DICE_HOME}/rtl/dice_ram/dice_ram_1w1r.sv
 ${DICE_HOME}/rtl/dice_ram/dice_ram_1rw.sv
+
+// ==== AXI4 Crossbar (contains axi4_xbar_pkg) ====
+${DICE_HOME}/rtl/cgra_core/axi/src/axi_pkg.sv
+${DICE_HOME}/rtl/cgra_core/crossbar/axi4_full_crossbar.sv
 
 // ==== Fetch Stage (FDR) ====
 ${DICE_HOME}/rtl/cgra_core/fetch_stage/rising_edge_detector.sv
