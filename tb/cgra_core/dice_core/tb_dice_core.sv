@@ -41,6 +41,8 @@ module tb_dice_core;
 
   localparam int ClkPeriod = 10;
   localparam int TimeoutCycles = 50000;
+  localparam int AxiRespDelayCycles = 10;
+  localparam int AxiRespDelayCtrWidth = $clog2(AxiRespDelayCycles + 1);
   localparam int MetaBeatBytes = AxiDataWidth / 8;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
@@ -113,6 +115,11 @@ module tb_dice_core;
   logic                                            w_seen_q;
   logic           [       DICE_REG_DATA_WIDTH-1:0] wdata_q;
   logic           [                           1:0] wstrb_q;
+  logic                                            write_resp_pending_q;
+  logic           [     AxiRespDelayCtrWidth-1:0] write_resp_delay_q;
+  logic                                            read_resp_pending_q;
+  logic           [     AxiRespDelayCtrWidth-1:0] read_resp_delay_q;
+  logic           [       DICE_REG_DATA_WIDTH-1:0] read_data_q;
 
   dice_cta_desc_t                                  launch_desc;
 
@@ -353,6 +360,11 @@ module tb_dice_core;
       w_seen_q <= 1'b0;
       wdata_q <= '0;
       wstrb_q <= '0;
+      write_resp_pending_q <= 1'b0;
+      write_resp_delay_q <= '0;
+      read_resp_pending_q <= 1'b0;
+      read_resp_delay_q <= '0;
+      read_data_q <= '0;
       axi_awready_i <= 1'b0;
       axi_wready_i <= 1'b0;
       axi_bvalid_i <= 1'b0;
@@ -362,9 +374,9 @@ module tb_dice_core;
       axi_rdata_i <= '0;
       axi_rresp_i <= 2'b00;
     end else begin
-      axi_awready_i <= 1'b1;
-      axi_wready_i  <= 1'b1;
-      axi_arready_i <= !axi_rvalid_i;
+      axi_awready_i <= !(write_resp_pending_q || axi_bvalid_i || aw_seen_q);
+      axi_wready_i  <= !(write_resp_pending_q || axi_bvalid_i || w_seen_q);
+      axi_arready_i <= !(read_resp_pending_q || axi_rvalid_i);
 
       if (axi_awvalid_o && axi_awready_i) begin
         aw_seen_q <= 1'b1;
@@ -377,18 +389,40 @@ module tb_dice_core;
         wstrb_q  <= axi_wstrb_o;
       end
 
-      if (!axi_bvalid_i && aw_seen_q && w_seen_q) begin
-        dice_core_tb_record_axi_write(int'(awaddr_q), int'(wdata_q), int'(wstrb_q));
-        axi_bvalid_i <= 1'b1;
+      if (!write_resp_pending_q
+          && !axi_bvalid_i
+          && (aw_seen_q || (axi_awvalid_o && axi_awready_i))
+          && (w_seen_q || (axi_wvalid_o && axi_wready_i))) begin
         aw_seen_q <= 1'b0;
         w_seen_q <= 1'b0;
+        write_resp_pending_q <= 1'b1;
+        write_resp_delay_q <= AxiRespDelayCtrWidth'(AxiRespDelayCycles);
+      end else if (write_resp_pending_q) begin
+        if (write_resp_delay_q == AxiRespDelayCtrWidth'(1)) begin
+          dice_core_tb_record_axi_write(int'(awaddr_q), int'(wdata_q), int'(wstrb_q));
+          axi_bvalid_i <= 1'b1;
+          write_resp_pending_q <= 1'b0;
+          write_resp_delay_q <= '0;
+        end else begin
+          write_resp_delay_q <= write_resp_delay_q - 1'b1;
+        end
       end else if (axi_bvalid_i && axi_bready_o) begin
         axi_bvalid_i <= 1'b0;
       end
 
-      if (!axi_rvalid_i && axi_arvalid_o && axi_arready_i) begin
-        axi_rvalid_i <= 1'b1;
-        axi_rdata_i  <= DICE_REG_DATA_WIDTH'(dice_core_tb_axi_read16(int'(axi_araddr_o)));
+      if (!read_resp_pending_q && !axi_rvalid_i && axi_arvalid_o && axi_arready_i) begin
+        read_resp_pending_q <= 1'b1;
+        read_resp_delay_q <= AxiRespDelayCtrWidth'(AxiRespDelayCycles);
+        read_data_q <= DICE_REG_DATA_WIDTH'(dice_core_tb_axi_read16(int'(axi_araddr_o)));
+      end else if (read_resp_pending_q) begin
+        if (read_resp_delay_q == AxiRespDelayCtrWidth'(1)) begin
+          axi_rvalid_i <= 1'b1;
+          axi_rdata_i  <= read_data_q;
+          read_resp_pending_q <= 1'b0;
+          read_resp_delay_q <= '0;
+        end else begin
+          read_resp_delay_q <= read_resp_delay_q - 1'b1;
+        end
       end else if (axi_rvalid_i && axi_rready_o) begin
         axi_rvalid_i <= 1'b0;
       end
