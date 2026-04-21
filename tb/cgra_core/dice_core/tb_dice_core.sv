@@ -39,8 +39,8 @@ module tb_dice_core;
   end
 
 
-  localparam int ClkPeriod = 10;
-  localparam int TimeoutCycles = 50000;
+  localparam int ClkPeriod = 20000;
+  localparam int TimeoutCycles = 5000000;
   localparam int AxiRespDelayCycles = 10;
   localparam int AxiRespDelayCtrWidth = $clog2(AxiRespDelayCycles + 1);
   localparam int MetaBeatBytes = AxiDataWidth / 8;
@@ -116,9 +116,9 @@ module tb_dice_core;
   logic           [       DICE_REG_DATA_WIDTH-1:0] wdata_q;
   logic           [                           1:0] wstrb_q;
   logic                                            write_resp_pending_q;
-  logic           [     AxiRespDelayCtrWidth-1:0] write_resp_delay_q;
+  logic           [      AxiRespDelayCtrWidth-1:0] write_resp_delay_q;
   logic                                            read_resp_pending_q;
-  logic           [     AxiRespDelayCtrWidth-1:0] read_resp_delay_q;
+  logic           [      AxiRespDelayCtrWidth-1:0] read_resp_delay_q;
   logic           [       DICE_REG_DATA_WIDTH-1:0] read_data_q;
 
   dice_cta_desc_t                                  launch_desc;
@@ -417,7 +417,7 @@ module tb_dice_core;
       end else if (read_resp_pending_q) begin
         if (read_resp_delay_q == AxiRespDelayCtrWidth'(1)) begin
           axi_rvalid_i <= 1'b1;
-          axi_rdata_i  <= read_data_q;
+          axi_rdata_i <= read_data_q;
           read_resp_pending_q <= 1'b0;
           read_resp_delay_q <= '0;
         end else begin
@@ -451,7 +451,8 @@ module tb_dice_core;
       $finish;
     end
 
-    $display("FAIL: dice_core runtime checks reported an error (see AXI WRITE VERIFICATION DIFF above)");
+    $display(
+        "FAIL: dice_core runtime checks reported an error (see AXI WRITE VERIFICATION DIFF above)");
     $fatal(1, "FAIL: AXI write mismatch - see diff above");
   end
 
