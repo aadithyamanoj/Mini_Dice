@@ -11,7 +11,7 @@
   "pgraph_meta_t": {
     "barrier": 0,
     "bitstream_addr": 2048,
-    "bitstream_length": 213,
+    "bitstream_length": 203,
     "branch_meta": {
       "branch_ena": 0,
       "branch_jump_target_offset": 0,

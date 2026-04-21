@@ -20,7 +20,7 @@
       "meta": {
         "barrier": 0,
         "bitstream_addr": 0,
-        "bitstream_length": 213,
+        "bitstream_length": 203,
         "branch_meta": {
           "branch_ena": 0,
           "branch_jump_target_offset": 0,
@@ -49,7 +49,7 @@
       "meta": {
         "barrier": 0,
         "bitstream_addr": 512,
-        "bitstream_length": 213,
+        "bitstream_length": 203,
         "branch_meta": {
           "branch_ena": 0,
           "branch_jump_target_offset": 0,
@@ -78,7 +78,7 @@
       "meta": {
         "barrier": 0,
         "bitstream_addr": 1024,
-        "bitstream_length": 213,
+        "bitstream_length": 203,
         "branch_meta": {
           "branch_ena": 0,
           "branch_jump_target_offset": 0,
@@ -107,7 +107,7 @@
       "meta": {
         "barrier": 0,
         "bitstream_addr": 1536,
-        "bitstream_length": 213,
+        "bitstream_length": 203,
         "branch_meta": {
           "branch_ena": 0,
           "branch_jump_target_offset": 0,
@@ -136,7 +136,7 @@
       "meta": {
         "barrier": 0,
         "bitstream_addr": 2048,
-        "bitstream_length": 213,
+        "bitstream_length": 203,
         "branch_meta": {
           "branch_ena": 0,
           "branch_jump_target_offset": 0,
