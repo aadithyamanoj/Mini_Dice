@@ -29,6 +29,67 @@ from typing import Any
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]
 RTL_ROOT = REPO_ROOT / "rtl"
+RTL_INCLUDE_ROOT = RTL_ROOT / "includes"
+MINI_DICE_BUILD_DIR = (
+    REPO_ROOT
+    / "dora"
+    / "examples"
+    / "devices"
+    / "dice-isca"
+    / "mini_dice"
+    / "build"
+)
+
+
+def _resolve_existing_path(description: str, *candidates: Path) -> Path:
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+
+    rendered_candidates = "\n".join(f"  - {candidate}" for candidate in candidates)
+    raise FileNotFoundError(
+        f"Could not locate {description}. Checked:\n{rendered_candidates}"
+    )
+
+
+def _resolve_repo_artifact_path(
+    raw_path: str | None,
+    *,
+    kernel: str | None = None,
+    expected_suffix: str | None = None,
+) -> Path | None:
+    candidates: list[Path] = []
+
+    if isinstance(raw_path, str) and raw_path != "":
+        candidate = Path(raw_path).expanduser()
+        candidates.append(candidate)
+
+        if not candidate.is_absolute():
+            candidates.append(REPO_ROOT / candidate)
+
+        if "Mini_Dice" in candidate.parts:
+            mini_dice_idx = candidate.parts.index("Mini_Dice")
+            repo_relative = Path(*candidate.parts[mini_dice_idx + 1 :])
+            candidates.append(REPO_ROOT / repo_relative)
+
+        candidates.append(MINI_DICE_BUILD_DIR / candidate.name)
+
+    if kernel and expected_suffix:
+        candidates.append(MINI_DICE_BUILD_DIR / f"mini_dice_{kernel}{expected_suffix}")
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+
+    return None
 
 
 def sv_clog2(value: int) -> int:
@@ -69,11 +130,22 @@ def _load_pkg_parameter(path: Path, name: str) -> int:
     return int(_strip_sv_comment(match.group(1)), 0)
 
 
-RTL_DEFINES = _load_sv_defines(RTL_ROOT / "dice_config.vh")
+DICE_CONFIG_VH = _resolve_existing_path(
+    "dice_config.vh",
+    RTL_INCLUDE_ROOT / "dice_config.vh",
+    RTL_ROOT / "dice_config.vh",
+)
+DICE_PKG_SV = _resolve_existing_path(
+    "dice_pkg.sv",
+    RTL_INCLUDE_ROOT / "dice_pkg.sv",
+    RTL_ROOT / "dice_pkg.sv",
+)
+
+RTL_DEFINES = _load_sv_defines(DICE_CONFIG_VH)
 
 # =====================================================================
-# Bit-width constants (sourced from current dice_config.vh / dice_pkg.sv /
-# dice_frontend_pkg.sv instead of being hard-coded)
+# Bit-width constants (sourced from current RTL package/include files instead
+# of being hard-coded)
 # =====================================================================
 DICE_ADDR_WIDTH = RTL_DEFINES["DICE_ADDR_WIDTH"]
 DICE_MAX_GRID_SIZE = RTL_DEFINES["DICE_MAX_GRID_SIZE"]
@@ -101,7 +173,7 @@ METADATA_MEM_DATA_WIDTH  = 256 * 8
 # Bitstream fetch/load uses AxiDataWidth=16 in axi4_full_crossbar.sv.
 BITSTREAM_MEM_DATA_WIDTH = 16
 # Bitstream payload size from dice_pkg.sv.
-DICE_BITSTREAM_SIZE = _load_pkg_parameter(RTL_ROOT / "dice_pkg.sv", "DICE_BITSTREAM_SIZE")
+DICE_BITSTREAM_SIZE = _load_pkg_parameter(DICE_PKG_SV, "DICE_BITSTREAM_SIZE")
 NUM_CHUNKS               = (DICE_BITSTREAM_SIZE + BITSTREAM_MEM_DATA_WIDTH - 1) // BITSTREAM_MEM_DATA_WIDTH
 
 # Packed struct widths from current packages
@@ -400,12 +472,31 @@ def _load_stage_bitstream_words(stage_artifacts: Any, stage_idx: int) -> list[st
     if not isinstance(stage_info, dict):
         return None
 
-    binary_output_path = stage_info.get("binary_output_path")
-    if not isinstance(binary_output_path, str) or binary_output_path == "":
-        return None
+    kernel = stage_info.get("kernel")
+    if not isinstance(kernel, str) or kernel == "":
+        kernel = None
 
-    binary_path = Path(binary_output_path)
-    if not binary_path.exists():
+    binary_path = _resolve_repo_artifact_path(
+        stage_info.get("binary_output_path"),
+        kernel=kernel,
+        expected_suffix=".bin",
+    )
+    if binary_path is None:
+        compile_report_path = _resolve_repo_artifact_path(
+            stage_info.get("compile_report_path"),
+            kernel=kernel,
+            expected_suffix="_compile_report.json",
+        )
+        if compile_report_path is not None:
+            with compile_report_path.open("r", encoding="utf-8") as stream:
+                compile_report = json.load(stream)
+            report_binary_path = compile_report.get("binary_output_path")
+            binary_path = _resolve_repo_artifact_path(
+                report_binary_path if isinstance(report_binary_path, str) else None,
+                kernel=kernel,
+                expected_suffix=".bin",
+            )
+    if binary_path is None:
         return None
 
     raw_bytes = binary_path.read_bytes()

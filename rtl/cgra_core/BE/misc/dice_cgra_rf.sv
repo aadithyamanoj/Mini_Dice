@@ -53,7 +53,7 @@ module dice_cgra_rf
     input logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_i,
     input logic [$clog2(NUM_MEM_PORTS+1)-1:0] num_stores_i,
     input logic [7:0] latency_i,
-    input logic       shift_clear_i,  // clear shift-reg ring buffers on eblock transition
+    input logic shift_clear_i,  // clear shift-reg ring buffers on eblock transition
 
     input  logic                                             rd_tid_valid_i,
     output logic                                             rd_tid_ready_o,
@@ -76,7 +76,7 @@ module dice_cgra_rf
   localparam int NUM_PRED = DICE_NUM_PRED;
   localparam int TOTAL_REGS = DICE_TOTAL_REGS;
   localparam int DATA_WIDTH = DICE_REG_DATA_WIDTH;
-  localparam int MAX_PIPE_STAGE = 128;
+  localparam int MAX_PIPE_STAGE = 32;
   localparam int SHIFT_LAT_W = $clog2(MAX_PIPE_STAGE);
   localparam int LAUNCH_TAG_W = DICE_TID_WIDTH + 1;
 
@@ -104,6 +104,8 @@ module dice_cgra_rf
   logic [DICE_EBLOCK_ID_WIDTH-1:0] e_block_id_lo;
   logic [NUM_MEM_PORTS-1:0][DICE_REG_ADDR_WIDTH-1:0] ld_dest_regs_lo;
   logic [$clog2(NUM_MEM_PORTS+1)-1:0] num_stores_lo;
+  logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] cgra_launch_tid_lo;
+  logic cgra_launch_valid_lo;
   logic [NUM_MEM_PORTS-1:0] mem_port_valid_li;
   logic [NUM_MEM_PORTS-1:0] mem_port_valid_lo;
   logic [NUM_MEM_PORTS-1:0] mem_port_op_li;
@@ -118,9 +120,16 @@ module dice_cgra_rf
     if (reset_i) begin
       rf_launch_data_lo <= '0;
       pred_launch_lo <= '0;
-    end else if (rf_rd_valid_lo) begin
-      rf_launch_data_lo <= rf_rd_data_lo;
-      pred_launch_lo <= pred_lo;
+      cgra_launch_tid_lo <= '0;
+      cgra_launch_valid_lo <= 1'b0;
+    end else begin
+      cgra_launch_valid_lo <= rf_rd_valid_lo;
+      if (rf_rd_valid_lo) begin
+        rf_launch_data_lo <= rf_rd_data_lo;
+        pred_launch_lo <= pred_lo;
+        // Align the dynamic thread-id source with the registered RF launch data.
+        cgra_launch_tid_lo <= cgra_tid_li;
+      end
     end
   end
 
@@ -140,7 +149,7 @@ module dice_cgra_rf
     };
   end
 
-  assign regS_i_0_li = {{(DATA_WIDTH - DICE_TID_WIDTH) {1'b0}}, cgra_tid_li};
+  assign regS_i_0_li = {{(DATA_WIDTH - DICE_TID_WIDTH) {1'b0}}, cgra_launch_tid_lo};
 
   dice_cgra_subs cgra_subs_inst (
       .clk_i(clk_i),
@@ -212,17 +221,17 @@ module dice_cgra_rf
       .mem_addr_o_3(mem_addr_o_3)
   );
 
-  wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i + 1;
-  assign launch_tag_li    = {rf_rd_valid_lo, cgra_tid_li};
+  wire [SHIFT_LAT_W-1:0] cgra_lat = latency_i[SHIFT_LAT_W-1:0];
+  assign launch_tag_li                = {cgra_launch_valid_lo, cgra_launch_tid_lo};
   // Reuse the metadata already registered by dice_rf_ctrl on the launch side.
-  assign mem_port_valid_li = gen_mem_port_valid(ld_dest_regs_lo, num_stores_lo);
-  assign mem_port_valid_lo = mem_port_valid_li;
-  assign mem_port_op_li    = gen_mem_port_op(ld_dest_regs_lo, num_stores_lo);
-  assign mem_port_op_lo    = mem_port_op_li;
-  assign mem_rsp_addr_li   = ld_dest_regs_lo;
-  assign mem_rsp_addr_lo   = mem_rsp_addr_li;
-  assign cgra_wr_bitmap_li = wr_bitmap_reg_li;
-  assign e_block_id_lo     = e_block_id_li;
+  assign mem_port_valid_li            = gen_mem_port_valid(ld_dest_regs_lo, num_stores_lo);
+  assign mem_port_valid_lo            = mem_port_valid_li;
+  assign mem_port_op_li               = gen_mem_port_op(ld_dest_regs_lo, num_stores_lo);
+  assign mem_port_op_lo               = mem_port_op_li;
+  assign mem_rsp_addr_li              = ld_dest_regs_lo;
+  assign mem_rsp_addr_lo              = mem_rsp_addr_li;
+  assign cgra_wr_bitmap_li            = wr_bitmap_reg_li;
+  assign e_block_id_lo                = e_block_id_li;
   assign {cgra_valid_lo, cgra_tid_lo} = launch_tag_lo;
 
   shift_reg #(

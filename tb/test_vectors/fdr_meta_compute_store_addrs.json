@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.bin",
-  "compile_report_path": "/home/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs_compile_report.json",
-  "fasm_path": "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.fasm",
+  "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs_compile_report.json",
+  "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_compute_store_addrs.fasm",
   "kernel": "compute_store_addrs",
   "notes": [
     "Materializes C-side affine store addresses into GPRs 4..7.",
@@ -21,7 +21,7 @@
       "is_return": 1
     },
     "in_regs_bitmap": 0,
-    "lat": 11,
+    "lat": 6,
     "ld_dest_regs": [
       31,
       31,
