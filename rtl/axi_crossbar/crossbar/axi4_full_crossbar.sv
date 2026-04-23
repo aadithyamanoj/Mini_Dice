@@ -45,8 +45,8 @@ package axi4_xbar_pkg;
   // Bus parameters
   // ---------------------------------------------------------------------------
   localparam int unsigned AxiAddrWidth = 16;
-  localparam int unsigned AxiDataWidth = 16;
-  localparam int unsigned AxiStrbWidth = AxiDataWidth / 8;  // 2
+  localparam int unsigned AxiDataWidth = 32;
+  localparam int unsigned AxiStrbWidth = AxiDataWidth / 8;  // 4
   localparam int unsigned AxiUserWidth = 1;
 
   // ---------------------------------------------------------------------------
@@ -71,14 +71,18 @@ package axi4_xbar_pkg;
   localparam int unsigned IDX_CSR     = 1;
 
   // ---------------------------------------------------------------------------
-  // Address map  (matches cgra_mem_system_16bit routing rules)
-  //   [0] fpga_mem : 0x0800 – 0x0FFF  (2 KB = 1024 × 16-bit words)
-  //   [1] cgra_csr : 0x0000 – 0x00FF  (8 × 16-bit regs, word-stride = 2)
+  // Address map
+  //   [0] fpga_mem : 0x0000 – 0xFEFF  (covers all CGRA fetch/data addresses)
+  //   [1] cgra_csr : 0xFF00 – 0xFFFF  (16 × 16-bit regs, word-stride = 2)
+  // cgra_io_csr decodes only the low-order bits of the address, so it works at
+  // any high base.  end_addr is exclusive per common_cells/addr_decode.sv, so
+  // FPGAMEM_END = 16'hFF00 excludes the CSR region and CSR_END = 16'h0000 is
+  // the sentinel for end-of-address-space.
   // ---------------------------------------------------------------------------
-  localparam logic [AxiAddrWidth-1:0] FPGAMEM_BASE = 16'h0800;
-  localparam logic [AxiAddrWidth-1:0] FPGAMEM_END  = 16'h0FFF;
-  localparam logic [AxiAddrWidth-1:0] CSR_BASE      = 16'h0000;
-  localparam logic [AxiAddrWidth-1:0] CSR_END       = 16'h00FF;
+  localparam logic [AxiAddrWidth-1:0] FPGAMEM_BASE = 16'h0000;
+  localparam logic [AxiAddrWidth-1:0] FPGAMEM_END  = 16'hFF00;
+  localparam logic [AxiAddrWidth-1:0] CSR_BASE      = 16'hFF00;
+  localparam logic [AxiAddrWidth-1:0] CSR_END       = 16'h0000;
 
   // ---------------------------------------------------------------------------
   // 16-bit address rule type

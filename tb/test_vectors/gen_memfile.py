@@ -186,8 +186,8 @@ THREAD_COUNT_WIDTH = DICE_TID_WIDTH + 1
 # Memory configuration from current TB / RTL
 # Metadata local memory uses WORD_SIZE=256 bytes in tb_dice_core.sv.
 METADATA_MEM_DATA_WIDTH  = 256 * 8
-# Bitstream fetch/load uses AxiDataWidth=16 in axi4_full_crossbar.sv.
-BITSTREAM_MEM_DATA_WIDTH = 16
+# Bitstream fetch/load uses AxiDataWidth=32 in axi4_full_crossbar.sv.
+BITSTREAM_MEM_DATA_WIDTH = 32
 # Bitstream payload size from dice_pkg.sv. The CLI may override this from the
 # selected generated CGRA compiler_arch.json so traditional and no-pred
 # collateral can coexist.
@@ -445,7 +445,7 @@ def generate_bitstream_mem(pgraph_list, stage_artifacts, output_path, bitstream_
 
     For each pgraph entry, writes NUM_CHUNKS memory words at consecutive
     addresses starting from bitstream_addr.  The memory word width matches
-    BITSTREAM_MEM_DATA_WIDTH (currently 16 bits), matching the frontend
+    BITSTREAM_MEM_DATA_WIDTH (currently 32 bits), matching the frontend
     bitstream-fetch AXI data width.
 
     If a pgraph entry has a "bitstream_data" list (hex strings), those are
@@ -538,10 +538,14 @@ def _load_stage_bitstream_words(stage_artifacts: Any, stage_idx: int) -> list[st
 
     raw_bytes = binary_path.read_bytes()
     words = []
-    for byte_idx in range(0, len(raw_bytes), 2):
-        lo_byte = raw_bytes[byte_idx]
-        hi_byte = raw_bytes[byte_idx + 1] if byte_idx + 1 < len(raw_bytes) else 0
-        words.append(f"{(hi_byte << 8) | lo_byte:04x}")
+    word_bytes = BITSTREAM_MEM_DATA_WIDTH // 8
+    hex_chars = BITSTREAM_MEM_DATA_WIDTH // 4
+    for byte_idx in range(0, len(raw_bytes), word_bytes):
+        word = 0
+        for offset in range(word_bytes):
+            if byte_idx + offset < len(raw_bytes):
+                word |= raw_bytes[byte_idx + offset] << (8 * offset)
+        words.append(f"{word:0{hex_chars}x}")
     return words
 
 

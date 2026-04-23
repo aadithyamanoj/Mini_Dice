@@ -13,7 +13,11 @@ import "DPI-C" context function int unsigned dice_core_tb_get_cta_desc_word(
 );
 import "DPI-C" context function int unsigned dice_core_tb_get_csr(input int unsigned csr_idx);
 import "DPI-C" context function int unsigned dice_core_tb_meta_read16(input int unsigned byte_addr);
+import "DPI-C" context function int unsigned dice_core_tb_meta_read32(input int unsigned byte_addr);
 import "DPI-C" context function int unsigned dice_core_tb_bitstream_read16(
+  input int unsigned byte_addr
+);
+import "DPI-C" context function int unsigned dice_core_tb_bitstream_read32(
   input int unsigned byte_addr
 );
 import "DPI-C" context function int unsigned dice_core_tb_axi_read16(input int unsigned addr);
@@ -287,7 +291,7 @@ module tb_dice_core;
       mfetch_resp_i.r_valid = 1'b1;
       mfetch_resp_i.r.id = mfetch_id_q;
       mfetch_resp_i.r.data = AxiDataWidth'(
-          dice_core_tb_meta_read16(int'(mfetch_addr_q) + int'(mfetch_beat_idx_q) * MetaBeatBytes));
+          dice_core_tb_meta_read32(int'(mfetch_addr_q) + int'(mfetch_beat_idx_q) * MetaBeatBytes));
       mfetch_resp_i.r.last = (mfetch_beat_idx_q == mfetch_len_q);
     end
   end
@@ -323,7 +327,7 @@ module tb_dice_core;
       bsfetch_resp_i.r_valid = 1'b1;
       bsfetch_resp_i.r.id = bsfetch_id_q;
       bsfetch_resp_i.r.data =
-          AxiDataWidth'(dice_core_tb_bitstream_read16(
+          AxiDataWidth'(dice_core_tb_bitstream_read32(
                         int'(bsfetch_addr_q) + int'(bsfetch_beat_idx_q) * MetaBeatBytes));
       bsfetch_resp_i.r.last = (bsfetch_beat_idx_q == bsfetch_len_q);
     end

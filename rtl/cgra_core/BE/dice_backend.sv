@@ -20,7 +20,7 @@ module dice_backend
     // Frontend configuration-memory write stream
     input logic                                   cm_wr_buffer_i,
     input logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_i,
-    input logic [        DICE_REG_DATA_WIDTH-1:0] cm_wr_data_i,
+    input logic [        DICE_MEM_DATA_WIDTH-1:0] cm_wr_data_i,
     input logic                                   cm_wr_valid_i,
 
     // CGRA scan chain / bitstream outputs
