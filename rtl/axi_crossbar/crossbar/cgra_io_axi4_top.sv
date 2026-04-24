@@ -2,17 +2,20 @@
 // cgra_io_axi4_top.sv
 //
 // CGRA IO top-level integrating:
-//   fpga_mst  : FPGA-originated AXI4 requests decoded from bsg_link RX
+//   fpga_mst  : FPGA-initiated AXI4 master (arrives via bsg_link RX)
+//   fpga_mem  : crossbar master port to off-chip memory (via bsg_link TX/RX)
 //   dfetch    : CGRA backend AXI4 port — driven directly by dice_core LDST FIFO
 //   mfetch    : CGRA frontend metadata fetch (slv_req_t from dice_core)
 //   bsfetch   : CGRA frontend bitstream fetch (slv_req_t from dice_core)
 //
-// Off-chip memory path (chip → FPGA SRAM → chip):
-//   dice_core axi_* → [dfetch port] → crossbar → top_level_io TX → bsg_link_ddr_upstream → [DDR] → FPGA SRAM
-//   FPGA SRAM → [DDR] → bsg_link_ddr_downstream → top_level_io RX → ID shim → crossbar → dice_core axi_*
+// One bsg_link pair carries *both* AXI buses by multiplexing on axi_link_tx/rx
+// opcodes (WRITE_REQ / READ_REQ / READ_RESP / WRITE_RESP):
 //
-// Physical DDR IO pins are exposed at the module boundary.  In simulation a
-// second top_level_io instance (FPGA endpoint) is connected back-to-back.
+//   TX (chip → FPGA): fpga_mem AW/W/AR (chip as master) + fpga_mst R/B (chip as slave)
+//   RX (FPGA → chip): fpga_mem R/B (FPGA SRAM responds)  + fpga_mst AW/W/AR (FPGA host)
+//
+// Only DDR bsg_link pins are exposed at the module boundary; there are no
+// flat AXI4 master ports.
 // =============================================================================
 
 `ifndef AXI_TYPEDEF_SVH_
@@ -40,31 +43,11 @@ module cgra_io_axi4_top
     input  logic clk_i,
     input  logic rst_i,
 
-    // Legacy FPGA AXI4 full master module IO is disabled.  FPGA-originated
-    // traffic now enters through top_level_io RX below.
-    // input  logic [ADDR_WIDTH-1:0]     fpga_axi_i_aw_addr,
-    // input  logic [2:0]                fpga_axi_i_aw_prot,
-    // input  logic                      fpga_axi_i_aw_valid,
-    // output logic                      fpga_axi_i_aw_ready,
-    //
-    // input  logic [DATA_WIDTH-1:0]     fpga_axi_i_w_data,
-    // input  logic [(DATA_WIDTH/8)-1:0] fpga_axi_i_w_strb,
-    // input  logic                      fpga_axi_i_w_valid,
-    // output logic                      fpga_axi_i_w_ready,
-    //
-    // output logic [1:0]                fpga_axi_i_b_resp,
-    // output logic                      fpga_axi_i_b_valid,
-    // input  logic                      fpga_axi_i_b_ready,
-    //
-    // input  logic [ADDR_WIDTH-1:0]     fpga_axi_i_ar_addr,
-    // input  logic [2:0]                fpga_axi_i_ar_prot,
-    // input  logic                      fpga_axi_i_ar_valid,
-    // output logic                      fpga_axi_i_ar_ready,
-    //
-    // output logic [DATA_WIDTH-1:0]     fpga_axi_i_r_data,
-    // output logic [1:0]                fpga_axi_i_r_resp,
-    // output logic                      fpga_axi_i_r_valid,
-    // input  logic                      fpga_axi_i_r_ready,
+    // NOTE: FPGA AXI4 master no longer has flat pins on this module — it
+    // arrives via the bsg_link downstream (FPGA → chip) and responses leave
+    // via the bsg_link upstream (chip → FPGA). See fpga_mst_req construction
+    // below (driven by top_level_io RX AW/W/AR) and the TX R/B inputs on
+    // top_level_io (driven by fpga_mst_resp).
 
     // mfetch / bsfetch AXI4 master ports (slv_req_t from dice_core)
     input  slv_req_t   mfetch_req_i,
@@ -129,6 +112,60 @@ module cgra_io_axi4_top
   mst_resp_t xbar_mem_resp;
 
   // --------------------------------------------------------------------------
+  // bsg_link RX → fpga_mst_req
+  //   top_level_io RX decodes AW/W/AR out of link flits.  fpga_mst is the
+  //   crossbar slave port for FPGA-initiated traffic: we build its slv_req_t
+  //   from the RX outputs and drive its slv_resp_t back onto the RX ready
+  //   inputs.  No ID shim is needed on the chip side — we stamp a constant
+  //   id = '0 here; the FPGA side is responsible for preserving its own
+  //   host-side IDs symmetrically.
+  //
+  //   Fields not carried by the link (id, wstrb, prot, qos, lock, cache,
+  //   region, user) are defaulted:
+  //     - id    : '0  (single master behind this link, constant is safe)
+  //     - wstrb : '1  (full-word writes — cgra_io_csr ignores upper bits)
+  //     - prot  : '0
+  // --------------------------------------------------------------------------
+  logic                  rx_fpga_awvalid;
+  logic [ADDR_WIDTH-1:0] rx_fpga_awaddr;
+  logic [7:0]            rx_fpga_awlen;
+  logic [2:0]            rx_fpga_awsize;
+  logic [1:0]            rx_fpga_awburst;
+  logic                  rx_fpga_wvalid;
+  logic [DATA_WIDTH-1:0] rx_fpga_wdata;
+  logic                  rx_fpga_wlast;
+  logic                  rx_fpga_arvalid;
+  logic [ADDR_WIDTH-1:0] rx_fpga_araddr;
+  logic [7:0]            rx_fpga_arlen;
+  logic [2:0]            rx_fpga_arsize;
+  logic [1:0]            rx_fpga_arburst;
+
+  logic                  tx_fpga_bready;
+  logic                  tx_fpga_rready;
+
+  always_comb begin
+    fpga_mst_req           = '0;
+    fpga_mst_req.aw_valid  = rx_fpga_awvalid;
+    fpga_mst_req.aw.addr   = axi_addr_t'(rx_fpga_awaddr);
+    fpga_mst_req.aw.len    = rx_fpga_awlen;
+    fpga_mst_req.aw.size   = rx_fpga_awsize;
+    fpga_mst_req.aw.burst  = rx_fpga_awburst;
+    fpga_mst_req.aw.id     = '0;
+    fpga_mst_req.w_valid   = rx_fpga_wvalid;
+    fpga_mst_req.w.data    = axi_data_t'(rx_fpga_wdata);
+    fpga_mst_req.w.strb    = '1;
+    fpga_mst_req.w.last    = rx_fpga_wlast;
+    fpga_mst_req.b_ready   = tx_fpga_bready;
+    fpga_mst_req.ar_valid  = rx_fpga_arvalid;
+    fpga_mst_req.ar.addr   = axi_addr_t'(rx_fpga_araddr);
+    fpga_mst_req.ar.len    = rx_fpga_arlen;
+    fpga_mst_req.ar.size   = rx_fpga_arsize;
+    fpga_mst_req.ar.burst  = rx_fpga_arburst;
+    fpga_mst_req.ar.id     = '0;
+    fpga_mst_req.r_ready   = tx_fpga_rready;
+  end
+
+  // --------------------------------------------------------------------------
   // dice_core AXI4 dfetch_* → dfetch_req (single-beat promotion)
   // --------------------------------------------------------------------------
   always_comb begin
@@ -170,24 +207,6 @@ module cgra_io_axi4_top
   // can route responses back to the correct master port.
   // --------------------------------------------------------------------------
   logic        tx_awready, tx_wready, tx_arready;
-  logic        tx_rready, tx_bready;
-
-  logic        rx_awvalid, rx_awready;
-  logic [ADDR_WIDTH-1:0] rx_awaddr;
-  logic [7:0]  rx_awlen;
-  logic [2:0]  rx_awsize;
-  logic [1:0]  rx_awburst;
-
-  logic        rx_wvalid, rx_wready;
-  logic [DATA_WIDTH-1:0] rx_wdata;
-  logic        rx_wlast;
-
-  logic        rx_arvalid, rx_arready;
-  logic [ADDR_WIDTH-1:0] rx_araddr;
-  logic [7:0]  rx_arlen;
-  logic [2:0]  rx_arsize;
-  logic [1:0]  rx_arburst;
-
   logic        rx_rvalid, rx_rlast;
   logic [DATA_WIDTH-1:0] rx_rdata;
   logic [1:0]  rx_rresp;
@@ -250,39 +269,6 @@ module cgra_io_axi4_top
     xbar_mem_resp.b.resp   = rx_bresp;
     xbar_mem_resp.b.id     = aw_id_q_data;
   end
-
-  // --------------------------------------------------------------------------
-  // FPGA-originated AXI requests decoded from bsg_link RX -> fpga_mst_req.
-  // Responses from the crossbar return through top_level_io TX R/B.
-  //
-  // axi_link does not transport AXI IDs or WSTRB.  Host traffic is therefore
-  // treated as strict-FIFO, full-strobe traffic on this path.
-  // --------------------------------------------------------------------------
-  always_comb begin
-    fpga_mst_req           = '0;
-    fpga_mst_req.aw_valid  = rx_awvalid;
-    fpga_mst_req.aw.addr   = axi_addr_t'(rx_awaddr);
-    fpga_mst_req.aw.prot   = 3'b000;
-    fpga_mst_req.aw.len    = rx_awlen;
-    fpga_mst_req.aw.size   = rx_awsize;
-    fpga_mst_req.aw.burst  = axi_pkg::burst_t'(rx_awburst);
-    fpga_mst_req.w_valid   = rx_wvalid;
-    fpga_mst_req.w.data    = axi_data_t'(rx_wdata);
-    fpga_mst_req.w.strb    = '1;
-    fpga_mst_req.w.last    = rx_wlast;
-    fpga_mst_req.b_ready   = tx_bready;
-    fpga_mst_req.ar_valid  = rx_arvalid;
-    fpga_mst_req.ar.addr   = axi_addr_t'(rx_araddr);
-    fpga_mst_req.ar.prot   = 3'b000;
-    fpga_mst_req.ar.len    = rx_arlen;
-    fpga_mst_req.ar.size   = rx_arsize;
-    fpga_mst_req.ar.burst  = axi_pkg::burst_t'(rx_arburst);
-    fpga_mst_req.r_ready   = tx_rready;
-  end
-
-  assign rx_awready = fpga_mst_resp.aw_ready;
-  assign rx_wready  = fpga_mst_resp.w_ready;
-  assign rx_arready = fpga_mst_resp.ar_ready;
 
   // --------------------------------------------------------------------------
   // top_level_io — bsg_link DDR physical layer + axi_link_tx/rx
@@ -354,16 +340,16 @@ module cgra_io_axi4_top
     .tx_arlen_i     ( xbar_mem_req.ar.len                  ),
     .tx_arsize_i    ( xbar_mem_req.ar.size                 ),
     .tx_arburst_i   ( xbar_mem_req.ar.burst                ),
-    // TX: responses to FPGA-originated requests decoded from bsg_link RX
-    .tx_rvalid_i    ( fpga_mst_resp.r_valid              ),
-    .tx_rready_o    ( tx_rready                          ),
-    .tx_rdata_i     ( DATA_WIDTH'(fpga_mst_resp.r.data)   ),
-    .tx_rresp_i     ( fpga_mst_resp.r.resp               ),
-    .tx_rlast_i     ( fpga_mst_resp.r.last               ),
-    .tx_bvalid_i    ( fpga_mst_resp.b_valid              ),
-    .tx_bready_o    ( tx_bready                          ),
-    .tx_bresp_i     ( fpga_mst_resp.b.resp               ),
-    // RX: R/B responses FPGA SRAM → crossbar (ID stamped by shim)
+    // TX: R/B from crossbar fpga_mst slave port → FPGA host
+    .tx_rvalid_i    ( fpga_mst_resp.r_valid                    ),
+    .tx_rready_o    ( tx_fpga_rready                           ),
+    .tx_rdata_i     ( fpga_mst_resp.r.data[DATA_WIDTH-1:0]     ),
+    .tx_rresp_i     ( fpga_mst_resp.r.resp                     ),
+    .tx_rlast_i     ( fpga_mst_resp.r.last                     ),
+    .tx_bvalid_i    ( fpga_mst_resp.b_valid                    ),
+    .tx_bready_o    ( tx_fpga_bready                           ),
+    .tx_bresp_i     ( fpga_mst_resp.b.resp                     ),
+    // RX: R/B responses FPGA SRAM → crossbar fpga_mem port (ID stamped by shim)
     .rx_rvalid_o    ( rx_rvalid                  ),
     .rx_rready_i    ( xbar_mem_req.r_ready       ),
     .rx_rdata_o     ( rx_rdata                   ),
@@ -372,23 +358,23 @@ module cgra_io_axi4_top
     .rx_bvalid_o    ( rx_bvalid                  ),
     .rx_bready_i    ( xbar_mem_req.b_ready       ),
     .rx_bresp_o     ( rx_bresp                   ),
-    // RX: FPGA-originated requests into the on-chip crossbar
-    .rx_awvalid_o   ( rx_awvalid ),
-    .rx_awready_i   ( rx_awready ),
-    .rx_awaddr_o    ( rx_awaddr  ),
-    .rx_awlen_o     ( rx_awlen   ),
-    .rx_awsize_o    ( rx_awsize  ),
-    .rx_awburst_o   ( rx_awburst ),
-    .rx_wvalid_o    ( rx_wvalid  ),
-    .rx_wready_i    ( rx_wready  ),
-    .rx_wdata_o     ( rx_wdata   ),
-    .rx_wlast_o     ( rx_wlast   ),
-    .rx_arvalid_o   ( rx_arvalid ),
-    .rx_arready_i   ( rx_arready ),
-    .rx_araddr_o    ( rx_araddr  ),
-    .rx_arlen_o     ( rx_arlen   ),
-    .rx_arsize_o    ( rx_arsize  ),
-    .rx_arburst_o   ( rx_arburst )
+    // RX: AW/W/AR from FPGA host → crossbar fpga_mst slave port
+    .rx_awvalid_o   ( rx_fpga_awvalid          ),
+    .rx_awready_i   ( fpga_mst_resp.aw_ready   ),
+    .rx_awaddr_o    ( rx_fpga_awaddr           ),
+    .rx_awlen_o     ( rx_fpga_awlen            ),
+    .rx_awsize_o    ( rx_fpga_awsize           ),
+    .rx_awburst_o   ( rx_fpga_awburst          ),
+    .rx_wvalid_o    ( rx_fpga_wvalid           ),
+    .rx_wready_i    ( fpga_mst_resp.w_ready    ),
+    .rx_wdata_o     ( rx_fpga_wdata            ),
+    .rx_wlast_o     ( rx_fpga_wlast            ),
+    .rx_arvalid_o   ( rx_fpga_arvalid          ),
+    .rx_arready_i   ( fpga_mst_resp.ar_ready   ),
+    .rx_araddr_o    ( rx_fpga_araddr           ),
+    .rx_arlen_o     ( rx_fpga_arlen            ),
+    .rx_arsize_o    ( rx_fpga_arsize           ),
+    .rx_arburst_o   ( rx_fpga_arburst          )
   );
 
   // --------------------------------------------------------------------------

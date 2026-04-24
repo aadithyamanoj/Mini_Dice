@@ -109,6 +109,14 @@ module mini_dice_top
   logic dfetch_arvalid, dfetch_arready;
   logic dfetch_rvalid, dfetch_rready;
 
+  logic [ADDR_WIDTH-1:0]  dfetch_awaddr_axi, dfetch_araddr_axi;
+  logic [DATA_WIDTH-1:0]  dfetch_wdata_axi, dfetch_rdata_axi;
+
+  assign dfetch_awaddr_axi = ADDR_WIDTH'(dfetch_awaddr);
+  assign dfetch_araddr_axi = ADDR_WIDTH'(dfetch_araddr);
+  assign dfetch_wdata_axi  = DATA_WIDTH'(dfetch_wdata);
+  assign dfetch_rdata      = DICE_REG_DATA_WIDTH'(dfetch_rdata_axi);
+
   // CSR outputs
   logic                           csr_start;
   logic [                   15:0] csr_start_pc;
@@ -235,20 +243,20 @@ module mini_dice_top
       .bsfetch_resp_o(bsfetch_resp),
 
       // dfetch from dice_core LDST FIFO
-      .dfetch_awaddr_i (dfetch_awaddr),
+      .dfetch_awaddr_i (dfetch_awaddr_axi),
       .dfetch_awvalid_i(dfetch_awvalid),
       .dfetch_awready_o(dfetch_awready),
-      .dfetch_wdata_i  (dfetch_wdata),
+      .dfetch_wdata_i  (dfetch_wdata_axi),
       .dfetch_wstrb_i  (dfetch_wstrb),
       .dfetch_wvalid_i (dfetch_wvalid),
       .dfetch_wready_o (dfetch_wready),
       .dfetch_bresp_o  (dfetch_bresp),
       .dfetch_bvalid_o (dfetch_bvalid),
       .dfetch_bready_i (dfetch_bready),
-      .dfetch_araddr_i (dfetch_araddr),
+      .dfetch_araddr_i (dfetch_araddr_axi),
       .dfetch_arvalid_i(dfetch_arvalid),
       .dfetch_arready_o(dfetch_arready),
-      .dfetch_rdata_o  (dfetch_rdata),
+      .dfetch_rdata_o  (dfetch_rdata_axi),
       .dfetch_rresp_o  (dfetch_rresp),
       .dfetch_rvalid_o (dfetch_rvalid),
       .dfetch_rready_i (dfetch_rready),

@@ -462,6 +462,13 @@ module axi_link_rx
           end
         end
       end
+
+      default: begin
+        state_n       = RX_IDLE;
+        cur_beats_n   = '0;
+        r_pkt_beats_n = '0;
+        payload_rem_n = '0;
+      end
     endcase
   end
 

@@ -157,13 +157,13 @@ std::uint32_t extract_hex_word_lsb_first(
   }
 
   const std::size_t total_chars = hex.size();
-  if ((word_idx + 1) * hex_chars_per_word > total_chars) {
+  if (word_idx * hex_chars_per_word >= total_chars) {
     return 0;
   }
 
   const std::size_t end = total_chars - word_idx * hex_chars_per_word;
-  const std::size_t begin = end - hex_chars_per_word;
-  return parse_u32("0x" + hex.substr(begin, hex_chars_per_word));
+  const std::size_t begin = (end > hex_chars_per_word) ? (end - hex_chars_per_word) : 0;
+  return parse_u32("0x" + hex.substr(begin, end - begin));
 }
 
 void load_memfile_map(
