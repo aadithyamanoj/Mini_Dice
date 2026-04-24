@@ -278,6 +278,25 @@ std::uint32_t bitstream_read16(std::uint32_t byte_addr) {
   return extract_hex_word_lsb_first(it->second, 0, 4);
 }
 
+std::uint32_t meta_read32(std::uint32_t byte_addr) {
+  const std::uint32_t line_addr = byte_addr / kMetaWordBytes;
+  const std::uint32_t beat_idx = (byte_addr % kMetaWordBytes) / 4u;
+  const auto it = g_meta_words.find(line_addr);
+  if (it == g_meta_words.end()) {
+    return 0;
+  }
+  return extract_hex_word_lsb_first(it->second, beat_idx, 8);
+}
+
+std::uint32_t bitstream_read32(std::uint32_t byte_addr) {
+  const std::uint32_t word_addr = byte_addr / 4u;
+  const auto it = g_bitstream_words.find(word_addr);
+  if (it == g_bitstream_words.end()) {
+    return 0;
+  }
+  return extract_hex_word_lsb_first(it->second, 0, 8);
+}
+
 }  // namespace
 
 extern "C" {
@@ -338,6 +357,14 @@ unsigned int dice_core_tb_meta_read16(unsigned int byte_addr) {
 
 unsigned int dice_core_tb_bitstream_read16(unsigned int byte_addr) {
   return bitstream_read16(byte_addr);
+}
+
+unsigned int dice_core_tb_meta_read32(unsigned int byte_addr) {
+  return meta_read32(byte_addr);
+}
+
+unsigned int dice_core_tb_bitstream_read32(unsigned int byte_addr) {
+  return bitstream_read32(byte_addr);
 }
 
 unsigned int dice_core_tb_axi_read16(unsigned int addr) {
