@@ -52,7 +52,7 @@ module cgra_io_csr
   output mst_resp_t axi_resp_o,
 
   // --------------------------------------------------------------------------
-  // Hardware outputs (CSR → CGRA core)
+  // Hardware outputs (CSR regs 0-7 → CGRA core)
   // --------------------------------------------------------------------------
   output logic        start_o,             // 1-cycle pulse: begin execution
   output logic [15:0] start_pc_o,          // warp entry PC
@@ -71,16 +71,16 @@ module cgra_io_csr
   input  logic [15:0] hw_bsload_cnt_i,     // bitstream load word counter
 
   // --------------------------------------------------------------------------
-  // Input-only CSR sources exposed to the CGRA input crossbar
+  // R/W kernel argument outputs (CSR regs 8-15) — host-writable, CGRA-readable
   // --------------------------------------------------------------------------
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX3_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX4_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
-  input logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX0_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX1_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX2_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX3_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX4_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX5_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX6_o,
+  output logic [DICE_REG_DATA_WIDTH-1:0] csrX7_o
 );
 
   // --------------------------------------------------------------------------
@@ -105,11 +105,12 @@ module cgra_io_csr
   localparam int REG_CSRX7  = 15; // 0x1E
 
   // --------------------------------------------------------------------------
-  // R/W register storage (CTRL, START_PC, RSVD6, RSVD7)
+  // R/W register storage (CTRL, START_PC, RSVD6, RSVD7, CSRX0-7)
   // --------------------------------------------------------------------------
   logic [15:0] ctrl_r;
   logic [15:0] start_pc_r;
   logic [15:0] rsvd6_r, rsvd7_r;
+  logic [DICE_REG_DATA_WIDTH-1:0] csrX_r [8];
 
   // --------------------------------------------------------------------------
   // Hardware-written sticky bits
@@ -149,8 +150,10 @@ module cgra_io_csr
   end
 
   logic        do_write;
+  logic        do_write_lo;
   logic [15:0] wr_data;
   assign do_write = aw_pending_r && axi_req_i.w_valid;
+  assign do_write_lo = do_write && (|axi_req_i.w.strb[1:0]);
   // Byte-lane strobe merge
   assign wr_data[7:0]  = axi_req_i.w.strb[0] ? axi_req_i.w.data[7:0]  : 8'h00;
   assign wr_data[15:8] = axi_req_i.w.strb[1] ? axi_req_i.w.data[15:8] : 8'h00;
@@ -199,14 +202,14 @@ module cgra_io_csr
       4'(REG_ERROR):  rd_data = error_info_sticky_r;
       4'(REG_RSVD6):  rd_data = rsvd6_r;
       4'(REG_RSVD7):  rd_data = rsvd7_r;
-      4'(REG_CSRX0):  rd_data = csrX0_i;
-      4'(REG_CSRX1):  rd_data = csrX1_i;
-      4'(REG_CSRX2):  rd_data = csrX2_i;
-      4'(REG_CSRX3):  rd_data = csrX3_i;
-      4'(REG_CSRX4):  rd_data = csrX4_i;
-      4'(REG_CSRX5):  rd_data = csrX5_i;
-      4'(REG_CSRX6):  rd_data = csrX6_i;
-      4'(REG_CSRX7):  rd_data = csrX7_i;
+      4'(REG_CSRX0):  rd_data = csrX_r[0];
+      4'(REG_CSRX1):  rd_data = csrX_r[1];
+      4'(REG_CSRX2):  rd_data = csrX_r[2];
+      4'(REG_CSRX3):  rd_data = csrX_r[3];
+      4'(REG_CSRX4):  rd_data = csrX_r[4];
+      4'(REG_CSRX5):  rd_data = csrX_r[5];
+      4'(REG_CSRX6):  rd_data = csrX_r[6];
+      4'(REG_CSRX7):  rd_data = csrX_r[7];
       default:        rd_data = '0;
     endcase
   end
@@ -241,21 +244,28 @@ module cgra_io_csr
       complete_sticky_r       <= 1'b0;
       stack_overflow_sticky_r <= 1'b0;
       error_info_sticky_r     <= '0;
+      for (int i = 0; i < 8; i++) csrX_r[i] <= '0;
     end else begin
 
       // --- CTRL: start bit self-clears one cycle after being written --------
       ctrl_r[0] <= 1'b0;  // default: clear start each cycle
 
       // --- AXI host writes --------------------------------------------------
-      if (do_write) begin
+      if (do_write_lo) begin
         unique case (aw_idx_r)
-          4'(REG_CTRL): begin
-            ctrl_r    <= wr_data;          // start bit set here, clears next cycle
-          end
-          4'(REG_PC):   start_pc_r <= wr_data;
-          4'(REG_RSVD6): rsvd6_r  <= wr_data;
-          4'(REG_RSVD7): rsvd7_r  <= wr_data;
-          default: ;  // RO registers: ignore writes
+          4'(REG_CTRL):  ctrl_r     <= wr_data;
+          4'(REG_PC):    start_pc_r <= wr_data;
+          4'(REG_RSVD6): rsvd6_r   <= wr_data;
+          4'(REG_RSVD7): rsvd7_r   <= wr_data;
+          4'(REG_CSRX0): csrX_r[0] <= wr_data;
+          4'(REG_CSRX1): csrX_r[1] <= wr_data;
+          4'(REG_CSRX2): csrX_r[2] <= wr_data;
+          4'(REG_CSRX3): csrX_r[3] <= wr_data;
+          4'(REG_CSRX4): csrX_r[4] <= wr_data;
+          4'(REG_CSRX5): csrX_r[5] <= wr_data;
+          4'(REG_CSRX6): csrX_r[6] <= wr_data;
+          4'(REG_CSRX7): csrX_r[7] <= wr_data;
+          default: ;
         endcase
       end
 
@@ -281,9 +291,18 @@ module cgra_io_csr
   // --------------------------------------------------------------------------
   // Hardware output assignments
   // --------------------------------------------------------------------------
-  assign start_o       = ctrl_r[0];   // 1-cycle pulse (self-clearing bit)
+  assign start_o       = ctrl_r[0];
   assign cgra_reset_o  = ctrl_r[1];
   assign bsload_en_o   = ctrl_r[2];
   assign start_pc_o    = start_pc_r;
+
+  assign csrX0_o = csrX_r[0];
+  assign csrX1_o = csrX_r[1];
+  assign csrX2_o = csrX_r[2];
+  assign csrX3_o = csrX_r[3];
+  assign csrX4_o = csrX_r[4];
+  assign csrX5_o = csrX_r[5];
+  assign csrX6_o = csrX_r[6];
+  assign csrX7_o = csrX_r[7];
 
 endmodule : cgra_io_csr

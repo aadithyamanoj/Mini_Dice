@@ -166,7 +166,7 @@ module tb_dice_core;
   );
 
   initial begin
-    clk_i = 1'b0;
+    clk_i = 1'b1;
     forever #(ClkPeriod / 2) clk_i = ~clk_i;
   end
 

@@ -3,7 +3,7 @@ module fdr_top
   import dice_frontend_pkg::*;
   import axi4_xbar_pkg::*;
 #(
-    parameter int BITSTREAM_SIZE = 2056
+    parameter int BITSTREAM_SIZE = DICE_BITSTREAM_SIZE
 ) (
     input logic clk_i,
     input logic rst_i,

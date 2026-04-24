@@ -23,8 +23,8 @@ package dice_pkg;
   parameter int DICE_CLUSTER_ID_WIDTH         = $clog2(`DICE_NUM_CGRA_CLUSTERS);
   parameter int DICE_CORE_ID_WIDTH            = $clog2(`DICE_NUM_CGRA_CORES);
   parameter int DICE_SMEM_SIZE_WIDTH          = $clog2(`DICE_SMEM_SIZE_PER_CORE);
-  parameter int DICE_BITSTREAM_SIZE           = 1700;  // 256 bytes max bitstream size
-  parameter int DICE_MEM_DATA_WIDTH           = 16;
+  parameter int DICE_BITSTREAM_SIZE           = 1620;  // serial CGRA config bits
+  parameter int DICE_MEM_DATA_WIDTH           = 32;
   parameter int DICE_MEM_FLAGS_WIDTH          = 1;
   parameter int DICE_MEM_ADDR_WIDTH           = DICE_ADDR_WIDTH;
 

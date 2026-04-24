@@ -20,7 +20,7 @@ module dice_backend
     // Frontend configuration-memory write stream
     input logic                                   cm_wr_buffer_i,
     input logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_i,
-    input logic [        DICE_REG_DATA_WIDTH-1:0] cm_wr_data_i,
+    input logic [        DICE_MEM_DATA_WIDTH-1:0] cm_wr_data_i,
     input logic                                   cm_wr_valid_i,
 
     // CGRA scan chain / bitstream outputs
@@ -111,9 +111,16 @@ module dice_backend
   logic [DICE_REG_DATA_WIDTH-1:0] mem_rsp_data_lo;
   logic mem_rsp_valid_lo;
 
-  // One-hot TID bitmap for scoreboard writeback release
-  logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] cgra_wb_tid_bitmap;
-  assign cgra_wb_tid_bitmap = cgra_v_lo ? (DICE_NUM_MAX_THREADS_PER_CORE'(1'b1) << cgra_tid_lo) : '0;
+  // One-hot release for the scoreboard. Loads are released when the LDST
+  // response is accepted by the RF writeback path, not when the CGRA pipeline
+  // emits the memory request.
+  logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] scoreboard_wb_tid_bitmap;
+  logic [REG_NUM-1:0] scoreboard_wb_regs_bitmap;
+
+  assign scoreboard_wb_tid_bitmap = mem_rsp_valid_lo
+      ? (DICE_NUM_MAX_THREADS_PER_CORE'(1'b1) << mem_rsp_tid_lo)
+      : '0;
+  assign scoreboard_wb_regs_bitmap = mem_rsp_valid_lo ? (REG_NUM'(1'b1) << mem_rsp_addr_lo) : '0;
 
 
 
@@ -165,6 +172,8 @@ module dice_backend
   logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_reads_li;
   logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_stores_li;
   logic                            fdr_accept_li;
+  logic                            fdr_active_valid_q;
+  logic                            scoreboard_clear_li;
 
   // Store completion from mem_req_fifo
   logic                            store_pop_lo;
@@ -204,6 +213,9 @@ module dice_backend
   assign fdr_pending_stores_li = PENDING_MEM_COUNT_WIDTH'(
       $countones(fdr_data_li.real_active_mask) * fdr_data_li.metadata.num_stores
   );
+  assign scoreboard_clear_li = fdr_accept_li
+                             && fdr_active_valid_q
+                             && (fdr_data_li.schedule_cta_id != fdr_active_q.schedule_cta_id);
   assign cgra_cm0_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign cgra_cm1_data_li = DICE_MEM_DATA_WIDTH'(cm_wr_data_i);
   assign prog_handshake_li = prog_pending_q & prog_ready_lo;
@@ -231,6 +243,7 @@ module dice_backend
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
       fdr_active_q          <= '0;
+      fdr_active_valid_q    <= 1'b0;
       prog_pending_q        <= 1'b0;
       prog_pending_buffer_q <= 1'b0;
       prog_pending_eblock_q <= '0;
@@ -239,6 +252,7 @@ module dice_backend
     end else begin
       if (fdr_accept_li) begin
         fdr_active_q          <= fdr_data_li;
+        fdr_active_valid_q    <= 1'b1;
         prog_pending_q        <= 1'b1;
         prog_pending_buffer_q <= fdr_data_li.loaded_buffer;
         prog_pending_eblock_q <= fdr_data_li.schedule_eblock_id;
@@ -308,8 +322,10 @@ module dice_backend
       .input_register_bitmap(fdr_active_li.metadata.in_regs_bitmap),
       .active_mask(fdr_active_li.real_active_mask),
       .fetch_done(fdr_accept_li),
-      .wb_valid(cgra_v_lo),  // CGRA writeback pulse (lat-shifted RF read valid)
-      .wb_tid_bitmap(cgra_wb_tid_bitmap),  // one-hot TID that just completed
+      .wb_valid(mem_rsp_valid_lo),
+      .wb_tid_bitmap(scoreboard_wb_tid_bitmap),
+      .wb_regs_bitmap(scoreboard_wb_regs_bitmap),
+      .clear_scoreboard(scoreboard_clear_li),
       .dispatch_fifo_pop(disp_pop),  // advance FIFO when we have credits
       .dispatch_fifo_empty(dispatch_fifo_empty),
       .dispatch_tid_o(rd_tid),
@@ -553,6 +569,14 @@ module dice_backend
             "[BE:dice_backend] t=%0t dispatching threads: tids_valid=%b loads_needed=%0d load_credit_refund=%0d mem_stage=%0b bundle_refund=%0b load_ready=%0b bundle_ready=%0b",
             $time, disp_tid_valid, load_credit_need_li, load_credit_up_li, mem_stage_lo,
             mem_bundle_credit_up_li, cgra_credit_ready_lo, mem_bundle_credit_ready_lo);
+        for (int lane = 0; lane < NUM_LANES; lane++) begin
+          if (disp_tid_valid[lane]) begin
+            $display(
+                "[BE:dice_backend] t=%0t thread dispatched: tid=%0d eblock=%0d lane=%0d",
+                $time, rd_tid[lane*DICE_TID_WIDTH+:DICE_TID_WIDTH],
+                fdr_active_li.schedule_eblock_id, lane);
+          end
+        end
       end
 
       if (!prog_busy_prev_q && prog_busy_lo) begin

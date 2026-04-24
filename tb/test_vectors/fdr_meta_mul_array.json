@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin",
-  "compile_report_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array_compile_report.json",
-  "fasm_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.fasm",
+  "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array_compile_report.json",
+  "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.fasm",
   "kernel": "mul_array",
   "notes": [
     "Consumes GPRs 0..7 as mul operands.",
@@ -10,7 +10,7 @@
   "pgraph_meta_t": {
     "barrier": 0,
     "bitstream_addr": 1024,
-    "bitstream_length": 213,
+    "bitstream_length": 203,
     "branch_meta": {
       "branch_ena": 0,
       "branch_jump_target_offset": 0,
@@ -18,10 +18,10 @@
       "branch_pred_reg": 0,
       "branch_reconv_offset": 0,
       "branch_uni": 0,
-      "is_return": 0
+      "is_return": 1
     },
     "in_regs_bitmap": 255,
-    "lat": 7,
+    "lat": 5,
     "ld_dest_regs": [
       31,
       31,

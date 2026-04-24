@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.bin",
-  "compile_report_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array_compile_report.json",
-  "fasm_path": "/home/jami3jun/Desktop/minidice/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.fasm",
+  "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array_compile_report.json",
+  "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_store_mul_array.fasm",
   "kernel": "store_mul_array",
   "notes": [
     "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
@@ -11,7 +11,7 @@
   "pgraph_meta_t": {
     "barrier": 0,
     "bitstream_addr": 2048,
-    "bitstream_length": 213,
+    "bitstream_length": 203,
     "branch_meta": {
       "branch_ena": 0,
       "branch_jump_target_offset": 0,
@@ -22,7 +22,7 @@
       "is_return": 1
     },
     "in_regs_bitmap": 255,
-    "lat": 9,
+    "lat": 5,
     "ld_dest_regs": [
       31,
       31,

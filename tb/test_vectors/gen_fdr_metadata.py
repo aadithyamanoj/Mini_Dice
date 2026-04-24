@@ -8,6 +8,7 @@ generation, separate from the Dora build/bitgen flow.
 
 Usage:
     python3 gen_fdr_metadata.py --kernel full_mul_array
+    python3 gen_fdr_metadata.py --kernel full_mul_array --nopred
     python3 gen_fdr_metadata.py --kernel load_mul_array_a --build-dir <path>
 """
 
@@ -37,6 +38,7 @@ REPO_ROOT = SCRIPT_PATH.parents[2]
 DEFAULT_BUILD_DIR = (
     REPO_ROOT / "dora" / "examples" / "devices" / "dice-isca" / "mini_dice" / "build"
 )
+DEFAULT_NOPRED_BUILD_DIR = DEFAULT_BUILD_DIR.with_name("build_nopred")
 DEFAULT_OUTPUT_DIR = SCRIPT_PATH.parent
 DEFAULT_START_PC = 0x1000
 DEFAULT_PC_STRIDE = 0x0100
@@ -44,14 +46,14 @@ DEFAULT_BITSTREAM_BASE = 0x0000
 DEFAULT_BITSTREAM_STRIDE = 0x0200
 DEFAULT_THREAD_COUNT = 16
 DEFAULT_AFFINE_CSR_VALUES = {
-    "csrX0": 0x0100,
-    "csrX1": 0x0200,
-    "csrX2": 0x0300,
-    "csrX3": 0x0008,
-    "csrX4": 0x0000,
-    "csrX5": 0x0001,
-    "csrX6": 0x0002,
-    "csrX7": 0x0003,
+    "csrX0": 1,       # A-side base
+    "csrX1": 128,     # B-side base
+    "csrX2": 256,     # C-side (store) base
+    "csrX3": 4,       # thread stride
+    "csrX4": 0,       # lane 0 offset
+    "csrX5": 1,       # lane 1 offset
+    "csrX6": 2,       # lane 2 offset
+    "csrX7": 3,       # lane 3 offset
 }
 
 
@@ -66,10 +68,16 @@ def parse_args() -> argparse.Namespace:
         help="Kernel or staged bundle to emit metadata for",
     )
     parser.add_argument(
+        "--nopred",
+        action="store_true",
+        help="Use the no-predicate mini_dice build_nopred collateral by default",
+    )
+    parser.add_argument(
         "--build-dir",
         type=Path,
-        default=DEFAULT_BUILD_DIR,
-        help="mini_dice build directory containing compile reports",
+        default=None,
+        help="mini_dice build directory containing compile reports "
+             "(default: build, or build_nopred with --nopred)",
     )
     parser.add_argument(
         "--output-dir",
@@ -124,8 +132,8 @@ def _no_branch_meta(*, is_return: bool = False) -> dict[str, int]:
     `branch_ena=0` cleanly disables the branch handler semantics. The remaining
     fields are set to zero as benign don't-care values.
 
-    Set `is_return=True` on the final stage of a kernel so the CTA scheduler
-    sees the return signal and marks the CTA complete after that eblock commits.
+    The last eblock in a kernel must set ``is_return=True`` so the CTA
+    scheduler knows the kernel is complete.
     """
     return {
         "branch_ena": 0,
@@ -236,25 +244,11 @@ def _runtime_csr_values_from_reports(
     kernels: tuple[str, ...],
     build_dir: Path,
 ) -> dict[str, int]:
-    for kernel in kernels:
-        report = _load_compile_report(_report_path(build_dir, kernel))
-        runtime_contract = report.get("runtime_contract")
-        if not isinstance(runtime_contract, dict):
-            continue
-        raw_defaults = runtime_contract.get("default_csr_values")
-        if not isinstance(raw_defaults, dict):
-            continue
+    """Return CSR values for the test vector.
 
-        csr_values: dict[str, int] = {}
-        for idx in range(8):
-            key = f"csrX{idx}"
-            value = raw_defaults.get(key)
-            if not isinstance(value, int):
-                break
-            csr_values[key] = value
-        else:
-            return csr_values
-
+    Always uses DEFAULT_AFFINE_CSR_VALUES which are chosen so that all
+    multiply products fit in 16 bits without overflow.
+    """
     return dict(DEFAULT_AFFINE_CSR_VALUES)
 
 
@@ -328,6 +322,7 @@ def _emit_metadata_for_kernel(
         kernel=kernel,
         build_dir=build_dir,
         bitstream_addr=bitstream_addr,
+        is_last_stage=True,
     )
 
     output_path = output_dir / f"fdr_meta_{kernel}.json"
@@ -335,6 +330,52 @@ def _emit_metadata_for_kernel(
         json.dump(payload, stream, indent=2, sort_keys=True)
         stream.write("\n")
     return output_path
+
+
+NUM_MEM_LANES = 4
+DATA_MASK = 0xFFFF
+
+
+def _axi_read_mock(addr: int) -> int:
+    """Mirror the DPI-C ``dice_core_tb_axi_read16`` behaviour."""
+    return addr & DATA_MASK
+
+
+def _compute_full_mul_array_expected_writes(
+    *,
+    csr_values: dict[str, int],
+    thread_count: int,
+) -> list[dict[str, int]]:
+    """Simulate the staged mul-array kernel and return expected AXI writes.
+
+    Stage semantics (matching the CGRA bitstreams):
+      0  load_mul_array_a   : GPR[0..3] = mem[csrX0 + tid*csrX3 + csrX{4..7}]
+      1  load_mul_array_b   : GPR[4..7] = mem[csrX1 + tid*csrX3 + csrX{4..7}]
+      2  mul_array           : GPR[l]   = GPR[l] * GPR[4+l]  for l in 0..3
+      3  compute_store_addrs : GPR[4+l] = csrX2 + tid*csrX3 + csrX{4+l}
+      4  store_mul_array     : mem[GPR[4+l]] = GPR[l]         for l in 0..3
+
+    The AXI read mock returns ``addr & 0xFFFF`` for every load, so loaded
+    values equal their addresses truncated to 16 bits.
+    """
+    base_a = csr_values["csrX0"]
+    base_b = csr_values["csrX1"]
+    base_c = csr_values["csrX2"]
+    stride = csr_values["csrX3"]
+    lane_offsets = [csr_values[f"csrX{4 + l}"] for l in range(NUM_MEM_LANES)]
+
+    writes: list[dict[str, int]] = []
+    for tid in range(thread_count):
+        for lane in range(NUM_MEM_LANES):
+            a_addr = base_a + tid * stride + lane_offsets[lane]
+            b_addr = base_b + tid * stride + lane_offsets[lane]
+            a_val = _axi_read_mock(a_addr)
+            b_val = _axi_read_mock(b_addr)
+            product = (a_val * b_val) & DATA_MASK
+            store_addr = base_c + tid * stride + lane_offsets[lane]
+            writes.append({"addr": store_addr, "data": product, "strb": 3})
+
+    return writes
 
 
 def _build_coalesced_test_vector(
@@ -378,6 +419,13 @@ def _build_coalesced_test_vector(
             }
         )
 
+    expected_writes: list[dict[str, int]] = []
+    if kernels == FULL_MUL_ARRAY_KERNEL_STAGES:
+        expected_writes = _compute_full_mul_array_expected_writes(
+            csr_values=runtime_csr_values,
+            thread_count=thread_count,
+        )
+
     return {
         "dice_cta_desc": {
             "kernel_desc": {
@@ -399,7 +447,7 @@ def _build_coalesced_test_vector(
         "runtime": {
             "csr_values": runtime_csr_values,
             "axi": {
-                "expected_writes": [],
+                "expected_writes": expected_writes,
             },
         },
         "stage_artifacts": stage_artifacts,
@@ -431,12 +479,23 @@ def _emit_coalesced_test_vector(
     with output_path.open("w", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2, sort_keys=True)
         stream.write("\n")
+
+    runtime_payload = payload["runtime"]
+    runtime_path = output_dir / f"{bundle_name}_test_vector_runtime.json"
+    with runtime_path.open("w", encoding="utf-8") as stream:
+        json.dump(runtime_payload, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+
     return output_path
 
 
 def main() -> None:
     args = parse_args()
-    build_dir = args.build_dir.resolve()
+    build_dir = (
+        args.build_dir
+        if args.build_dir is not None
+        else (DEFAULT_NOPRED_BUILD_DIR if args.nopred else DEFAULT_BUILD_DIR)
+    ).resolve()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

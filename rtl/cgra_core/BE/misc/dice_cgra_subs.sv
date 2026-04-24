@@ -82,7 +82,9 @@ module dice_cgra_subs
   logic prog_done_li;
   logic prog_we_li;
   logic prog_din_li;
-  cgra_bitstream_buf_serial bitstream_buf_serial_inst (
+  cgra_bitstream_buf_serial #(
+      .PROG_BITSTREAM_BITS_P(DICE_BITSTREAM_SIZE)
+  ) bitstream_buf_serial_inst (
       .clk_i(clk_i),
       .reset_i(reset_i),
       .cm0_data_i(cm0_data_i),
