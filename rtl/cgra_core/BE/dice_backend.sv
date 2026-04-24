@@ -569,6 +569,14 @@ module dice_backend
             "[BE:dice_backend] t=%0t dispatching threads: tids_valid=%b loads_needed=%0d load_credit_refund=%0d mem_stage=%0b bundle_refund=%0b load_ready=%0b bundle_ready=%0b",
             $time, disp_tid_valid, load_credit_need_li, load_credit_up_li, mem_stage_lo,
             mem_bundle_credit_up_li, cgra_credit_ready_lo, mem_bundle_credit_ready_lo);
+        for (int lane = 0; lane < NUM_LANES; lane++) begin
+          if (disp_tid_valid[lane]) begin
+            $display(
+                "[BE:dice_backend] t=%0t thread dispatched: tid=%0d eblock=%0d lane=%0d",
+                $time, rd_tid[lane*DICE_TID_WIDTH+:DICE_TID_WIDTH],
+                fdr_active_li.schedule_eblock_id, lane);
+          end
+        end
       end
 
       if (!prog_busy_prev_q && prog_busy_lo) begin
