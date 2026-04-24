@@ -11,8 +11,6 @@
 //   dice_core mfetch/bsfetch (slv_req_t) → crossbar
 //   dice_core axi_* (dfetch) → crossbar
 //
-// hw_* status inputs to cgra_io_csr are tied off (dice_core does not yet
-// expose these signals; they are not needed for single-kernel testing).
 // grid_size and thread_count are tied to single-CTA defaults for now.
 // =============================================================================
 
@@ -123,6 +121,7 @@ module mini_dice_top
 
   // csrX kernel arguments: cgra_io_csr regs 8-15 → dice_core
   logic [DICE_REG_DATA_WIDTH-1:0] csrX         [8];
+  logic                           cta_complete_fire;
 
   // Legacy flat FPGA AXI4 host interface is no longer consumed by
   // cgra_io_axi4_top; FPGA-originated traffic now enters through bsg_link RX.
@@ -151,6 +150,8 @@ module mini_dice_top
     u_cta_if.dispatch_data.kernel_desc.thread_count = 16;
     u_cta_if.complete_ready                         = 1'b1;
   end
+
+  assign cta_complete_fire = u_cta_if.complete_valid && u_cta_if.complete_ready;
 
   // --------------------------------------------------------------------------
   // dice_core
@@ -298,9 +299,9 @@ module mini_dice_top
       .cgra_reset_o(csr_cgra_reset_o),
       .bsload_en_o (csr_bsload_en_o),
 
-      // hw_* status: tied off until dice_core exposes these signals
+      // hw_* status exposed through CSR STATUS.
       .hw_busy_i          (1'b0),
-      .hw_complete_i      (1'b0),
+      .hw_complete_i      (cta_complete_fire),
       .hw_dispatching_i   (1'b0),
       .hw_stack_overflow_i(1'b0),
       .hw_stack_depth_i   ('0),

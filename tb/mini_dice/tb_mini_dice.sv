@@ -68,7 +68,7 @@ module tb_mini_dice;
   localparam int FW = 32;
   localparam int CW = 8;
   localparam int CLK_HALF_NS = 10;  // 100 MHz core clock
-  localparam int TIMEOUT_CYC = 1200000000;
+  localparam int TIMEOUT_CYC = 70000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
 
@@ -100,11 +100,23 @@ module tb_mini_dice;
   initial forever #(CLK_HALF_NS * 1ns) clk_i = ~clk_i;
 
   int unsigned cyc_count;
+  int unsigned complete_seen_cycle;
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
       cyc_count <= 0;
+      complete_seen_cycle <= 0;
     end else begin
       cyc_count <= cyc_count + 1;
+      if (u_dut.u_csr.complete_sticky_r && complete_seen_cycle == 0) begin
+        complete_seen_cycle <= cyc_count;
+      end
+      if (complete_seen_cycle != 0) begin
+        if (dice_core_tb_check_done() != 0) begin
+          $display("[TB] PASS: CSR complete observed and DPI write diff clean");
+          $finish;
+        end
+        $fatal(1, "CSR complete observed but DPI write diff failed");
+      end
       if (cyc_count >= TIMEOUT_CYC) begin
         $display("[TB] TIMEOUT at %0d cycles", cyc_count);
         if (dice_core_tb_check_done() != 0) begin
