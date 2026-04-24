@@ -1,5 +1,5 @@
 module axi_link_rx
-  #(parameter int flit_width_p        = 16
+  #(parameter int flit_width_p        = 32
    ,parameter int addr_width_p        = 16
    ,parameter int link_fifo_els_p     = 8
    ,parameter int aw_desc_fifo_els_p  = 2
@@ -26,7 +26,7 @@ module axi_link_rx
 
    ,output logic                    wvalid_o
    ,input  logic                    wready_i
-   ,output logic [15:0]             wdata_o
+   ,output logic [flit_width_p-1:0] wdata_o
    ,output logic                    wlast_o
 
    ,output logic                    arvalid_o
@@ -38,7 +38,7 @@ module axi_link_rx
 
    ,output logic                    rvalid_o
    ,input  logic                    rready_i
-   ,output logic [15:0]             rdata_o
+   ,output logic [flit_width_p-1:0] rdata_o
    ,output logic [1:0]              rresp_o
    ,output logic                    rlast_o
 
@@ -68,8 +68,6 @@ module axi_link_rx
   // --------------------------------------------------------------------------
 
   initial begin
-    if (flit_width_p != 16)
-      $error("axi_link_rx requires flit_width_p=16, got %0d", flit_width_p);
     if (addr_width_p != 16)
       $error("axi_link_rx requires addr_width_p=16, got %0d", addr_width_p);
   end
@@ -96,7 +94,7 @@ module axi_link_rx
   localparam int drop_count_width_lp = 14;
   localparam int req_desc_width_lp   = addr_width_p + beat_count_width_lp;
   localparam int r_desc_width_lp     = beat_count_width_lp + 2;
-  localparam logic [2:0] axi_size_lp   = 3'b001;
+  localparam logic [2:0] axi_size_lp   = 3'b010;
   localparam logic [1:0] axi_burst_lp  = 2'b01;
   localparam int max_axi_beats_lp    = 256;
 
@@ -114,15 +112,15 @@ module axi_link_rx
   // Link ingress FIFO
   // --------------------------------------------------------------------------
 
-  logic        link_fifo_ready_lo;
-  logic        link_fifo_v_lo;
-  logic [15:0] link_fifo_data_lo;
-  logic        link_fifo_yumi_li;
+  logic                    link_fifo_ready_lo;
+  logic                    link_fifo_v_lo;
+  logic [flit_width_p-1:0] link_fifo_data_lo;
+  logic                    link_fifo_yumi_li;
 
   assign link_rx_yumi_o = link_rx_v_i && link_fifo_ready_lo;
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (flit_width_p),
     .els_p              (link_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -156,9 +154,9 @@ module axi_link_rx
   logic [req_desc_width_lp-1:0] rd_desc_data_lo;
 
   logic                      w_data_push_v_li, w_data_push_ready_lo;
-  logic [15:0]               w_data_push_data_li;
+  logic [flit_width_p-1:0]  w_data_push_data_li;
   logic                      w_data_v_lo, w_data_yumi_li;
-  logic [15:0]               w_data_lo;
+  logic [flit_width_p-1:0]  w_data_lo;
 
   logic                      r_desc_push_v_li, r_desc_push_ready_lo;
   logic [r_desc_width_lp-1:0] r_desc_push_data_li;
@@ -166,9 +164,9 @@ module axi_link_rx
   logic [r_desc_width_lp-1:0] r_desc_data_lo;
 
   logic                      r_data_push_v_li, r_data_push_ready_lo;
-  logic [15:0]               r_data_push_data_li;
+  logic [flit_width_p-1:0]  r_data_push_data_li;
   logic                      r_data_v_lo, r_data_yumi_li;
-  logic [15:0]               r_data_lo;
+  logic [flit_width_p-1:0]  r_data_lo;
 
   logic                      b_resp_push_v_li, b_resp_push_ready_lo;
   logic [1:0]                b_resp_push_data_li;
@@ -208,7 +206,7 @@ module axi_link_rx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (flit_width_p),
     .els_p              (w_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -240,7 +238,7 @@ module axi_link_rx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (flit_width_p),
     .els_p              (r_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -463,6 +461,13 @@ module axi_link_rx
             payload_rem_n = payload_rem_r - drop_count_width_lp'(1);
           end
         end
+      end
+
+      default: begin
+        state_n       = RX_IDLE;
+        cur_beats_n   = '0;
+        r_pkt_beats_n = '0;
+        payload_rem_n = '0;
       end
     endcase
   end

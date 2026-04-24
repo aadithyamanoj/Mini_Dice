@@ -15,6 +15,7 @@ CSR launch values and optional expected AXI writes.
 
 Usage:
     python3 gen_memfile.py kernel_simple.json [--mem-data-width 2048] [--output-dir .]
+    python3 gen_memfile.py full_mul_array_test_vector.json --nopred
 """
 
 import argparse
@@ -29,6 +30,82 @@ from typing import Any
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]
 RTL_ROOT = REPO_ROOT / "rtl"
+RTL_INCLUDE_ROOT = RTL_ROOT / "includes"
+MINI_DICE_TRAD_BUILD_DIR = (
+    REPO_ROOT
+    / "dora"
+    / "examples"
+    / "devices"
+    / "dice-isca"
+    / "mini_dice"
+    / "build"
+)
+MINI_DICE_NOPRED_BUILD_DIR = MINI_DICE_TRAD_BUILD_DIR.with_name("build_nopred")
+MINI_DICE_BUILD_DIR = MINI_DICE_TRAD_BUILD_DIR
+PREFER_SELECTED_BUILD_DIR = False
+
+
+def _resolve_existing_path(description: str, *candidates: Path) -> Path:
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+
+    rendered_candidates = "\n".join(f"  - {candidate}" for candidate in candidates)
+    raise FileNotFoundError(
+        f"Could not locate {description}. Checked:\n{rendered_candidates}"
+    )
+
+
+def _resolve_repo_artifact_path(
+    raw_path: str | None,
+    *,
+    kernel: str | None = None,
+    expected_suffix: str | None = None,
+) -> Path | None:
+    candidates: list[Path] = []
+
+    selected_build_candidates: list[Path] = []
+    if kernel and expected_suffix:
+        selected_build_candidates.append(
+            MINI_DICE_BUILD_DIR / f"mini_dice_{kernel}{expected_suffix}"
+        )
+
+    if isinstance(raw_path, str) and raw_path != "":
+        candidate = Path(raw_path).expanduser()
+        if PREFER_SELECTED_BUILD_DIR:
+            selected_build_candidates.append(MINI_DICE_BUILD_DIR / candidate.name)
+            candidates.extend(selected_build_candidates)
+
+        candidates.append(candidate)
+
+        if not candidate.is_absolute():
+            candidates.append(REPO_ROOT / candidate)
+
+        if "Mini_Dice" in candidate.parts:
+            mini_dice_idx = candidate.parts.index("Mini_Dice")
+            repo_relative = Path(*candidate.parts[mini_dice_idx + 1 :])
+            candidates.append(REPO_ROOT / repo_relative)
+
+        candidates.append(MINI_DICE_BUILD_DIR / candidate.name)
+
+    if PREFER_SELECTED_BUILD_DIR and not candidates:
+        candidates.extend(selected_build_candidates)
+    elif not PREFER_SELECTED_BUILD_DIR:
+        candidates.extend(selected_build_candidates)
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+
+    return None
 
 
 def sv_clog2(value: int) -> int:
@@ -69,11 +146,22 @@ def _load_pkg_parameter(path: Path, name: str) -> int:
     return int(_strip_sv_comment(match.group(1)), 0)
 
 
-RTL_DEFINES = _load_sv_defines(RTL_ROOT / "dice_config.vh")
+DICE_CONFIG_VH = _resolve_existing_path(
+    "dice_config.vh",
+    RTL_INCLUDE_ROOT / "dice_config.vh",
+    RTL_ROOT / "dice_config.vh",
+)
+DICE_PKG_SV = _resolve_existing_path(
+    "dice_pkg.sv",
+    RTL_INCLUDE_ROOT / "dice_pkg.sv",
+    RTL_ROOT / "dice_pkg.sv",
+)
+
+RTL_DEFINES = _load_sv_defines(DICE_CONFIG_VH)
 
 # =====================================================================
-# Bit-width constants (sourced from current dice_config.vh / dice_pkg.sv /
-# dice_frontend_pkg.sv instead of being hard-coded)
+# Bit-width constants (sourced from current RTL package/include files instead
+# of being hard-coded)
 # =====================================================================
 DICE_ADDR_WIDTH = RTL_DEFINES["DICE_ADDR_WIDTH"]
 DICE_MAX_GRID_SIZE = RTL_DEFINES["DICE_MAX_GRID_SIZE"]
@@ -98,11 +186,12 @@ THREAD_COUNT_WIDTH = DICE_TID_WIDTH + 1
 # Memory configuration from current TB / RTL
 # Metadata local memory uses WORD_SIZE=256 bytes in tb_dice_core.sv.
 METADATA_MEM_DATA_WIDTH  = 256 * 8
-# Bitstream fetch/load uses AxiDataWidth=16 in axi4_full_crossbar.sv.
-BITSTREAM_MEM_DATA_WIDTH = 16
-# Bitstream payload size from dice_pkg.sv.
-DICE_BITSTREAM_SIZE = _load_pkg_parameter(RTL_ROOT / "dice_pkg.sv", "DICE_BITSTREAM_SIZE")
-NUM_CHUNKS               = (DICE_BITSTREAM_SIZE + BITSTREAM_MEM_DATA_WIDTH - 1) // BITSTREAM_MEM_DATA_WIDTH
+# Bitstream fetch/load uses AxiDataWidth=32 in axi4_full_crossbar.sv.
+BITSTREAM_MEM_DATA_WIDTH = 32
+# Bitstream payload size from dice_pkg.sv. The CLI may override this from the
+# selected generated CGRA compiler_arch.json so traditional and no-pred
+# collateral can coexist.
+DICE_BITSTREAM_SIZE = _load_pkg_parameter(DICE_PKG_SV, "DICE_BITSTREAM_SIZE")
 
 # Packed struct widths from current packages
 BRANCH_META_WIDTH = 1 + 1 + PR_INDEX_WIDTH + 1 + 1 + PGRAPH_OFFSET_WIDTH + PGRAPH_OFFSET_WIDTH
@@ -333,24 +422,44 @@ def generate_cta_desc_mem(cta_desc, output_path):
     print(f"  Wrote {output_path} ({packed.total_bits} bits, padded to {pad_width})")
 
 
-def generate_bitstream_mem(pgraph_list, stage_artifacts, output_path):
+def _load_compiler_bitstream_size(build_dir: Path) -> int | None:
+    compiler_arch_path = build_dir / "compiler_arch.json"
+    if not compiler_arch_path.exists():
+        return None
+
+    with compiler_arch_path.open("r", encoding="utf-8") as stream:
+        compiler_arch = json.load(stream)
+
+    bitstream_size = compiler_arch.get("bitstream_size")
+    if isinstance(bitstream_size, int) and bitstream_size > 0:
+        return bitstream_size
+    return None
+
+
+def _selected_bitstream_size(build_dir: Path) -> int:
+    return _load_compiler_bitstream_size(build_dir) or DICE_BITSTREAM_SIZE
+
+
+def generate_bitstream_mem(pgraph_list, stage_artifacts, output_path, bitstream_size):
     """Generate bitstream.mem file with test-pattern data.
 
     For each pgraph entry, writes NUM_CHUNKS memory words at consecutive
     addresses starting from bitstream_addr.  The memory word width matches
-    BITSTREAM_MEM_DATA_WIDTH (currently 16 bits), matching the frontend
+    BITSTREAM_MEM_DATA_WIDTH (currently 32 bits), matching the frontend
     bitstream-fetch AXI data width.
 
     If a pgraph entry has a "bitstream_data" list (hex strings), those are
     used verbatim.  Otherwise an incremental counting pattern is generated.
     """
     word_bytes = BITSTREAM_MEM_DATA_WIDTH // 8
+    num_chunks = (bitstream_size + BITSTREAM_MEM_DATA_WIDTH - 1) // BITSTREAM_MEM_DATA_WIDTH
 
     with open(output_path, 'w') as f:
         f.write(f"// Auto-generated bitstream memory file\n")
         f.write(f"// Memory word width: {BITSTREAM_MEM_DATA_WIDTH} bits "
                 f"({word_bytes} bytes)\n")
-        f.write(f"// Chunks per bitstream: {NUM_CHUNKS}\n\n")
+        f.write(f"// Bitstream payload size: {bitstream_size} bits\n")
+        f.write(f"// Chunks per bitstream: {num_chunks}\n\n")
 
         for entry_idx, entry in enumerate(pgraph_list):
             bs_addr = parse_int(entry["meta"]["bitstream_addr"])
@@ -364,7 +473,7 @@ def generate_bitstream_mem(pgraph_list, stage_artifacts, output_path):
             f.write(f"// pgraph[{entry_idx}]: bitstream_addr=0x{bs_addr:08x}, "
                     f"length={bs_len}, base_word_addr=0x{base_word_addr:08x}\n")
 
-            for chunk_idx in range(NUM_CHUNKS):
+            for chunk_idx in range(num_chunks):
                 word_addr = base_word_addr + chunk_idx
 
                 if explicit_data and chunk_idx < len(explicit_data):
@@ -389,7 +498,7 @@ def generate_bitstream_mem(pgraph_list, stage_artifacts, output_path):
             f.write(f"\n")
 
     print(f"  Wrote {output_path} ({len(pgraph_list)} entries, "
-          f"{NUM_CHUNKS} chunks each)")
+          f"{num_chunks} chunks each)")
 
 
 def _load_stage_bitstream_words(stage_artifacts: Any, stage_idx: int) -> list[str] | None:
@@ -400,20 +509,43 @@ def _load_stage_bitstream_words(stage_artifacts: Any, stage_idx: int) -> list[st
     if not isinstance(stage_info, dict):
         return None
 
-    binary_output_path = stage_info.get("binary_output_path")
-    if not isinstance(binary_output_path, str) or binary_output_path == "":
-        return None
+    kernel = stage_info.get("kernel")
+    if not isinstance(kernel, str) or kernel == "":
+        kernel = None
 
-    binary_path = Path(binary_output_path)
-    if not binary_path.exists():
+    binary_path = _resolve_repo_artifact_path(
+        stage_info.get("binary_output_path"),
+        kernel=kernel,
+        expected_suffix=".bin",
+    )
+    if binary_path is None:
+        compile_report_path = _resolve_repo_artifact_path(
+            stage_info.get("compile_report_path"),
+            kernel=kernel,
+            expected_suffix="_compile_report.json",
+        )
+        if compile_report_path is not None:
+            with compile_report_path.open("r", encoding="utf-8") as stream:
+                compile_report = json.load(stream)
+            report_binary_path = compile_report.get("binary_output_path")
+            binary_path = _resolve_repo_artifact_path(
+                report_binary_path if isinstance(report_binary_path, str) else None,
+                kernel=kernel,
+                expected_suffix=".bin",
+            )
+    if binary_path is None:
         return None
 
     raw_bytes = binary_path.read_bytes()
     words = []
-    for byte_idx in range(0, len(raw_bytes), 2):
-        lo_byte = raw_bytes[byte_idx]
-        hi_byte = raw_bytes[byte_idx + 1] if byte_idx + 1 < len(raw_bytes) else 0
-        words.append(f"{(hi_byte << 8) | lo_byte:04x}")
+    word_bytes = BITSTREAM_MEM_DATA_WIDTH // 8
+    hex_chars = BITSTREAM_MEM_DATA_WIDTH // 4
+    for byte_idx in range(0, len(raw_bytes), word_bytes):
+        word = 0
+        for offset in range(word_bytes):
+            if byte_idx + offset < len(raw_bytes):
+                word |= raw_bytes[byte_idx + offset] << (8 * offset)
+        words.append(f"{word:0{hex_chars}x}")
     return words
 
 
@@ -490,7 +622,28 @@ def main():
     parser.add_argument("json_file", help="Input JSON test vector file")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Output directory (default: same as JSON file)")
+    parser.add_argument(
+        "--nopred",
+        action="store_true",
+        help="Prefer build_nopred CGRA binaries and bitstream sizing",
+    )
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=None,
+        help="Override mini_dice build directory used for fallback binaries and "
+             "bitstream sizing (default: build, or build_nopred with --nopred)",
+    )
     args = parser.parse_args()
+
+    global MINI_DICE_BUILD_DIR, PREFER_SELECTED_BUILD_DIR
+    MINI_DICE_BUILD_DIR = (
+        args.build_dir
+        if args.build_dir is not None
+        else (MINI_DICE_NOPRED_BUILD_DIR if args.nopred else MINI_DICE_TRAD_BUILD_DIR)
+    ).resolve()
+    PREFER_SELECTED_BUILD_DIR = args.nopred or args.build_dir is not None
+    bitstream_size = _selected_bitstream_size(MINI_DICE_BUILD_DIR)
 
     # Metadata local memory width is fixed by tb_dice_core.sv.
     mem_data_width = METADATA_MEM_DATA_WIDTH
@@ -508,6 +661,8 @@ def main():
 
     stem = json_path.stem  # e.g., "kernel_simple"
     print(f"Processing {json_path.name} (mem_data_width={mem_data_width} bits)")
+    print(f"  mini_dice build dir: {MINI_DICE_BUILD_DIR}")
+    print(f"  bitstream size: {bitstream_size} bits")
 
     # Generate metadata memory file
     if "pgraph_metadata" in data:
@@ -526,6 +681,7 @@ def main():
             data["pgraph_metadata"],
             data.get("stage_artifacts"),
             bs_path,
+            bitstream_size,
         )
 
     # Generate runtime sidecar for CSR and AXI collateral.

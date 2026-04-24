@@ -1,5 +1,5 @@
 module axi_link_tx
-  #(parameter int flit_width_p          = 16
+  #(parameter int flit_width_p          = 32
    ,parameter int addr_width_p          = 16
    ,parameter int link_fifo_els_p       = 8
    ,parameter int aw_desc_fifo_els_p    = 2
@@ -23,7 +23,7 @@ module axi_link_tx
 
    ,input  logic                    wvalid_i
    ,output logic                    wready_o
-   ,input  logic [15:0]             wdata_i
+   ,input  logic [flit_width_p-1:0] wdata_i
    ,input  logic                    wlast_i
 
    ,input  logic                    arvalid_i
@@ -35,7 +35,7 @@ module axi_link_tx
 
    ,input  logic                    rvalid_i
    ,output logic                    rready_o
-   ,input  logic [15:0]             rdata_i
+   ,input  logic [flit_width_p-1:0] rdata_i
    ,input  logic [1:0]              rresp_i
    ,input  logic                    rlast_i
 
@@ -73,8 +73,6 @@ module axi_link_tx
   // --------------------------------------------------------------------------
 
   initial begin
-    if (flit_width_p != 16)
-      $error("axi_link_tx requires flit_width_p=16, got %0d", flit_width_p);
     if (addr_width_p != 16)
       $error("axi_link_tx requires addr_width_p=16, got %0d", addr_width_p);
   end
@@ -105,7 +103,7 @@ module axi_link_tx
   localparam int wr_desc_width_lp    = addr_width_p + beat_count_width_lp;
   localparam int rd_desc_width_lp    = addr_width_p + beat_count_width_lp;
   localparam int r_desc_width_lp     = beat_count_width_lp + 2;
-  localparam logic [2:0] axi_size_lp   = 3'b001;
+  localparam logic [2:0] axi_size_lp   = 3'b010;
   localparam logic [1:0] axi_burst_lp  = 2'b01;
 
   typedef struct packed {
@@ -143,9 +141,9 @@ module axi_link_tx
   logic [beat_count_width_lp-1:0] w_len_data_lo;
 
   logic                     w_data_push_v_li, w_data_push_ready_lo;
-  logic [15:0]              w_data_push_data_li;
+  logic [flit_width_p-1:0] w_data_push_data_li;
   logic                     w_data_v_lo, w_data_yumi_li;
-  logic [15:0]              w_data_lo;
+  logic [flit_width_p-1:0] w_data_lo;
 
   logic                     r_desc_push_v_li, r_desc_push_ready_lo;
   logic [r_desc_width_lp-1:0] r_desc_push_data_li;
@@ -153,9 +151,9 @@ module axi_link_tx
   logic [r_desc_width_lp-1:0] r_desc_data_lo;
 
   logic                     r_data_push_v_li, r_data_push_ready_lo;
-  logic [15:0]              r_data_push_data_li;
+  logic [flit_width_p-1:0] r_data_push_data_li;
   logic                     r_data_v_lo, r_data_yumi_li;
-  logic [15:0]              r_data_lo;
+  logic [flit_width_p-1:0] r_data_lo;
 
   logic                     b_resp_push_v_li, b_resp_push_ready_lo;
   logic [1:0]               b_resp_push_data_li;
@@ -216,7 +214,7 @@ module axi_link_tx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (flit_width_p),
     .els_p              (w_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -248,7 +246,7 @@ module axi_link_tx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (16),
+    .width_p            (flit_width_p),
     .els_p              (r_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -311,8 +309,11 @@ module axi_link_tx
 
   assign aw_beats   = {5'b0, awlen_i} + beat_count_width_lp'(1);
   assign ar_beats   = {5'b0, arlen_i} + beat_count_width_lp'(1);
-  assign aw_ctrl_ok = (awsize_i == axi_size_lp) && (awburst_i == axi_burst_lp) && (aw_beats != '0);
-  assign ar_ctrl_ok = (arsize_i == axi_size_lp) && (arburst_i == axi_burst_lp) && (ar_beats != '0);
+  // Accept any burst size — the link flit width is fixed and each beat
+  // carries `flit_width_p` bits regardless of the AXI size field.  Requiring
+  // size==axi_size_lp would reject dice_core's mfetch/bsfetch (size=0b001).
+  assign aw_ctrl_ok = (awburst_i == axi_burst_lp) && (aw_beats != '0);
+  assign ar_ctrl_ok = (arburst_i == axi_burst_lp) && (ar_beats != '0);
 
   logic r_capture_active_r, r_capture_active_n;
   logic [beat_count_width_lp-1:0] r_capture_beats_r, r_capture_beats_n;

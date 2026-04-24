@@ -13,7 +13,7 @@ module tb_fdr_top;
   localparam int TimeoutCycles  = 5000;
   localparam int BeatBits       = AxiDataWidth;
   localparam int MetaBeats      = DICE_METADATA_WIDTH / BeatBits;
-  localparam int BitstreamBeats = DICE_BITSTREAM_SIZE / BeatBits;
+  localparam int BitstreamBeats = (DICE_BITSTREAM_SIZE + BeatBits - 1) / BeatBits;
   localparam int CmAddrWidth    = $clog2(DICE_BITSTREAM_SIZE);
 
   logic clk;

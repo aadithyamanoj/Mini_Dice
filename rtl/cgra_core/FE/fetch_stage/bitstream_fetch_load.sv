@@ -34,6 +34,11 @@ module bitstream_fetch_load
   localparam int CmAddrWidth = $clog2(DICE_BITSTREAM_SIZE);
   localparam int BeatCount   = (DICE_BITSTREAM_SIZE + AxiDataWidth - 1) / AxiDataWidth;
   localparam int BurstLen    = BeatCount - 1;
+  localparam logic [2:0] FetchAxiSize =
+      (AxiDataWidth == 8)  ? 3'b000 :
+      (AxiDataWidth == 16) ? 3'b001 :
+      (AxiDataWidth == 32) ? 3'b010 :
+      (AxiDataWidth == 64) ? 3'b011 : 3'b000;
 
   typedef enum logic [1:0] {
     StateIdle,
@@ -171,7 +176,7 @@ module bitstream_fetch_load
   assign bs_req_o.ar_valid  = (state_q == StateStreaming) && !ar_sent_q && !flush_i;
   assign bs_req_o.ar.addr   = addr_q;
   assign bs_req_o.ar.len    = 8'(BurstLen);
-  assign bs_req_o.ar.size   = 3'b001;  // 2 bytes per beat
+  assign bs_req_o.ar.size   = FetchAxiSize;
   assign bs_req_o.ar.burst  = 2'b01;   // INCR
   assign bs_req_o.ar.id     = '0;
   assign bs_req_o.ar.lock   = '0;

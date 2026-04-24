@@ -39,9 +39,17 @@ module meta_fetch
   logic flushed_q;  // Track if flushed, cleared on new schedule
   pgraph_meta_t outgoing_meta_q;
 
-  // 256-bit assembly buffer: 16 × 16-bit beats accumulated here
-  // First received beat ends up in bits [255:240] after all 16 beats
+  localparam int MetaBeatCount = (DICE_METADATA_WIDTH + AxiDataWidth - 1) / AxiDataWidth;
+  localparam int MetaBeatIdxWidth = (MetaBeatCount > 1) ? $clog2(MetaBeatCount) : 1;
+  localparam logic [2:0] FetchAxiSize =
+      (AxiDataWidth == 8)  ? 3'b000 :
+      (AxiDataWidth == 16) ? 3'b001 :
+      (AxiDataWidth == 32) ? 3'b010 :
+      (AxiDataWidth == 64) ? 3'b011 : 3'b000;
+
+  // Packed metadata assembly buffer. Beat 0 lands in the low bits.
   logic [DICE_METADATA_WIDTH-1:0] meta_buf_q;
+  logic [MetaBeatIdxWidth-1:0]    meta_beat_idx_q;
 
   // AXI handshake pulses
   logic ar_fire;
@@ -85,27 +93,35 @@ module meta_fetch
       flushed_q       <= 1'b0;
       outgoing_meta_q <= '0;
       meta_buf_q      <= '0;
+      meta_beat_idx_q <= '0;
     end else begin
       state_q <= state_d;
 
       if (flush_i) begin
         flushed_q    <= 1'b1;
         meta_valid_q <= 1'b0;
+        meta_beat_idx_q <= '0;
       end
 
       if (state_q == StateReady && schedule_valid_i && schedule_ready_o) begin
-        flushed_q  <= 1'b0;
-        meta_buf_q <= '0;
+        flushed_q       <= 1'b0;
+        meta_buf_q      <= '0;
+        meta_beat_idx_q <= '0;
       end
 
-      // Accumulate 16-bit beats: shift new word into MSB, pushing earlier words down
-      if (r_fire) begin
-        meta_buf_q <= {meta_resp_i.r.data, meta_buf_q[DICE_METADATA_WIDTH-1:16]};
-      end
+      if (r_fire && !flush_i) begin
+        logic [DICE_METADATA_WIDTH-1:0] assembled_meta;
+        assembled_meta = meta_buf_q;
+        assembled_meta[int'(meta_beat_idx_q) * AxiDataWidth+:AxiDataWidth] = meta_resp_i.r.data;
+        meta_buf_q <= assembled_meta;
 
-      if (r_fire && meta_resp_i.r.last) begin
-        outgoing_meta_q <= pgraph_meta_t'({meta_resp_i.r.data, meta_buf_q[DICE_METADATA_WIDTH-1:16]});
-        meta_valid_q    <= 1'b1;
+        if (meta_resp_i.r.last) begin
+          outgoing_meta_q <= pgraph_meta_t'(assembled_meta);
+          meta_valid_q    <= 1'b1;
+          meta_beat_idx_q <= '0;
+        end else begin
+          meta_beat_idx_q <= meta_beat_idx_q + 1'b1;
+        end
       end
 
       if (fire_eblock_i) begin
@@ -117,8 +133,8 @@ module meta_fetch
   // AR channel: driven fields
   assign meta_req_o.ar_valid  = (state_q == StateReqVal) && !flush_i;
   assign meta_req_o.ar.addr   = fdr_next_pc_i;
-  assign meta_req_o.ar.len    = (DICE_METADATA_WIDTH / 16) - 1;
-  assign meta_req_o.ar.size   = 3'b001;  // 2 bytes per beat
+  assign meta_req_o.ar.len    = 8'(MetaBeatCount - 1);
+  assign meta_req_o.ar.size   = FetchAxiSize;
   assign meta_req_o.ar.burst  = 2'b01;   // INCR
   assign meta_req_o.ar.id     = '0;
   assign meta_req_o.ar.lock   = '0;

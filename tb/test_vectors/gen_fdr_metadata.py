@@ -8,6 +8,7 @@ generation, separate from the Dora build/bitgen flow.
 
 Usage:
     python3 gen_fdr_metadata.py --kernel full_mul_array
+    python3 gen_fdr_metadata.py --kernel full_mul_array --nopred
     python3 gen_fdr_metadata.py --kernel load_mul_array_a --build-dir <path>
 """
 
@@ -37,6 +38,7 @@ REPO_ROOT = SCRIPT_PATH.parents[2]
 DEFAULT_BUILD_DIR = (
     REPO_ROOT / "dora" / "examples" / "devices" / "dice-isca" / "mini_dice" / "build"
 )
+DEFAULT_NOPRED_BUILD_DIR = DEFAULT_BUILD_DIR.with_name("build_nopred")
 DEFAULT_OUTPUT_DIR = SCRIPT_PATH.parent
 DEFAULT_START_PC = 0x1000
 DEFAULT_PC_STRIDE = 0x0100
@@ -66,10 +68,16 @@ def parse_args() -> argparse.Namespace:
         help="Kernel or staged bundle to emit metadata for",
     )
     parser.add_argument(
+        "--nopred",
+        action="store_true",
+        help="Use the no-predicate mini_dice build_nopred collateral by default",
+    )
+    parser.add_argument(
         "--build-dir",
         type=Path,
-        default=DEFAULT_BUILD_DIR,
-        help="mini_dice build directory containing compile reports",
+        default=None,
+        help="mini_dice build directory containing compile reports "
+             "(default: build, or build_nopred with --nopred)",
     )
     parser.add_argument(
         "--output-dir",
@@ -483,7 +491,11 @@ def _emit_coalesced_test_vector(
 
 def main() -> None:
     args = parse_args()
-    build_dir = args.build_dir.resolve()
+    build_dir = (
+        args.build_dir
+        if args.build_dir is not None
+        else (DEFAULT_NOPRED_BUILD_DIR if args.nopred else DEFAULT_BUILD_DIR)
+    ).resolve()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

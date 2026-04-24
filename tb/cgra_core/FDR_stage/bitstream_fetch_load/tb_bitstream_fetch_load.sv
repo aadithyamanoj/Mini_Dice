@@ -12,7 +12,7 @@ module tb_bitstream_fetch_load;
   localparam int ClkPeriod      = 10;
   localparam int TimeoutCycles  = 3000;
   localparam int BeatBits       = AxiDataWidth;
-  localparam int BitstreamBeats = DICE_BITSTREAM_SIZE / BeatBits;
+  localparam int BitstreamBeats = (DICE_BITSTREAM_SIZE + BeatBits - 1) / BeatBits;
   localparam int CmAddrWidth    = $clog2(DICE_BITSTREAM_SIZE);
 
   logic clk;
