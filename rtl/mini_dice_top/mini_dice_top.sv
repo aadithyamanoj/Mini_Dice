@@ -109,11 +109,11 @@ module mini_dice_top
   logic dfetch_arvalid, dfetch_arready;
   logic dfetch_rvalid, dfetch_rready;
 
-  logic [ADDR_WIDTH-1:0]  dfetch_awaddr_axi, dfetch_araddr_axi;
+  logic [DATA_WIDTH-1:0]  dfetch_awaddr_axi, dfetch_araddr_axi;
   logic [DATA_WIDTH-1:0]  dfetch_wdata_axi, dfetch_rdata_axi;
 
-  assign dfetch_awaddr_axi = ADDR_WIDTH'(dfetch_awaddr);
-  assign dfetch_araddr_axi = ADDR_WIDTH'(dfetch_araddr);
+  assign dfetch_awaddr_axi = DATA_WIDTH'(dfetch_awaddr);
+  assign dfetch_araddr_axi = DATA_WIDTH'(dfetch_araddr);
   assign dfetch_wdata_axi  = DATA_WIDTH'(dfetch_wdata);
   assign dfetch_rdata      = DICE_REG_DATA_WIDTH'(dfetch_rdata_axi);
 

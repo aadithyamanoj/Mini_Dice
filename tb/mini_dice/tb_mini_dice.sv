@@ -67,8 +67,8 @@ module tb_mini_dice;
   localparam int DW = 32;
   localparam int FW = 32;
   localparam int CW = 8;
-  localparam int CLK_HALF_NS = 5;  // 100 MHz core clock
-  localparam int TIMEOUT_CYC = 2000000;
+  localparam int CLK_HALF_NS = 10;  // 100 MHz core clock
+  localparam int TIMEOUT_CYC = 1200000000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
 
@@ -244,6 +244,7 @@ module tb_mini_dice;
   logic [DW-1:0] ep_rx_wdata;
   logic          ep_rx_wlast;
   logic          ep_rx_arvalid;
+  logic          ep_rx_arready;
   logic [AW-1:0] ep_rx_araddr;
   logic [   7:0] ep_rx_arlen;
   logic          ep_rx_rvalid;
@@ -337,7 +338,7 @@ module tb_mini_dice;
       .rx_wdata_o  (ep_rx_wdata),
       .rx_wlast_o  (ep_rx_wlast),
       .rx_arvalid_o(ep_rx_arvalid),
-      .rx_arready_i(1'b1),
+      .rx_arready_i(ep_rx_arready),
       .rx_araddr_o (ep_rx_araddr),
       .rx_arlen_o  (ep_rx_arlen),
       .rx_arsize_o (),
@@ -395,6 +396,8 @@ module tb_mini_dice;
   logic          ep_aw_pending;
   logic [AW-1:0] ep_aw_addr_lat;
 
+  assign ep_rx_arready = (rd_state_q == RD_IDLE);
+
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
       rd_state_q     <= RD_IDLE;
@@ -413,7 +416,7 @@ module tb_mini_dice;
       // Read FSM
       unique case (rd_state_q)
         RD_IDLE: begin
-          if (ep_rx_arvalid) begin
+          if (ep_rx_arvalid && ep_rx_arready) begin
             logic [1:0] kind;
             if (ep_rx_araddr >= start_pc_val) kind = 2'd1;  // meta
             else if (ep_rx_arlen > 8'd8) kind = 2'd2;  // bitstream
@@ -466,7 +469,7 @@ module tb_mini_dice;
   // the CGRA is actually issuing through bsg_link.
   always_ff @(posedge clk_i)
     if (!rst_i) begin
-      if (ep_rx_arvalid && rd_state_q == RD_IDLE)
+      if (ep_rx_arvalid && ep_rx_arready)
         $display(
             "[EP] t=%0t AR addr=0x%04x len=%0d kind=%0d",
             $time,
