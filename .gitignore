@@ -33,3 +33,5 @@ sysProgressP*
 .DS_Store
 *.swp
 *~
+
+/tb/cgra_core/verification/vc_hdrs.h
