@@ -33,3 +33,5 @@ sysProgressP*
 .DS_Store
 *.swp
 *~
+
+verible.filelist
