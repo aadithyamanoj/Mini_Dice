@@ -128,6 +128,15 @@ module top_level_io
   //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
   // --------------------------------------------------------------------------
 
+  initial begin
+    if (flit_width_p != 32)
+      $error("top_level_io requires flit_width_p=32, got %0d", flit_width_p);
+    if (addr_width_p != 16)
+      $error("top_level_io requires addr_width_p=16, got %0d", addr_width_p);
+    if (data_width_p != 32)
+      $error("top_level_io requires data_width_p=32, got %0d", data_width_p);
+  end
+
   logic [flit_width_p-1:0] link_rx_core_data_lo;
   logic                    link_rx_core_valid_lo;
   logic                    link_rx_core_yumi_li;
@@ -170,10 +179,6 @@ module top_level_io
     .core_token_r_o    (downstream_core_token_r_o)
   );
 
-  // Note: rx_r_len_fifo_els_p / rx_r_data_fifo_els_p no longer size any
-  // storage inside axi_link_rx after the streaming READ_RESP redesign --
-  // R beats are forwarded straight from the link ingress FIFO to the AXI R
-  // channel. The parameters are still passed for interface compatibility.
   axi_link_rx #(
     .flit_width_p       (flit_width_p),
     .addr_width_p       (addr_width_p),
