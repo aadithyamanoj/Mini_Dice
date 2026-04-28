@@ -144,6 +144,11 @@ module top_level_io
   logic [flit_width_p-1:0] link_tx_core_data_li;
   logic                    link_tx_core_valid_li;
   logic                    link_tx_core_ready_lo;
+  logic                    rx_arready_li;
+  logic                    tx_r_len_v_lo;
+  logic [7:0]              tx_r_len_lo;
+  logic                    tx_r_len_yumi_li;
+  logic                    tx_r_len_ready_lo;
 
   logic [num_channels_p-1:0][channel_width_p-1:0] downstream_io_data_li;
   logic [num_channels_p-1:0][channel_width_p-1:0] upstream_io_data_lo;
@@ -179,6 +184,27 @@ module top_level_io
     .core_token_r_o    (downstream_core_token_r_o)
   );
 
+  // Incoming READ_REQ lengths are mirrored into a small FIFO so the local
+  // AXI R channel can start streaming a READ_RESP packet back over the link
+  // on the very first response beat.
+  assign rx_arready_li = rx_arready_i && tx_r_len_ready_lo;
+
+  bsg_fifo_1r1w_small #(
+    .width_p            (8),
+    .els_p              (tx_r_len_fifo_els_p),
+    .harden_p           (0),
+    .ready_THEN_valid_p (0)
+  ) tx_r_len_fifo_i (
+    .clk_i  (core_clk_i),
+    .reset_i(reset_i),
+    .v_i    (rx_arvalid_o && rx_arready_li),
+    .data_i (rx_arlen_o),
+    .ready_o(tx_r_len_ready_lo),
+    .v_o    (tx_r_len_v_lo),
+    .data_o (tx_r_len_lo),
+    .yumi_i (tx_r_len_yumi_li)
+  );
+
   axi_link_rx #(
     .flit_width_p       (flit_width_p),
     .addr_width_p       (addr_width_p),
@@ -207,7 +233,7 @@ module top_level_io
     .wdata_o        (rx_wdata_o),
     .wlast_o        (rx_wlast_o),
     .arvalid_o      (rx_arvalid_o),
-    .arready_i      (rx_arready_i),
+    .arready_i      (rx_arready_li),
     .araddr_o       (rx_araddr_o),
     .arlen_o        (rx_arlen_o),
     .arsize_o       (rx_arsize_o),
@@ -258,6 +284,9 @@ module top_level_io
     .rdata_i        (tx_rdata_i),
     .rresp_i        (tx_rresp_i),
     .rlast_i        (tx_rlast_i),
+    .tx_r_len_v_i   (tx_r_len_v_lo),
+    .tx_r_len_i     (tx_r_len_lo),
+    .tx_r_len_yumi_o(tx_r_len_yumi_li),
     .bvalid_i       (tx_bvalid_i),
     .bready_o       (tx_bready_o),
     .bresp_i        (tx_bresp_i),

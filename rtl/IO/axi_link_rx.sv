@@ -57,9 +57,9 @@ module axi_link_rx
   //   3'b011 = WRITE_RESP
   //
   // Header flit layout (32 bits):
-  //   [31:29] = opcode
-  //   [28:16] = packet length (beats)
-  //   [15:0]  = address (request packets only; 16'b0 for responses)
+  //   requests  : [31:29] opcode, [28:16] length, [15:0] address
+  //   READ_RESP : [31:29] opcode, [28:16] length, [15:2] reserved, [1:0] rresp
+  //   WRITE_RESP: [31:29] opcode, [28:16] 1,      [15:0] 16'b0
   //
   // RX reconstructs all five AXI channels from the simplified transport:
   //   WRITE_REQ  -> AW + W burst
@@ -90,9 +90,8 @@ module axi_link_rx
     RX_IDLE      = 3'd0,
     RX_WR_DATA   = 3'd1,
     RX_R_DATA    = 3'd2,
-    RX_R_RESP    = 3'd3,
-    RX_B_RESP    = 3'd4,
-    RX_DROP      = 3'd5
+    RX_B_RESP    = 3'd3,
+    RX_DROP      = 3'd4
   } rx_state_e;
 
   localparam int beat_count_width_lp = 13;
@@ -283,7 +282,6 @@ module axi_link_rx
 
   rx_state_e state_r, state_n;
   logic [beat_count_width_lp-1:0] cur_beats_r, cur_beats_n;
-  logic [beat_count_width_lp-1:0] r_pkt_beats_r, r_pkt_beats_n;
   logic [drop_count_width_lp-1:0] payload_rem_r, payload_rem_n;
 
   logic [2:0]                     hdr_opcode;
@@ -299,7 +297,6 @@ module axi_link_rx
   always_comb begin
     state_n           = state_r;
     cur_beats_n       = cur_beats_r;
-    r_pkt_beats_n     = r_pkt_beats_r;
     payload_rem_n     = payload_rem_r;
 
     link_fifo_yumi_li = 1'b0;
@@ -355,15 +352,20 @@ module axi_link_rx
             end
 
             OP_READ_RESP: begin
-              // Next come `len` R data beats followed by one padded RRESP flit.
-              link_fifo_yumi_li = 1'b1;
-              cur_beats_n       = hdr_len;
-              r_pkt_beats_n     = hdr_len;
-              if (hdr_len_valid)
-                state_n = RX_R_DATA;
-              else begin
-                state_n       = RX_DROP;
-                payload_rem_n = drop_count_width_lp'({1'b0, hdr_len}) + drop_count_width_lp'(1);
+              // Header carries both the response length and the shared RRESP,
+              // so AXI R replay can start as soon as the first data beat
+              // arrives. No end-of-packet trailer is required.
+              if (hdr_len_valid && r_desc_push_ready_lo) begin
+                link_fifo_yumi_li   = 1'b1;
+                r_desc_push_v_li    = 1'b1;
+                r_desc_push_data_li = {hdr_len, link_fifo_data_lo[1:0]};
+                cur_beats_n         = hdr_len;
+                state_n             = RX_R_DATA;
+              end
+              else if (!hdr_len_valid) begin
+                link_fifo_yumi_li = 1'b1;
+                state_n           = RX_DROP;
+                payload_rem_n     = drop_count_width_lp'({1'b0, hdr_len});
               end
             end
 
@@ -406,27 +408,18 @@ module axi_link_rx
 
       RX_R_DATA: begin
         if (link_fifo_v_lo && r_data_push_ready_lo) begin
-          // READ_RESP data beats stream into the R data FIFO first.
+          // READ_RESP data beats stream into the R data FIFO first; AXI R can
+          // begin replaying before the full burst has arrived because the
+          // descriptor was published from the header.
           link_fifo_yumi_li = 1'b1;
           r_data_push_v_li  = 1'b1;
           if (cur_beats_r == beat_count_width_lp'(1)) begin
             cur_beats_n = '0;
-            state_n     = RX_R_RESP;
+            state_n     = RX_IDLE;
           end
           else begin
             cur_beats_n = cur_beats_r - beat_count_width_lp'(1);
           end
-        end
-      end
-
-      RX_R_RESP: begin
-        if (link_fifo_v_lo && r_desc_push_ready_lo) begin
-          // The final padded response flit supplies one shared RRESP code for
-          // the whole reconstructed burst.
-          link_fifo_yumi_li   = 1'b1;
-          r_desc_push_v_li    = 1'b1;
-          r_desc_push_data_li = {r_pkt_beats_r, link_fifo_data_lo[1:0]};
-          state_n             = RX_IDLE;
         end
       end
 
@@ -463,13 +456,11 @@ module axi_link_rx
     if (reset_i) begin
       state_r       <= RX_IDLE;
       cur_beats_r   <= '0;
-      r_pkt_beats_r <= '0;
       payload_rem_r <= '0;
     end
     else begin
       state_r       <= state_n;
       cur_beats_r   <= cur_beats_n;
-      r_pkt_beats_r <= r_pkt_beats_n;
       payload_rem_r <= payload_rem_n;
     end
   end
