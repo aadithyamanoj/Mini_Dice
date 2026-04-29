@@ -26,7 +26,7 @@ module axi_link_rx
 
    ,output logic                    wvalid_o
    ,input  logic                    wready_i
-   ,output logic [flit_width_p-1:0] wdata_o
+   ,output logic [31:0]             wdata_o
    ,output logic                    wlast_o
 
    ,output logic                    arvalid_o
@@ -38,7 +38,7 @@ module axi_link_rx
 
    ,output logic                    rvalid_o
    ,input  logic                    rready_i
-   ,output logic [flit_width_p-1:0] rdata_o
+   ,output logic [31:0]             rdata_o
    ,output logic [1:0]              rresp_o
    ,output logic                    rlast_o
 
@@ -48,13 +48,18 @@ module axi_link_rx
    );
 
   // --------------------------------------------------------------------------
-  // Combined transport packets over a 16-bit flit link.
+  // Combined transport packets over a 32-bit flit link.
   //
   // Opcode mapping:
   //   3'b000 = WRITE_REQ
   //   3'b001 = READ_REQ
   //   3'b010 = READ_RESP
   //   3'b011 = WRITE_RESP
+  //
+  // Header flit layout (32 bits):
+  //   requests  : [31:29] opcode, [28:16] length, [15:0] address
+  //   READ_RESP : [31:29] opcode, [28:16] length, [15:2] reserved, [1:0] rresp
+  //   WRITE_RESP: [31:29] opcode, [28:16] 1,      [15:0] 16'b0
   //
   // RX reconstructs all five AXI channels from the simplified transport:
   //   WRITE_REQ  -> AW + W burst
@@ -68,6 +73,8 @@ module axi_link_rx
   // --------------------------------------------------------------------------
 
   initial begin
+    if (flit_width_p != 32)
+      $error("axi_link_rx requires flit_width_p=32, got %0d", flit_width_p);
     if (addr_width_p != 16)
       $error("axi_link_rx requires addr_width_p=16, got %0d", addr_width_p);
   end
@@ -81,22 +88,19 @@ module axi_link_rx
 
   typedef enum logic [2:0] {
     RX_IDLE      = 3'd0,
-    RX_WR_ADDR   = 3'd1,
-    RX_WR_DATA   = 3'd2,
-    RX_RD_ADDR   = 3'd3,
-    RX_R_DATA    = 3'd4,
-    RX_R_RESP    = 3'd5,
-    RX_B_RESP    = 3'd6,
-    RX_DROP      = 3'd7
+    RX_WR_DATA   = 3'd1,
+    RX_R_DATA    = 3'd2,
+    RX_B_RESP    = 3'd3,
+    RX_DROP      = 3'd4
   } rx_state_e;
 
   localparam int beat_count_width_lp = 13;
   localparam int drop_count_width_lp = 14;
   localparam int req_desc_width_lp   = addr_width_p + beat_count_width_lp;
   localparam int r_desc_width_lp     = beat_count_width_lp + 2;
-  localparam logic [2:0] axi_size_lp   = 3'b010;
-  localparam logic [1:0] axi_burst_lp  = 2'b01;
-  localparam int max_axi_beats_lp    = 256;
+  localparam logic [2:0] axi_size_lp  = 3'b010;
+  localparam logic [1:0] axi_burst_lp = 2'b01;
+  localparam int max_axi_beats_lp     = 256;
 
   typedef struct packed {
     logic [addr_width_p-1:0]        addr;
@@ -112,15 +116,15 @@ module axi_link_rx
   // Link ingress FIFO
   // --------------------------------------------------------------------------
 
-  logic                    link_fifo_ready_lo;
-  logic                    link_fifo_v_lo;
-  logic [flit_width_p-1:0] link_fifo_data_lo;
-  logic                    link_fifo_yumi_li;
+  logic        link_fifo_ready_lo;
+  logic        link_fifo_v_lo;
+  logic [31:0] link_fifo_data_lo;
+  logic        link_fifo_yumi_li;
 
   assign link_rx_yumi_o = link_rx_v_i && link_fifo_ready_lo;
 
   bsg_fifo_1r1w_small #(
-    .width_p            (flit_width_p),
+    .width_p            (32),
     .els_p              (link_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -140,33 +144,33 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // Request and response classes are buffered separately after parsing so the
   // link-facing parser can keep making progress even if one AXI channel is
-  // backpressured. The descriptor FIFOs carry burst metadata, while the 16-bit
-  // data FIFOs carry only payload beats.
+  // backpressured. The descriptor FIFOs carry burst metadata, while the data
+  // FIFOs carry only payload beats.
 
-  logic                      wr_desc_push_v_li, wr_desc_push_ready_lo;
+  logic                        wr_desc_push_v_li, wr_desc_push_ready_lo;
   logic [req_desc_width_lp-1:0] wr_desc_push_data_li;
-  logic                      wr_desc_v_lo, wr_desc_yumi_li;
+  logic                        wr_desc_v_lo, wr_desc_yumi_li;
   logic [req_desc_width_lp-1:0] wr_desc_data_lo;
 
-  logic                      rd_desc_push_v_li, rd_desc_push_ready_lo;
+  logic                        rd_desc_push_v_li, rd_desc_push_ready_lo;
   logic [req_desc_width_lp-1:0] rd_desc_push_data_li;
-  logic                      rd_desc_v_lo, rd_desc_yumi_li;
+  logic                        rd_desc_v_lo, rd_desc_yumi_li;
   logic [req_desc_width_lp-1:0] rd_desc_data_lo;
 
-  logic                      w_data_push_v_li, w_data_push_ready_lo;
-  logic [flit_width_p-1:0]  w_data_push_data_li;
-  logic                      w_data_v_lo, w_data_yumi_li;
-  logic [flit_width_p-1:0]  w_data_lo;
+  logic                        w_data_push_v_li, w_data_push_ready_lo;
+  logic [31:0]                 w_data_push_data_li;
+  logic                        w_data_v_lo, w_data_yumi_li;
+  logic [31:0]                 w_data_lo;
 
-  logic                      r_desc_push_v_li, r_desc_push_ready_lo;
+  logic                       r_desc_push_v_li, r_desc_push_ready_lo;
   logic [r_desc_width_lp-1:0] r_desc_push_data_li;
-  logic                      r_desc_v_lo, r_desc_yumi_li;
+  logic                       r_desc_v_lo, r_desc_yumi_li;
   logic [r_desc_width_lp-1:0] r_desc_data_lo;
 
-  logic                      r_data_push_v_li, r_data_push_ready_lo;
-  logic [flit_width_p-1:0]  r_data_push_data_li;
-  logic                      r_data_v_lo, r_data_yumi_li;
-  logic [flit_width_p-1:0]  r_data_lo;
+  logic                        r_data_push_v_li, r_data_push_ready_lo;
+  logic [31:0]                 r_data_push_data_li;
+  logic                        r_data_v_lo, r_data_yumi_li;
+  logic [31:0]                 r_data_lo;
 
   logic                      b_resp_push_v_li, b_resp_push_ready_lo;
   logic [1:0]                b_resp_push_data_li;
@@ -206,7 +210,7 @@ module axi_link_rx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (flit_width_p),
+    .width_p            (32),
     .els_p              (w_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -238,7 +242,7 @@ module axi_link_rx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (flit_width_p),
+    .width_p            (32),
     .els_p              (r_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -278,21 +282,21 @@ module axi_link_rx
 
   rx_state_e state_r, state_n;
   logic [beat_count_width_lp-1:0] cur_beats_r, cur_beats_n;
-  logic [beat_count_width_lp-1:0] r_pkt_beats_r, r_pkt_beats_n;
   logic [drop_count_width_lp-1:0] payload_rem_r, payload_rem_n;
 
   logic [2:0]                     hdr_opcode;
   logic [beat_count_width_lp-1:0] hdr_len;
+  logic [addr_width_p-1:0]        hdr_addr;
   logic                           hdr_len_valid;
 
-  assign hdr_opcode    = link_fifo_data_lo[15:13];
-  assign hdr_len       = link_fifo_data_lo[12:0];
+  assign hdr_opcode    = link_fifo_data_lo[31:29];
+  assign hdr_len       = link_fifo_data_lo[28:16];
+  assign hdr_addr      = link_fifo_data_lo[15:0];
   assign hdr_len_valid = (hdr_len != '0) && (hdr_len <= beat_count_width_lp'(max_axi_beats_lp));
 
   always_comb begin
     state_n           = state_r;
     cur_beats_n       = cur_beats_r;
-    r_pkt_beats_n     = r_pkt_beats_r;
     payload_rem_n     = payload_rem_r;
 
     link_fifo_yumi_li = 1'b0;
@@ -315,39 +319,53 @@ module axi_link_rx
         if (link_fifo_v_lo) begin
           unique case (hdr_opcode)
             OP_WRITE_REQ: begin
-              // Next flit is the AW start address, then `len` W payload beats.
-              link_fifo_yumi_li = 1'b1;
-              cur_beats_n       = hdr_len;
-              if (hdr_len_valid)
-                state_n = RX_WR_ADDR;
-              else begin
-                state_n       = RX_DROP;
-                payload_rem_n = drop_count_width_lp'({1'b0, hdr_len}) + drop_count_width_lp'(1);
+              // Header carries {opcode,len,addr}. Publish the AW descriptor
+              // immediately and stream `len` W payload beats next.
+              if (hdr_len_valid && wr_desc_push_ready_lo) begin
+                link_fifo_yumi_li    = 1'b1;
+                wr_desc_push_v_li    = 1'b1;
+                wr_desc_push_data_li = {hdr_addr, hdr_len};
+                cur_beats_n          = hdr_len;
+                payload_rem_n        = drop_count_width_lp'({1'b0, hdr_len});
+                state_n              = RX_WR_DATA;
+              end
+              else if (!hdr_len_valid) begin
+                link_fifo_yumi_li = 1'b1;
+                state_n           = RX_DROP;
+                payload_rem_n     = drop_count_width_lp'({1'b0, hdr_len});
               end
             end
 
             OP_READ_REQ: begin
-              // Next flit is the AR start address.
-              link_fifo_yumi_li = 1'b1;
-              cur_beats_n       = hdr_len;
-              if (hdr_len_valid)
-                state_n = RX_RD_ADDR;
-              else begin
-                state_n       = RX_DROP;
-                payload_rem_n = drop_count_width_lp'(1);
+              // READ_REQ has no payload; one header flit publishes AR directly.
+              if (hdr_len_valid && rd_desc_push_ready_lo) begin
+                link_fifo_yumi_li    = 1'b1;
+                rd_desc_push_v_li    = 1'b1;
+                rd_desc_push_data_li = {hdr_addr, hdr_len};
+                state_n              = RX_IDLE;
+              end
+              else if (!hdr_len_valid) begin
+                link_fifo_yumi_li = 1'b1;
+                state_n           = RX_DROP;
+                payload_rem_n     = '0;
               end
             end
 
             OP_READ_RESP: begin
-              // Next come `len` R data beats followed by one padded RRESP flit.
-              link_fifo_yumi_li = 1'b1;
-              cur_beats_n       = hdr_len;
-              r_pkt_beats_n     = hdr_len;
-              if (hdr_len_valid)
-                state_n = RX_R_DATA;
-              else begin
-                state_n       = RX_DROP;
-                payload_rem_n = drop_count_width_lp'({1'b0, hdr_len}) + drop_count_width_lp'(1);
+              // Header carries both the response length and the shared RRESP,
+              // so AXI R replay can start as soon as the first data beat
+              // arrives. No end-of-packet trailer is required.
+              if (hdr_len_valid && r_desc_push_ready_lo) begin
+                link_fifo_yumi_li   = 1'b1;
+                r_desc_push_v_li    = 1'b1;
+                r_desc_push_data_li = {hdr_len, link_fifo_data_lo[1:0]};
+                cur_beats_n         = hdr_len;
+                state_n             = RX_R_DATA;
+              end
+              else if (!hdr_len_valid) begin
+                link_fifo_yumi_li = 1'b1;
+                state_n           = RX_DROP;
+                payload_rem_n     = drop_count_width_lp'({1'b0, hdr_len});
               end
             end
 
@@ -373,18 +391,6 @@ module axi_link_rx
         end
       end
 
-      RX_WR_ADDR: begin
-        if (link_fifo_v_lo && wr_desc_push_ready_lo) begin
-          // Publish the combined write descriptor as soon as the address flit
-          // arrives so AW can be replayed later in FIFO order.
-          link_fifo_yumi_li  = 1'b1;
-          wr_desc_push_v_li  = 1'b1;
-          wr_desc_push_data_li = {link_fifo_data_lo, cur_beats_r};
-          payload_rem_n      = drop_count_width_lp'({1'b0, cur_beats_r});
-          state_n            = RX_WR_DATA;
-        end
-      end
-
       RX_WR_DATA: begin
         if (link_fifo_v_lo && w_data_push_ready_lo) begin
           // WRITE_REQ payload flits stream directly into the W data FIFO.
@@ -400,39 +406,20 @@ module axi_link_rx
         end
       end
 
-      RX_RD_ADDR: begin
-        if (link_fifo_v_lo && rd_desc_push_ready_lo) begin
-          // READ_REQ becomes one AR descriptor with no additional data payload.
-          link_fifo_yumi_li  = 1'b1;
-          rd_desc_push_v_li  = 1'b1;
-          rd_desc_push_data_li = {link_fifo_data_lo, cur_beats_r};
-          state_n            = RX_IDLE;
-        end
-      end
-
       RX_R_DATA: begin
         if (link_fifo_v_lo && r_data_push_ready_lo) begin
-          // READ_RESP data beats stream into the R data FIFO first.
+          // READ_RESP data beats stream into the R data FIFO first; AXI R can
+          // begin replaying before the full burst has arrived because the
+          // descriptor was published from the header.
           link_fifo_yumi_li = 1'b1;
           r_data_push_v_li  = 1'b1;
           if (cur_beats_r == beat_count_width_lp'(1)) begin
             cur_beats_n = '0;
-            state_n     = RX_R_RESP;
+            state_n     = RX_IDLE;
           end
           else begin
             cur_beats_n = cur_beats_r - beat_count_width_lp'(1);
           end
-        end
-      end
-
-      RX_R_RESP: begin
-        if (link_fifo_v_lo && r_desc_push_ready_lo) begin
-          // The final padded response flit supplies one shared RRESP code for
-          // the whole reconstructed burst.
-          link_fifo_yumi_li = 1'b1;
-          r_desc_push_v_li  = 1'b1;
-          r_desc_push_data_li = {r_pkt_beats_r, link_fifo_data_lo[1:0]};
-          state_n           = RX_IDLE;
         end
       end
 
@@ -462,13 +449,6 @@ module axi_link_rx
           end
         end
       end
-
-      default: begin
-        state_n       = RX_IDLE;
-        cur_beats_n   = '0;
-        r_pkt_beats_n = '0;
-        payload_rem_n = '0;
-      end
     endcase
   end
 
@@ -476,13 +456,11 @@ module axi_link_rx
     if (reset_i) begin
       state_r       <= RX_IDLE;
       cur_beats_r   <= '0;
-      r_pkt_beats_r <= '0;
       payload_rem_r <= '0;
     end
     else begin
       state_r       <= state_n;
       cur_beats_r   <= cur_beats_n;
-      r_pkt_beats_r <= r_pkt_beats_n;
       payload_rem_r <= payload_rem_n;
     end
   end
@@ -578,7 +556,7 @@ module axi_link_rx
 
   logic r_active_r, r_active_n;
   logic [beat_count_width_lp-1:0] r_beats_left_r, r_beats_left_n;
-  logic [1:0] r_resp_hold_r, r_resp_hold_n;
+  logic [1:0]                     r_resp_hold_r, r_resp_hold_n;
   logic r_start_burst;
   logic r_handshake;
 
@@ -636,8 +614,8 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // Each WRITE_RESP packet becomes exactly one AXI B beat.
 
-  assign bvalid_o     = b_resp_v_lo;
-  assign bresp_o      = b_resp_lo;
+  assign bvalid_o       = b_resp_v_lo;
+  assign bresp_o        = b_resp_lo;
   assign b_resp_yumi_li = bvalid_o && bready_i;
 
 `ifndef SYNTHESIS

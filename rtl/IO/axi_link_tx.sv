@@ -23,7 +23,7 @@ module axi_link_tx
 
    ,input  logic                    wvalid_i
    ,output logic                    wready_o
-   ,input  logic [flit_width_p-1:0] wdata_i
+   ,input  logic [31:0]             wdata_i
    ,input  logic                    wlast_i
 
    ,input  logic                    arvalid_i
@@ -35,9 +35,12 @@ module axi_link_tx
 
    ,input  logic                    rvalid_i
    ,output logic                    rready_o
-   ,input  logic [flit_width_p-1:0] rdata_i
+   ,input  logic [31:0]             rdata_i
    ,input  logic [1:0]              rresp_i
    ,input  logic                    rlast_i
+   ,input  logic                    tx_r_len_v_i
+   ,input  logic [7:0]              tx_r_len_i
+   ,output logic                    tx_r_len_yumi_o
 
    ,input  logic                    bvalid_i
    ,output logic                    bready_o
@@ -49,7 +52,7 @@ module axi_link_tx
    );
 
   // --------------------------------------------------------------------------
-  // Combined transport packets over a 16-bit flit link.
+  // Combined transport packets over a 32-bit flit link.
   //
   // Opcode mapping:
   //   3'b000 = WRITE_REQ
@@ -57,15 +60,20 @@ module axi_link_tx
   //   3'b010 = READ_RESP
   //   3'b011 = WRITE_RESP
   //
+  // Header flit layout (32 bits):
+  //   requests  : [31:29] opcode, [28:16] length, [15:0] address
+  //   READ_RESP : [31:29] opcode, [28:16] length, [15:2] reserved, [1:0] rresp
+  //   WRITE_RESP: [31:29] opcode, [28:16] 1,      [15:0] 16'b0
+  //
   // AXI semantics are preserved at the module boundary:
   //   requests  : AW, W, AR
   //   responses : R, B
   //
-  // Only the transport is simplified:
-  //   WRITE_REQ  = header(len) + address + len W beats
-  //   READ_REQ   = header(len) + address
-  //   READ_RESP  = header(len) + len R beats + padded RRESP flit
-  //   WRITE_RESP = header(1)   + padded BRESP flit
+  // Transport:
+  //   WRITE_REQ  = header(opcode,len,addr) + len W beats
+  //   READ_REQ   = header(opcode,len,addr)
+  //   READ_RESP  = header(opcode,len,rresp) + len R beats
+  //   WRITE_RESP = header(opcode,1,0)      + padded BRESP flit
   //
   // Strict FIFO assumption:
   //   No AXI IDs or reorder logic exist here. Associations rely purely on
@@ -73,6 +81,8 @@ module axi_link_tx
   // --------------------------------------------------------------------------
 
   initial begin
+    if (flit_width_p != 32)
+      $error("axi_link_tx requires flit_width_p=32, got %0d", flit_width_p);
     if (addr_width_p != 16)
       $error("axi_link_tx requires addr_width_p=16, got %0d", addr_width_p);
   end
@@ -94,9 +104,8 @@ module axi_link_tx
   typedef enum logic [2:0] {
     TX_IDLE    = 3'd0,
     TX_HEADER  = 3'd1,
-    TX_ADDR    = 3'd2,
-    TX_DATA    = 3'd3,
-    TX_RESP    = 3'd4
+    TX_DATA    = 3'd2,
+    TX_RESP    = 3'd3
   } tx_state_e;
 
   localparam int beat_count_width_lp = 13;
@@ -141,9 +150,9 @@ module axi_link_tx
   logic [beat_count_width_lp-1:0] w_len_data_lo;
 
   logic                     w_data_push_v_li, w_data_push_ready_lo;
-  logic [flit_width_p-1:0] w_data_push_data_li;
+  logic [31:0]              w_data_push_data_li;
   logic                     w_data_v_lo, w_data_yumi_li;
-  logic [flit_width_p-1:0] w_data_lo;
+  logic [31:0]              w_data_lo;
 
   logic                     r_desc_push_v_li, r_desc_push_ready_lo;
   logic [r_desc_width_lp-1:0] r_desc_push_data_li;
@@ -151,9 +160,9 @@ module axi_link_tx
   logic [r_desc_width_lp-1:0] r_desc_data_lo;
 
   logic                     r_data_push_v_li, r_data_push_ready_lo;
-  logic [flit_width_p-1:0] r_data_push_data_li;
+  logic [31:0]              r_data_push_data_li;
   logic                     r_data_v_lo, r_data_yumi_li;
-  logic [flit_width_p-1:0] r_data_lo;
+  logic [31:0]              r_data_lo;
 
   logic                     b_resp_push_v_li, b_resp_push_ready_lo;
   logic [1:0]               b_resp_push_data_li;
@@ -214,7 +223,7 @@ module axi_link_tx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (flit_width_p),
+    .width_p            (32),
     .els_p              (w_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -246,7 +255,7 @@ module axi_link_tx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (flit_width_p),
+    .width_p            (32),
     .els_p              (r_data_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -305,23 +314,26 @@ module axi_link_tx
   logic aw_req, ar_req, r_start_req, b_req;
 
   logic [beat_count_width_lp-1:0] aw_beats, ar_beats;
+  logic [beat_count_width_lp-1:0] tx_r_beats_li;
   logic aw_ctrl_ok, ar_ctrl_ok;
 
   assign aw_beats   = {5'b0, awlen_i} + beat_count_width_lp'(1);
   assign ar_beats   = {5'b0, arlen_i} + beat_count_width_lp'(1);
-  // Accept any burst size — the link flit width is fixed and each beat
-  // carries `flit_width_p` bits regardless of the AXI size field.  Requiring
-  // size==axi_size_lp would reject dice_core's mfetch/bsfetch (size=0b001).
-  assign aw_ctrl_ok = (awburst_i == axi_burst_lp) && (aw_beats != '0);
-  assign ar_ctrl_ok = (arburst_i == axi_burst_lp) && (ar_beats != '0);
+  assign tx_r_beats_li = {5'b0, tx_r_len_i} + beat_count_width_lp'(1);
+  assign aw_ctrl_ok = (awsize_i == axi_size_lp) && (awburst_i == axi_burst_lp) && (aw_beats != '0);
+  assign ar_ctrl_ok = (arsize_i == axi_size_lp) && (arburst_i == axi_burst_lp) && (ar_beats != '0);
 
   logic r_capture_active_r, r_capture_active_n;
-  logic [beat_count_width_lp-1:0] r_capture_beats_r, r_capture_beats_n;
+  logic [beat_count_width_lp-1:0] r_capture_beats_left_r, r_capture_beats_left_n;
   logic [1:0] r_capture_resp_r, r_capture_resp_n;
+  logic [beat_count_width_lp-1:0] r_accept_loaded_beats;
+  logic r_first_accept;
 
   assign aw_req      = awvalid_i && wr_desc_push_ready_lo && w_len_push_ready_lo && pkt_order_push_ready_lo && aw_ctrl_ok;
   assign ar_req      = arvalid_i && rd_desc_push_ready_lo && pkt_order_push_ready_lo && ar_ctrl_ok;
-  assign r_start_req = rvalid_i && !r_capture_active_r && r_data_push_ready_lo && pkt_order_push_ready_lo;
+  assign r_start_req = rvalid_i && !r_capture_active_r
+                       && tx_r_len_v_i && r_data_push_ready_lo && r_desc_push_ready_lo
+                       && pkt_order_push_ready_lo;
   assign b_req       = bvalid_i && b_resp_push_ready_lo && pkt_order_push_ready_lo;
 
   assign start_req[pkt_kind_e'(PKT_WR_REQ)]  = aw_req;
@@ -398,8 +410,7 @@ module axi_link_tx
 
   assign w_accept_loaded_beats = w_accept_active_r ? w_accept_beats_left_r : w_len_data_lo;
   assign wready_o = w_data_push_ready_lo
-                    && (w_accept_active_r || w_len_v_lo)
-                    && (!( !w_accept_active_r) || w_len_v_lo);
+                    && (w_accept_active_r || w_len_v_lo);
   assign w_accept = wvalid_i && wready_o;
   assign w_data_push_v_li    = w_accept;
   assign w_data_push_data_li = wdata_i;
@@ -445,60 +456,61 @@ module axi_link_tx
   end
 
   assign rready_o = r_data_push_ready_lo
-                    && (!rlast_i || r_desc_push_ready_lo)
                     && (r_capture_active_r || start_grant[pkt_kind_e'(PKT_RD_RESP)]);
   assign r_accept = rvalid_i && rready_o;
+  assign r_first_accept = r_accept && !r_capture_active_r;
+  assign r_accept_loaded_beats = r_capture_active_r ? r_capture_beats_left_r : tx_r_beats_li;
 
   // R beats stream straight into `r_data_fifo_i`. The matching `{len,rresp}`
-  // descriptor is emitted only when the final beat arrives, which lets the
-  // serializer later emit one READ_RESP packet with a padded trailer flit.
+  // descriptor is emitted on the first beat using the stored AR length from
+  // `top_level_io`, so the serializer can emit the READ_RESP header before the
+  // full burst has completed.
 
   assign r_data_push_v_li    = r_accept;
   assign r_data_push_data_li = rdata_i;
-  assign r_final_accept      = r_accept && rlast_i;
-  assign r_desc_push_v_li    = r_final_accept;
-  assign r_desc_push_data_li = !r_capture_active_r
-                               ? {beat_count_width_lp'(1), rresp_i}
-                               : {r_capture_beats_r + beat_count_width_lp'(1), r_capture_resp_r};
+  assign r_final_accept      = r_accept && (r_accept_loaded_beats == beat_count_width_lp'(1));
+  assign r_desc_push_v_li    = r_first_accept;
+  assign r_desc_push_data_li = {tx_r_beats_li, rresp_i};
+  assign tx_r_len_yumi_o     = r_first_accept;
 
   always_comb begin
-    r_capture_active_n = r_capture_active_r;
-    r_capture_beats_n  = r_capture_beats_r;
-    r_capture_resp_n   = r_capture_resp_r;
+    r_capture_active_n     = r_capture_active_r;
+    r_capture_beats_left_n = r_capture_beats_left_r;
+    r_capture_resp_n       = r_capture_resp_r;
 
     if (r_accept) begin
       if (!r_capture_active_r) begin
-        if (rlast_i) begin
-          r_capture_active_n = 1'b0;
-          r_capture_beats_n  = '0;
-          r_capture_resp_n   = rresp_i;
+        if (r_accept_loaded_beats == beat_count_width_lp'(1)) begin
+          r_capture_active_n     = 1'b0;
+          r_capture_beats_left_n = '0;
+          r_capture_resp_n       = rresp_i;
         end
         else begin
-          r_capture_active_n = 1'b1;
-          r_capture_beats_n  = beat_count_width_lp'(1);
-          r_capture_resp_n   = rresp_i;
+          r_capture_active_n     = 1'b1;
+          r_capture_beats_left_n = r_accept_loaded_beats - beat_count_width_lp'(1);
+          r_capture_resp_n       = rresp_i;
         end
       end
-      else if (rlast_i) begin
-        r_capture_active_n = 1'b0;
-        r_capture_beats_n  = '0;
+      else if (r_capture_beats_left_r == beat_count_width_lp'(1)) begin
+        r_capture_active_n     = 1'b0;
+        r_capture_beats_left_n = '0;
       end
       else begin
-        r_capture_beats_n = r_capture_beats_r + beat_count_width_lp'(1);
+        r_capture_beats_left_n = r_capture_beats_left_r - beat_count_width_lp'(1);
       end
     end
   end
 
   always_ff @(posedge clk_i) begin
     if (reset_i) begin
-      r_capture_active_r <= 1'b0;
-      r_capture_beats_r  <= '0;
-      r_capture_resp_r   <= '0;
+      r_capture_active_r     <= 1'b0;
+      r_capture_beats_left_r <= '0;
+      r_capture_resp_r       <= '0;
     end
     else begin
-      r_capture_active_r <= r_capture_active_n;
-      r_capture_beats_r  <= r_capture_beats_n;
-      r_capture_resp_r   <= r_capture_resp_n;
+      r_capture_active_r     <= r_capture_active_n;
+      r_capture_beats_left_r <= r_capture_beats_left_n;
+      r_capture_resp_r       <= r_capture_resp_n;
     end
   end
 
@@ -506,10 +518,9 @@ module axi_link_tx
   // Link serializer
   // --------------------------------------------------------------------------
   // The serializer is intentionally simple:
-  //   TX_HEADER emits the packet header flit
-  //   TX_ADDR   emits the address flit for request packets that carry one
+  //   TX_HEADER emits the 32-bit header flit {opcode, beats, addr}
   //   TX_DATA   streams W or R payload beats from the corresponding FIFO
-  //   TX_RESP   emits the padded RRESP/BRESP flit when required
+  //   TX_RESP   emits the padded BRESP flit when required
   //
   // Only one packet is active at a time, and packet start order is supplied by
   // `pkt_order_fifo_i`, so no cross-packet reordering is possible.
@@ -552,12 +563,12 @@ module axi_link_tx
                           && (cur_kind_r == pkt_kind_e'(PKT_RD_RESP));
 
   always_comb begin
-    state_n             = state_r;
-    cur_kind_n          = cur_kind_r;
-    cur_addr_n          = cur_addr_r;
-    cur_beats_n         = cur_beats_r;
+    state_n               = state_r;
+    cur_kind_n            = cur_kind_r;
+    cur_addr_n            = cur_addr_r;
+    cur_beats_n           = cur_beats_r;
     cur_data_beats_left_n = cur_data_beats_left_r;
-    cur_resp_n          = cur_resp_r;
+    cur_resp_n            = cur_resp_r;
 
     if (start_wr_pkt) begin
       // WRITE_REQ = header + address + W data beats.
@@ -578,7 +589,7 @@ module axi_link_tx
       cur_resp_n            = '0;
     end
     else if (start_r_pkt) begin
-      // READ_RESP = header + R data beats + one padded RRESP trailer flit.
+      // READ_RESP = header + R data beats.
       state_n               = TX_HEADER;
       cur_kind_n            = pkt_kind_e'(PKT_RD_RESP);
       cur_addr_n            = '0;
@@ -599,27 +610,17 @@ module axi_link_tx
       unique case (state_r)
         TX_HEADER: begin
           case (cur_kind_r)
-            pkt_kind_e'(PKT_WR_REQ):  state_n = TX_ADDR;
-            pkt_kind_e'(PKT_RD_REQ):  state_n = TX_ADDR;
+            pkt_kind_e'(PKT_WR_REQ):  state_n = TX_DATA;
+            pkt_kind_e'(PKT_RD_REQ):  state_n = TX_IDLE;
             pkt_kind_e'(PKT_RD_RESP): state_n = TX_DATA;
             default:                  state_n = TX_RESP;
           endcase
         end
 
-        TX_ADDR: begin
-          if (cur_kind_r == pkt_kind_e'(PKT_WR_REQ))
-            state_n = TX_DATA;
-          else
-            state_n = TX_IDLE;
-        end
-
         TX_DATA: begin
           if (cur_data_beats_left_r == beat_count_width_lp'(1)) begin
             cur_data_beats_left_n = '0;
-            if (cur_kind_r == pkt_kind_e'(PKT_RD_RESP))
-              state_n = TX_RESP;
-            else
-              state_n = TX_IDLE;
+            state_n = TX_IDLE;
           end
           else begin
             cur_data_beats_left_n = cur_data_beats_left_r - beat_count_width_lp'(1);
@@ -669,16 +670,11 @@ module axi_link_tx
       TX_HEADER: begin
         link_tx_v_o = 1'b1;
         unique case (cur_kind_r)
-          pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ, cur_beats_r};
-          pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = {OP_READ_REQ,  cur_beats_r};
-          pkt_kind_e'(PKT_RD_RESP): link_tx_data_o = {OP_READ_RESP, cur_beats_r};
-          default:                  link_tx_data_o = {OP_WRITE_RESP, beat_count_width_lp'(1)};
+          pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ,  cur_beats_r, cur_addr_r};
+          pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = {OP_READ_REQ,   cur_beats_r, cur_addr_r};
+          pkt_kind_e'(PKT_RD_RESP): link_tx_data_o = {OP_READ_RESP,  cur_beats_r, 14'b0, cur_resp_r};
+          default:                  link_tx_data_o = {OP_WRITE_RESP, beat_count_width_lp'(1), 16'b0};
         endcase
-      end
-
-      TX_ADDR: begin
-        link_tx_v_o    = 1'b1;
-        link_tx_data_o = cur_addr_r;
       end
 
       TX_DATA: begin
@@ -694,7 +690,7 @@ module axi_link_tx
 
       TX_RESP: begin
         link_tx_v_o    = 1'b1;
-        link_tx_data_o = {14'b0, cur_resp_r};
+        link_tx_data_o = {30'b0, cur_resp_r};
       end
 
       default: begin
@@ -718,6 +714,9 @@ module axi_link_tx
 
       if (r_accept && r_capture_active_r && (rresp_i != r_capture_resp_r))
         $error("axi_link_tx observed varying RRESP inside one R burst");
+
+      if (r_accept && (rlast_i != (r_accept_loaded_beats == beat_count_width_lp'(1))))
+        $error("axi_link_tx observed RLAST misaligned with stored AR length");
 
       if (awvalid_i && !aw_ctrl_ok && awready_o)
         $error("axi_link_tx accepted malformed AW control");

@@ -287,13 +287,13 @@ module cgra_io_axi4_top
       .use_hardened_fifo_p            (USE_HARDENED_FIFO),
       // RX FIFO sizes — large R data FIFO so full bitstream / meta bursts
       // (up to 54 / 16 beats) can be received without backpressuring the link.
-      .rx_link_fifo_els_p             (64),
+      .rx_link_fifo_els_p             (8),
       .rx_aw_desc_fifo_els_p          (2),
       .rx_ar_desc_fifo_els_p          (2),
       .rx_w_len_fifo_els_p            (4),
       .rx_w_data_fifo_els_p           (8),
       .rx_r_len_fifo_els_p            (4),
-      .rx_r_data_fifo_els_p           (64),
+      .rx_r_data_fifo_els_p           (8),
       .rx_b_resp_fifo_els_p           (4),
       // TX FIFO sizes
       .tx_link_fifo_els_p             (8),
