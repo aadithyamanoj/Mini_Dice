@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.bin",
-  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b_compile_report.json",
-  "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_load_mul_array_b.fasm",
+  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
+  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
   "kernel": "load_mul_array_b",
   "notes": [
     "B-side load stage for the staged mul-array flow.",
@@ -11,7 +11,7 @@
   "pgraph_meta_t": {
     "barrier": 0,
     "bitstream_addr": 512,
-    "bitstream_length": 203,
+    "bitstream_length": 135,
     "branch_meta": {
       "branch_ena": 0,
       "branch_jump_target_offset": 0,
