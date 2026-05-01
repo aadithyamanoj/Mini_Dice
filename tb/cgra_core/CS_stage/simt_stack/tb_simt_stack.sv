@@ -32,6 +32,7 @@ module tb_simt_stack;
 
   logic                                 stack_empty_o;
   logic                                 stack_full_o;
+  logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count_o;
 
   int cycle_count;
 
@@ -58,7 +59,8 @@ module tb_simt_stack;
       .top_active_mask_o      (top_active_mask_o),
       .out_valid_o            (out_valid_o),
       .stack_empty_o          (stack_empty_o),
-      .stack_full_o           (stack_full_o)
+      .stack_full_o           (stack_full_o),
+      .stack_entry_count_o    (stack_entry_count_o)
   );
 
   initial begin
@@ -89,6 +91,9 @@ module tb_simt_stack;
 
     reset_dut();
 
+    assert (stack_entry_count_o == '0)
+      else $fatal(1, "stack_entry_count_o not zero after reset");
+
     pc = 32'h0000_1000;
     reconv = 32'h0000_2000;
     mask = {ThreadWidth{1'b1}};
@@ -100,6 +105,9 @@ module tb_simt_stack;
     push_i = 1'b1;
     @(posedge clk);
     push_i = 1'b0;
+
+    assert (stack_entry_count_o == 1)
+      else $fatal(1, "stack_entry_count_o not one after push");
 
     // Read top (out_valid asserted one cycle after read_top)
     read_top_i = 1'b1;

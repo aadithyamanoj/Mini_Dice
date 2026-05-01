@@ -27,7 +27,8 @@ module simt_stack
 
     // Stack status outputs
     output logic stack_empty_o,
-    output logic stack_full_o
+    output logic stack_full_o,
+    output logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count_o
 );
 
   // Local Parameters (derived from packages)
@@ -100,6 +101,7 @@ module simt_stack
   // Stack status
   assign stack_empty_o = (stack_ptr_q == '0);
   assign stack_full_o = (stack_ptr_q == SIMT_STACK_DEPTH);
+  assign stack_entry_count_o = stack_ptr_q[SIMT_STACK_ENTRY_COUNT_WIDTH-1:0];
 
   // Top of stack outputs - directly from RAM (registered)
   assign top_next_pc_o = unpack_next_pc(ram_rd_data);

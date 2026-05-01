@@ -30,7 +30,8 @@ module cta_schedule_stage
     output logic                           simt_update_ready_o,
     input simt_stack_update_t              simt_update_stack_data_i,
 
-    output simt_stack_status_entry_t simt_status_o
+    output simt_stack_status_entry_t simt_status_o,
+    output logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] simt_stack_entry_count_o
 );
 
 
@@ -43,6 +44,9 @@ module cta_schedule_stage
   thread_mask_t                stack_top_active_mask;
   logic                        stack_empty;
   logic                        stack_full;
+  logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count;
+
+  assign simt_stack_entry_count_o = stack_entry_count;
 
   assign simt_status_o.valid            = stack_top_valid;
   assign simt_status_o.next_pc          = stack_top_next_pc;
@@ -170,7 +174,8 @@ module cta_schedule_stage
       .stack_top_reconvergence_pc_o (stack_top_reconvergence_pc),
       .stack_top_active_mask_o      (stack_top_active_mask),
       .stack_empty_o                (stack_empty),
-      .stack_full_o                 (stack_full)
+      .stack_full_o                 (stack_full),
+      .stack_entry_count_o          (stack_entry_count)
   );
 
 `ifndef SYNTHESIS

@@ -77,7 +77,6 @@ module active_cta_table
       if ((add_valid_i == 1'b1) && (add_ready_o == 1'b1)) begin
         cta_entry_q.cta_valid        <= 1'b1;
         cta_entry_q.cta_id           <= add_cta_info_i.cta_id;
-        cta_entry_q.grid_size        <= add_cta_info_i.kernel_desc.grid_size;
       end
     end
   end

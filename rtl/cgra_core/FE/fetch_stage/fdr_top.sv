@@ -65,7 +65,6 @@ module fdr_top
   // ---- FDR output pass-through (schedule_data_q → fdr_if) ----
   assign fdr_if.data.schedule_eblock_id        = schedule_data_q.schedule_eblock_id;
   assign fdr_if.data.schedule_cta_id           = schedule_data_q.schedule_cta_id;
-  assign fdr_if.data.schedule_grid_size        = schedule_data_q.schedule_grid_size;
   assign fdr_if.data.real_active_mask          = branch_mask_internal;
 
   // ---- Branch prediction output ----
@@ -83,7 +82,6 @@ module fdr_top
 
   // ---- Internal signals: bitstream ----
   logic [DICE_ADDR_WIDTH-1:0]        bitstream_addr;
-  logic [BITSTREAM_LENGTH_WIDTH-1:0] bitstream_length;
   logic                              bitstream_addr_valid_internal;
   logic                              done_streaming_internal;
   logic                              cm_num_internal;
@@ -92,7 +90,6 @@ module fdr_top
   branch_meta_t branch_meta_internal;
   logic         branch_mask_valid;
   logic         branch_req_valid_internal;
-  logic         is_barrier_internal;
   logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] branch_handler_pred_regs;
 
   logic         bh_update_valid;
@@ -155,10 +152,8 @@ module fdr_top
       .real_active_thread_mask_i(branch_mask_internal),
       .bitstream_addr_o         (bitstream_addr),
       .bitstream_addr_valid_o   (bitstream_addr_valid_internal),
-      .bitstream_length_o       (bitstream_length),
       .branch_metadata_o        (branch_meta_internal),
       .branch_req_valid_o       (branch_req_valid_internal),
-      .is_barrier_o             (is_barrier_internal),
       .meta_o                   (fdr_if.data.metadata)
   );
 
@@ -183,11 +178,9 @@ module fdr_top
 
   // ---- Valid Checker ----
   valid_check u_valid_check (
-      .barrier_indicator_i(is_barrier_internal),
       .decode_done_i      (branch_mask_valid),
       .bh_done_i          (bh_done_internal),
       .bitstream_loaded_i (done_streaming_internal),
-      .barrier_complete_i (1'b1),
       .fdr_valid_o        (fdr_if.valid),
       .ex_ready_i         (fdr_if.ready),
       .fire_eblock_o      (fire_eblock_internal)
@@ -225,24 +218,11 @@ module fdr_top
         );
       end
 
-      if (!meta_valid_prev_q && meta_valid_internal) begin
-        $display(
-            "[FDR] t=%0t metadata fetched: bitstream_addr=%0d bitstream_len=%0d latency=%0d branch=%0b barrier=%0b",
-            $time,
-            meta_internal.bitstream_addr,
-            meta_internal.bitstream_length,
-            meta_internal.lat,
-            meta_internal.branch_meta.branch_ena,
-            meta_internal.barrier
-        );
-      end
-
       if (!bitstream_addr_valid_prev_q && bitstream_addr_valid_internal) begin
         $display(
-            "[FDR] t=%0t starting bitstream fetch/load: addr=%0d len=%0d",
+            "[FDR] t=%0t starting bitstream fetch/load: addr=%0d ",
             $time,
-            bitstream_addr,
-            bitstream_length
+            bitstream_addr
         );
       end
 
