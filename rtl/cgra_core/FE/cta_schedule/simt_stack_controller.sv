@@ -32,7 +32,10 @@ module simt_stack_controller
 
     // ============== STACK STATUS ==============
     output logic stack_empty_o,
-    output logic stack_full_o
+    output logic stack_full_o,
+    output logic        stack_overflow_o,
+    output logic [15:0] stack_depth_o,
+    output logic [15:0] stack_error_pc_o
 );
 
   // ===========================================================================
@@ -124,10 +127,16 @@ module simt_stack_controller
 
   logic stack_empty_internal;
   logic stack_full_internal;
+  logic stack_overflow_internal;
+  logic [$clog2(SIMT_STACK_DEPTH):0] stack_depth_internal;
+  logic [DICE_ADDR_WIDTH-1:0] error_pc_internal;
 
   // Output status signals - direct pass-through from single stack
-  assign stack_empty_o = stack_empty_internal;
-  assign stack_full_o = stack_full_internal;
+  assign stack_empty_o    = stack_empty_internal;
+  assign stack_full_o     = stack_full_internal;
+  assign stack_overflow_o  = stack_overflow_internal;
+  assign stack_depth_o     = 16'(stack_depth_internal);
+  assign stack_error_pc_o  = 16'(error_pc_internal);
 
   // Output data signals - direct pass-through from single stack
   assign stack_top_valid_o = stack_out_valid && !stack_empty_internal;
@@ -161,7 +170,10 @@ module simt_stack_controller
       .top_active_mask_o      (stack_top_active_mask_int),
       .out_valid_o            (stack_out_valid),
       .stack_empty_o          (stack_empty_internal),
-      .stack_full_o           (stack_full_internal)
+      .stack_full_o           (stack_full_internal),
+      .stack_overflow_o       (stack_overflow_internal),
+      .stack_depth_o          (stack_depth_internal),
+      .error_pc_o             (error_pc_internal)
   );
 
   // ===========================================================================

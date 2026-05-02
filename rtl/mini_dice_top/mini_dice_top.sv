@@ -119,6 +119,14 @@ module mini_dice_top
   logic                           csr_start;
   logic [                   15:0] csr_start_pc;
 
+  // Hardware status wires from dice_core → cgra_io_csr
+  logic        core_hw_busy;
+  logic        core_dispatch_busy;
+  logic [15:0] core_bsload_cnt;
+  logic        core_stack_overflow;
+  logic [15:0] core_stack_depth;
+  logic [15:0] core_stack_error_pc;
+
   // csrX kernel arguments: cgra_io_csr regs 8-15 → dice_core
   logic [DICE_REG_DATA_WIDTH-1:0] csrX         [8];
   logic                           cta_complete_fire;
@@ -178,6 +186,12 @@ module mini_dice_top
 
       .cgra_prog_dout_o(cgra_prog_dout_o),
       .cgra_prog_we_o  (cgra_prog_we_o),
+      .hw_busy_o       (core_hw_busy),
+      .dispatch_busy_o (core_dispatch_busy),
+      .bsload_cnt_o    (core_bsload_cnt),
+      .stack_overflow_o(core_stack_overflow),
+      .stack_depth_o   (core_stack_depth),
+      .stack_error_pc_o(core_stack_error_pc),
 
       .axi_awaddr_o (dfetch_awaddr),
       .axi_awvalid_o(dfetch_awvalid),
@@ -300,13 +314,13 @@ module mini_dice_top
       .bsload_en_o (csr_bsload_en_o),
 
       // hw_* status exposed through CSR STATUS.
-      .hw_busy_i          (1'b0),
+      .hw_busy_i          (core_hw_busy),
       .hw_complete_i      (cta_complete_fire),
-      .hw_dispatching_i   (1'b0),
-      .hw_stack_overflow_i(1'b0),
-      .hw_stack_depth_i   ('0),
-      .hw_error_info_i    ('0),
-      .hw_bsload_cnt_i    ('0),
+      .hw_dispatching_i   (core_dispatch_busy),
+      .hw_stack_overflow_i(core_stack_overflow),
+      .hw_stack_depth_i   (core_stack_depth),
+      .hw_error_info_i    (core_stack_error_pc),
+      .hw_bsload_cnt_i    (core_bsload_cnt),
 
       // Regs 8-15: kernel argument outputs → dice_core csrX inputs
       .csrX0_o(csrX[0]),

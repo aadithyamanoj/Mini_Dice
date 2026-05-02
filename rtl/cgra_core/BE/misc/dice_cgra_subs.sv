@@ -75,7 +75,9 @@ module dice_cgra_subs
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_2,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_2,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_3,
-    output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3
+    output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3,
+
+    output logic [15:0] bsload_cnt_o
 );
 
   logic prog_rst_li;
@@ -99,7 +101,8 @@ module dice_cgra_subs
       .prog_rst_o(prog_rst_li),
       .prog_done_o(prog_done_li),
       .prog_we_o(prog_we_li),
-      .prog_din_o(prog_din_li)
+      .prog_din_o(prog_din_li),
+      .bsload_cnt_o(bsload_cnt_o)
   );
 
   dice_top cgra_inst (

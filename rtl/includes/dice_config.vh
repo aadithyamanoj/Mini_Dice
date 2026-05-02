@@ -13,6 +13,7 @@
 
 // Available CGRA memory ports
 `define DICE_CGRA_MEM_PORTS          4
+`define DICE_BITSTREAM_SIZE          1074 // serial CGRA config bits
 
 // Architectural configurations
 `define DICE_ADDR_WIDTH              16

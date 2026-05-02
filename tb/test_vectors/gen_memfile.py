@@ -143,7 +143,12 @@ def _load_pkg_parameter(path: Path, name: str) -> int:
     match = param_re.search(text)
     if not match:
         raise KeyError(f"Could not find parameter {name} in {path}")
-    return int(_strip_sv_comment(match.group(1)), 0)
+    value_text = _strip_sv_comment(match.group(1)).strip()
+    if value_text.startswith("`"):
+        define_name = value_text[1:]
+        if define_name in RTL_DEFINES:
+            return RTL_DEFINES[define_name]
+    return int(value_text, 0)
 
 
 DICE_CONFIG_VH = _resolve_existing_path(

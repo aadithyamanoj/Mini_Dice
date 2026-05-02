@@ -90,7 +90,7 @@ module tb_mini_dice;
 
   // Default test vector
   localparam string DEFAULT_TEST_VECTOR = "full_mul_array_test_vector";
-  localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors";
+  localparam string DEFAULT_TEST_VECTOR_DIR = "../../../Mini_Dice/tb/test_vectors";
 
   // --------------------------------------------------------------------------
   // Clocks / reset

@@ -2,7 +2,7 @@ module top_level_io
   #(parameter int flit_width_p         = 32
    ,parameter int addr_width_p         = 16
    ,parameter int data_width_p         = 32
-   ,parameter int channel_width_p      = 8
+   ,parameter int channel_width_p      = 16
    ,parameter int num_channels_p       = 1
    ,parameter int lg_fifo_depth_p      = 6
    ,parameter int lg_credit_to_token_decimation_p = 3
@@ -117,16 +117,25 @@ module top_level_io
   // top_level_io
   // --------------------------------------------------------------------------
   // Full top-level IO subsystem:
-  //   AXI source/sink side <-> axi_link_tx/rx <-> 16-bit core-side link flits
+  //   AXI source/sink side <-> axi_link_tx/rx <-> 32-bit core-side link flits
   //   <-> bsg_link_ddr_upstream/downstream <-> physical DDR/tokens
   //
   // The bsg_link blocks provide the actual source-synchronous DDR physical
-  // transport. axi_link_tx and axi_link_rx sit directly on the 16-bit core-side
+  // transport. axi_link_tx and axi_link_rx sit directly on the 32-bit core-side
   // ready/valid boundary exported by those bsg_link blocks.
   //
   // Ordering model:
   //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
   // --------------------------------------------------------------------------
+
+  initial begin
+    if (flit_width_p != 32)
+      $error("top_level_io requires flit_width_p=32, got %0d", flit_width_p);
+    if (addr_width_p != 16)
+      $error("top_level_io requires addr_width_p=16, got %0d", addr_width_p);
+    if (data_width_p != 32)
+      $error("top_level_io requires data_width_p=32, got %0d", data_width_p);
+  end
 
   logic [flit_width_p-1:0] link_rx_core_data_lo;
   logic                    link_rx_core_valid_lo;
@@ -135,6 +144,11 @@ module top_level_io
   logic [flit_width_p-1:0] link_tx_core_data_li;
   logic                    link_tx_core_valid_li;
   logic                    link_tx_core_ready_lo;
+  logic                    rx_arready_li;
+  logic                    tx_r_len_v_lo;
+  logic [7:0]              tx_r_len_lo;
+  logic                    tx_r_len_yumi_li;
+  logic                    tx_r_len_ready_lo;
 
   logic [num_channels_p-1:0][channel_width_p-1:0] downstream_io_data_li;
   logic [num_channels_p-1:0][channel_width_p-1:0] upstream_io_data_lo;
@@ -170,6 +184,27 @@ module top_level_io
     .core_token_r_o    (downstream_core_token_r_o)
   );
 
+  // Incoming READ_REQ lengths are mirrored into a small FIFO so the local
+  // AXI R channel can start streaming a READ_RESP packet back over the link
+  // on the very first response beat.
+  assign rx_arready_li = rx_arready_i && tx_r_len_ready_lo;
+
+  bsg_fifo_1r1w_small #(
+    .width_p            (8),
+    .els_p              (tx_r_len_fifo_els_p),
+    .harden_p           (0),
+    .ready_THEN_valid_p (0)
+  ) tx_r_len_fifo_i (
+    .clk_i  (core_clk_i),
+    .reset_i(reset_i),
+    .v_i    (rx_arvalid_o && rx_arready_li),
+    .data_i (rx_arlen_o),
+    .ready_o(tx_r_len_ready_lo),
+    .v_o    (tx_r_len_v_lo),
+    .data_o (tx_r_len_lo),
+    .yumi_i (tx_r_len_yumi_li)
+  );
+
   axi_link_rx #(
     .flit_width_p       (flit_width_p),
     .addr_width_p       (addr_width_p),
@@ -198,7 +233,7 @@ module top_level_io
     .wdata_o        (rx_wdata_o),
     .wlast_o        (rx_wlast_o),
     .arvalid_o      (rx_arvalid_o),
-    .arready_i      (rx_arready_i),
+    .arready_i      (rx_arready_li),
     .araddr_o       (rx_araddr_o),
     .arlen_o        (rx_arlen_o),
     .arsize_o       (rx_arsize_o),
@@ -249,6 +284,9 @@ module top_level_io
     .rdata_i        (tx_rdata_i),
     .rresp_i        (tx_rresp_i),
     .rlast_i        (tx_rlast_i),
+    .tx_r_len_v_i   (tx_r_len_v_lo),
+    .tx_r_len_i     (tx_r_len_lo),
+    .tx_r_len_yumi_o(tx_r_len_yumi_li),
     .bvalid_i       (tx_bvalid_i),
     .bready_o       (tx_bready_o),
     .bresp_i        (tx_bresp_i),

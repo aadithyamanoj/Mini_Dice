@@ -30,7 +30,11 @@ module cta_schedule_stage
     output logic                           simt_update_ready_o,
     input simt_stack_update_t              simt_update_stack_data_i,
 
-    output simt_stack_status_entry_t simt_status_o
+    output simt_stack_status_entry_t simt_status_o,
+
+    output logic        stack_overflow_o,
+    output logic [15:0] stack_depth_o,
+    output logic [15:0] stack_error_pc_o
 );
 
 
@@ -43,6 +47,9 @@ module cta_schedule_stage
   thread_mask_t                stack_top_active_mask;
   logic                        stack_empty;
   logic                        stack_full;
+  logic                        stack_overflow;
+  logic [15:0]                 stack_depth;
+  logic [15:0]                 stack_error_pc;
 
   assign simt_status_o.valid            = stack_top_valid;
   assign simt_status_o.next_pc          = stack_top_next_pc;
@@ -50,6 +57,9 @@ module cta_schedule_stage
   assign simt_status_o.active_mask      = stack_top_active_mask;
   assign simt_status_o.empty            = stack_empty;
   assign simt_status_o.full             = stack_full;
+  assign stack_overflow_o               = stack_overflow;
+  assign stack_depth_o                  = stack_depth;
+  assign stack_error_pc_o               = stack_error_pc;
 
   // ---- Active CTA table wiring ----
   logic active_table_add_ready;
@@ -170,7 +180,10 @@ module cta_schedule_stage
       .stack_top_reconvergence_pc_o (stack_top_reconvergence_pc),
       .stack_top_active_mask_o      (stack_top_active_mask),
       .stack_empty_o                (stack_empty),
-      .stack_full_o                 (stack_full)
+      .stack_full_o                 (stack_full),
+      .stack_overflow_o             (stack_overflow),
+      .stack_depth_o                (stack_depth),
+      .stack_error_pc_o             (stack_error_pc)
   );
 
 `ifndef SYNTHESIS

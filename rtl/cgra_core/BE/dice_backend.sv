@@ -27,6 +27,10 @@ module dice_backend
     output logic cgra_prog_dout_o,
     output logic cgra_prog_we_o,
 
+    // Hardware status outputs → cgra_io_csr
+    output logic        dispatch_busy_o,
+    output logic [15:0] bsload_cnt_o,
+
     // Input-only CSR sources exposed to the CGRA input crossbar
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
@@ -184,6 +188,8 @@ module dice_backend
   assign cgra_pipeline_inc_li = CgraPipeCountWidth'($countones(rd_tid_valid));
   assign cgra_pipeline_dec_li = CgraPipeCountWidth'(cgra_v_lo && !cgra_pipeline_empty_lo);
   assign cgra_pipeline_empty_lo = (cgra_pipeline_count_q == '0);
+  assign dispatch_busy_o = dispatch_busy;
+
   assign fdr_ready_o = ~dispatch_busy
                      && ~prog_busy_lo
                      && ~prog_pending_q
@@ -402,6 +408,7 @@ module dice_backend
       .bank_valid_o(cm_bank_valid_lo),
       .prog_dout_o (cgra_prog_dout_o),
       .prog_we_o   (cgra_prog_we_o),
+      .bsload_cnt_o(bsload_cnt_o),
 
       .csrX0_i(csrX0_i),
       .csrX1_i(csrX1_i),
