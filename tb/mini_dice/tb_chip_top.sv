@@ -57,7 +57,7 @@ module tb_chip_top;
   localparam int AW = 16;
   localparam int DW = 32;
   localparam int FW = 32;
-  localparam int CW = 8;
+  localparam int CW = 16;
   localparam int CLK_HALF_NS = 10;  // 100 MHz
   localparam int TIMEOUT_CYC = 70000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
@@ -80,10 +80,8 @@ module tb_chip_top;
   // Clock / reset drivers (TB-side logic, mapped to PAD below)
   // --------------------------------------------------------------------------
   bit   clk_i;
-  logic rst_i = 1'b1;
-  logic dut_upstream_io_link_reset = 1'b1;
-  logic dut_async_token_reset = 1'b0;
-  logic dut_downstream_io_link_reset = 1'b1;
+  logic rst_i = 1'b1;       // FPGA endpoint/core reset
+  logic hard_reset = 1'b1;  // chip hard reset on PAD[45]
   logic ep_upstream_io_link_reset = 1'b1;
   logic ep_async_token_reset = 1'b0;
   logic ep_downstream_io_link_reset = 1'b1;
@@ -94,36 +92,93 @@ module tb_chip_top;
   // PAD bus — chip_top inout
   // --------------------------------------------------------------------------
   wire [47:0] PAD;
+  logic [47:0] pad_drv;
 
-  // TB drives input pads (chip tristates OEN=1 side)
-  assign PAD[0]     = clk_i;  // core_clk
-  assign PAD[1]     = rst_i;  // core_rst
-  assign PAD[2]     = clk_i;  // io_master_clk
-  assign PAD[3]     = dut_upstream_io_link_reset;  // upstream_io_link_reset_i
-  assign PAD[4]     = dut_async_token_reset;  // async_token_reset_i
-  // PAD[5]  = token_clk_i      — driven from ep_dn_token_r below
-  assign PAD[6]     = dut_downstream_io_link_reset;  // downstream_io_link_reset_i
-  // PAD[7]     — driven from ep upstream clock below
-  // PAD[8:15]  — driven from ep upstream data below
-  // PAD[16]    — driven from ep upstream valid below
-  // PAD[17]    — chip upstream clock output (read below)
-  // PAD[18:25] — chip upstream data outputs (read below)
-  // PAD[26]    — chip upstream valid output (read below)
-  // PAD[27]    — chip downstream token output (read below)
-  // PAD[28:47] — spare/unused: drive to 0
-  assign PAD[47:28] = '0;
+  // EP upstream outputs -> chip downstream inputs.
+  wire           ep_up_clk_r;
+  wire           ep_up_valid_r;
+  wire  [CW-1:0] ep_up_data_r;
+  wire           ep_dn_token_r;
 
-  // Chip upstream outputs → EP downstream inputs
-  wire          dut_up_clk_r = PAD[17];
-  wire          dut_up_valid_r = PAD[26];
+  function automatic logic kz(input logic v);
+    kz = v;
+  endfunction
+
+  assign PAD = pad_drv;
+
+  always_comb begin
+    pad_drv = 'z;
+
+    // zeroscatter-compatible chip_top pad map.
+    pad_drv[44] = kz(clk_i);  // core_clk
+    pad_drv[45] = kz(hard_reset);
+
+    // EP upstream outputs -> chip downstream inputs.
+    pad_drv[8] = kz(ep_up_clk_r);
+    pad_drv[9] = kz(ep_up_valid_r);
+    for (int i = 0; i < CW; i++) begin
+      pad_drv[dn_data_pad(i)] = kz(ep_up_data_r[i]);
+    end
+
+    // Chip TX-side credit return into EP upstream.
+    pad_drv[12] = kz(ep_dn_token_r);
+  end
+
+  function automatic int dn_data_pad(input int bit_idx);
+    case (bit_idx)
+      0:  dn_data_pad = 0;
+      1:  dn_data_pad = 1;
+      2:  dn_data_pad = 2;
+      3:  dn_data_pad = 3;
+      4:  dn_data_pad = 4;
+      5:  dn_data_pad = 5;
+      6:  dn_data_pad = 6;
+      7:  dn_data_pad = 7;
+      8:  dn_data_pad = 37;
+      9:  dn_data_pad = 36;
+      10: dn_data_pad = 39;
+      11: dn_data_pad = 38;
+      12: dn_data_pad = 41;
+      13: dn_data_pad = 40;
+      14: dn_data_pad = 43;
+      15: dn_data_pad = 42;
+      default: dn_data_pad = 0;
+    endcase
+  endfunction
+
+  function automatic int up_data_pad(input int bit_idx);
+    case (bit_idx)
+      0:  up_data_pad = 22;
+      1:  up_data_pad = 23;
+      2:  up_data_pad = 20;
+      3:  up_data_pad = 21;
+      4:  up_data_pad = 18;
+      5:  up_data_pad = 19;
+      6:  up_data_pad = 16;
+      7:  up_data_pad = 17;
+      8:  up_data_pad = 28;
+      9:  up_data_pad = 29;
+      10: up_data_pad = 30;
+      11: up_data_pad = 31;
+      12: up_data_pad = 32;
+      13: up_data_pad = 33;
+      14: up_data_pad = 34;
+      15: up_data_pad = 35;
+      default: up_data_pad = 28;
+    endcase
+  endfunction
+
+  // Chip upstream outputs -> EP downstream inputs.
+  wire          dut_up_clk_r = PAD[15];
+  wire          dut_up_valid_r = PAD[14];
   wire [CW-1:0] dut_up_data_r;
   genvar gi;
   generate
     for (gi = 0; gi < CW; gi++) begin : gen_up_data
-      assign dut_up_data_r[gi] = PAD[18+gi];
+      assign dut_up_data_r[gi] = PAD[up_data_pad(gi)];
     end
   endgenerate
-  wire dut_dn_token_r = PAD[27];
+  wire dut_dn_token_r = PAD[10];
 
   // --------------------------------------------------------------------------
   // DUT: chip_top
@@ -137,7 +192,8 @@ module tb_chip_top;
   );
 
   // --------------------------------------------------------------------------
-  // FPGA endpoint: top_level_io back-to-back with DUT over DDR
+  // FPGA endpoint: top_level_io packetizer + external bsg_link wrapper
+  // back-to-back with DUT over DDR pads.
   // --------------------------------------------------------------------------
   logic          ep_tx_awvalid = 1'b0;
   logic          ep_tx_awready;
@@ -187,20 +243,38 @@ module tb_chip_top;
   logic          ep_rx_bready = 1'b0;
   logic [   1:0] ep_rx_bresp;
 
-  // EP upstream outputs → chip downstream inputs (PAD[7, 8:15, 16])
-  wire           ep_up_clk_r;
-  wire           ep_up_valid_r;
-  wire  [CW-1:0] ep_up_data_r;
-  wire           ep_dn_token_r;
+  logic [FW-1:0] ep_link_rx_data;
+  logic          ep_link_rx_valid;
+  logic          ep_link_rx_yumi;
+  logic [FW-1:0] ep_link_tx_data;
+  logic          ep_link_tx_valid;
+  logic          ep_link_tx_ready;
 
-  assign PAD[7]  = ep_up_clk_r;
-  assign PAD[16] = ep_up_valid_r;
-  generate
-    for (gi = 0; gi < CW; gi++) begin : gen_dn_data
-      assign PAD[8+gi] = ep_up_data_r[gi];
-    end
-  endgenerate
-  assign PAD[5] = ep_dn_token_r;  // token_clk_i
+  bsg_link_wrapper #(
+      .FLIT_WIDTH   (FW),
+      .CHANNEL_WIDTH(CW)
+  ) u_fpga_link (
+      .core_clk_i                (clk_i),
+      .reset_i                   (rst_i),
+      .io_master_clk_i           (clk_i),
+      .upstream_io_link_reset_i  (ep_upstream_io_link_reset),
+      .async_token_reset_i       (ep_async_token_reset),
+      .token_clk_i               (dut_dn_token_r),
+      .downstream_io_link_reset_i(ep_downstream_io_link_reset),
+      .downstream_io_clk_i       (dut_up_clk_r),
+      .downstream_io_data_i      (dut_up_data_r),
+      .downstream_io_valid_i     (dut_up_valid_r),
+      .upstream_io_clk_r_o       (ep_up_clk_r),
+      .upstream_io_data_r_o      (ep_up_data_r),
+      .upstream_io_valid_r_o     (ep_up_valid_r),
+      .downstream_core_token_r_o (ep_dn_token_r),
+      .rx_data_o                 (ep_link_rx_data),
+      .rx_valid_o                (ep_link_rx_valid),
+      .rx_yumi_i                 (ep_link_rx_yumi),
+      .tx_data_i                 (ep_link_tx_data),
+      .tx_valid_i                (ep_link_tx_valid),
+      .tx_ready_o                (ep_link_tx_ready)
+  );
 
   top_level_io #(
       .flit_width_p           (FW),
@@ -230,19 +304,12 @@ module tb_chip_top;
       .core_clk_i(clk_i),
       .reset_i   (rst_i),
 
-      .io_master_clk_i         (clk_i),
-      .upstream_io_link_reset_i(ep_upstream_io_link_reset),
-      .async_token_reset_i     (ep_async_token_reset),
-      .token_clk_i             (dut_dn_token_r),
-      .upstream_io_clk_r_o     (ep_up_clk_r),
-      .upstream_io_data_r_o    (ep_up_data_r),
-      .upstream_io_valid_r_o   (ep_up_valid_r),
-
-      .downstream_io_link_reset_i(ep_downstream_io_link_reset),
-      .downstream_io_clk_i       (dut_up_clk_r),
-      .downstream_io_data_i      (dut_up_data_r),
-      .downstream_io_valid_i     (dut_up_valid_r),
-      .downstream_core_token_r_o (ep_dn_token_r),
+      .link_rx_data_i (ep_link_rx_data),
+      .link_rx_valid_i(ep_link_rx_valid),
+      .link_rx_yumi_o (ep_link_rx_yumi),
+      .link_tx_data_o (ep_link_tx_data),
+      .link_tx_valid_o(ep_link_tx_valid),
+      .link_tx_ready_i(ep_link_tx_ready),
 
       .tx_awvalid_i(ep_tx_awvalid),
       .tx_awready_o(ep_tx_awready),
@@ -569,37 +636,43 @@ module tb_chip_top;
   // --------------------------------------------------------------------------
   task automatic bsg_link_bringup();
     begin
-      rst_i                        = 1'b1;
-      dut_upstream_io_link_reset   = 1'b1;
-      dut_downstream_io_link_reset = 1'b1;
-      ep_upstream_io_link_reset    = 1'b1;
-      ep_downstream_io_link_reset  = 1'b1;
-      dut_async_token_reset        = 1'b0;
-      ep_async_token_reset         = 1'b0;
+      hard_reset                 = 1'b1;
+      rst_i                       = 1'b1;
+      ep_upstream_io_link_reset   = 1'b1;
+      ep_downstream_io_link_reset = 1'b1;
+      ep_async_token_reset        = 1'b0;
       repeat (4) @(posedge clk_i);
 
       @(posedge clk_i);
       #1;
-      dut_async_token_reset = 1'b1;
-      ep_async_token_reset  = 1'b1;
+      ep_async_token_reset = 1'b1;
       @(posedge clk_i);
       #1;
-      dut_async_token_reset = 1'b0;
-      ep_async_token_reset  = 1'b0;
+      ep_async_token_reset = 1'b0;
       repeat (8) @(posedge clk_i);
 
       @(posedge clk_i);
       #1;
-      dut_upstream_io_link_reset = 1'b0;
-      ep_upstream_io_link_reset  = 1'b0;
+      ep_upstream_io_link_reset = 1'b0;
       repeat (8) @(posedge clk_i);
 
+      // Release chip hard reset first; chip_top internally sequences its
+      // bsg_link resets before Mini_Dice consumes the core-side flit stream.
       @(posedge clk_i);
       #1;
-      dut_downstream_io_link_reset = 1'b0;
-      ep_downstream_io_link_reset  = 1'b0;
-      repeat (4) @(posedge clk_i);
+      hard_reset = 1'b0;
+      repeat (64) @(posedge clk_i);
 
+      // The chip is now driving up_clk, so the FPGA-side downstream receiver
+      // can safely start sampling the chip -> FPGA link.
+      @(posedge clk_i);
+      #1;
+      ep_downstream_io_link_reset = 1'b0;
+      repeat (8) @(posedge clk_i);
+
+      // Release FPGA core-side logic last, matching the zeroscatter link TB.
+      @(posedge clk_i);
+      #1;
       rst_i = 1'b0;
       repeat (4) @(posedge clk_i);
     end

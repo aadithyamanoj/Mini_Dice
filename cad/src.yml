@@ -330,6 +330,7 @@ synthesis.inputs.input_files: [
   "../Mini_Dice/rtl/IO/axi_link_rx.sv",
   "../Mini_Dice/rtl/IO/axi_link_tx.sv",
   "../Mini_Dice/rtl/IO/top_level_io.sv",
+  "../Mini_Dice/rtl/IO/bsg_link_wrapper.sv",
   "../Mini_Dice/rtl/cgra_core/internal_memory/cgra_io_csr.sv",
   "../Mini_Dice/rtl/axi_crossbar/crossbar/cgra_io_axi4_top.sv",
   "../Mini_Dice/rtl/mini_dice_top/mini_dice_top.sv",
