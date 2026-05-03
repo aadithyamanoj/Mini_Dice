@@ -8,7 +8,7 @@ generation, separate from the Dora build/bitgen flow.
 
 Usage:
     python3 gen_fdr_metadata.py --kernel full_mul_array
-    python3 gen_fdr_metadata.py --kernel full_mul_array --nopred
+    python3 gen_fdr_metadata.py --kernel full_mul_array --pred
     python3 gen_fdr_metadata.py --kernel load_mul_array_a --build-dir <path>
 """
 
@@ -24,6 +24,15 @@ FULL_MUL_ARRAY_KERNEL_STAGES = (
     "load_mul_array_a",
     "load_mul_array_b",
     "mul_array",
+    "compute_store_addrs",
+    "store_mul_array",
+)
+SIMPLE_BRANCHING_KERNEL_STAGES = (
+    "load_mul_array_a",
+    "load_mul_array_b",
+    "gen_tid_nonzero_pred",
+    "mul_array",
+    "add_array",
     "compute_store_addrs",
     "store_mul_array",
 )
@@ -63,21 +72,26 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--kernel",
-        choices=("full_mul_array",) + FULL_MUL_ARRAY_KERNEL_STAGES,
+        choices=("full_mul_array", "simple-branching") + SIMPLE_BRANCHING_KERNEL_STAGES,
         default="full_mul_array",
         help="Kernel or staged bundle to emit metadata for",
     )
     parser.add_argument(
         "--nopred",
         action="store_true",
-        help="Use the no-predicate mini_dice build_nopred collateral by default",
+        help="Use no-predicate build_nopred collateral (default)",
+    )
+    parser.add_argument(
+        "--pred",
+        action="store_true",
+        help="Use traditional predicate-network build collateral when --build-dir is not set",
     )
     parser.add_argument(
         "--build-dir",
         type=Path,
         default=None,
         help="mini_dice build directory containing compile reports "
-             "(default: build, or build_nopred with --nopred)",
+             "(default: build_nopred, or build with --pred)",
     )
     parser.add_argument(
         "--output-dir",
@@ -146,6 +160,40 @@ def _no_branch_meta(*, is_return: bool = False) -> dict[str, int]:
     }
 
 
+def _simple_branch_meta() -> dict[str, int]:
+    """Branch on PR0 so only tid 0 takes the add target."""
+    return {
+        "branch_ena": 1,
+        "branch_uni": 0,
+        "branch_pred_reg": 0,
+        "branch_neg_pred": 1,
+        "is_return": 0,
+        "branch_jump_target_offset": 2,
+        "branch_reconv_offset": 3,
+    }
+
+
+def _simple_branch_mul_skip_meta() -> dict[str, int]:
+    """Unconditionally skip the taken add pgraph after the not-taken mul path."""
+    return {
+        "branch_ena": 1,
+        "branch_uni": 1,
+        "branch_pred_reg": 0,
+        "branch_neg_pred": 0,
+        "is_return": 0,
+        "branch_jump_target_offset": 2,
+        "branch_reconv_offset": 0,
+    }
+
+
+def _simple_branching_branch_meta_for_kernel(kernel: str) -> dict[str, int] | None:
+    if kernel == "gen_tid_nonzero_pred":
+        return _simple_branch_meta()
+    if kernel == "mul_array":
+        return _simple_branch_mul_skip_meta()
+    return None
+
+
 def _stage_spec(kernel: str) -> dict[str, Any]:
     if kernel == "load_mul_array_a":
         return {
@@ -186,6 +234,32 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
             "notes": [
                 "Consumes GPRs 0..7 as mul operands.",
                 "Assumes result writeback targets GPRs 0..3.",
+            ],
+        }
+    if kernel == "add_array":
+        return {
+            "in_regs_bitmap": _bitmap_from_indices(0, 1, 2, 3, 4, 5, 6, 7),
+            "out_regs_bitmap": _bitmap_from_indices(0, 1, 2, 3),
+            "ld_dest_regs": [UNUSED_LD_DEST_REG] * 4,
+            "num_stores": 0,
+            "unrolling_factor": 0,
+            "parameter_load": 0,
+            "notes": [
+                "Consumes GPRs 0..7 as add operands.",
+                "Assumes result writeback targets GPRs 0..3.",
+            ],
+        }
+    if kernel == "gen_tid_nonzero_pred":
+        return {
+            "in_regs_bitmap": 0,
+            "out_regs_bitmap": _bitmap_from_indices(NUM_GPRS + NUM_CONSTS),
+            "ld_dest_regs": [UNUSED_LD_DEST_REG] * 4,
+            "num_stores": 0,
+            "unrolling_factor": 0,
+            "parameter_load": 0,
+            "notes": [
+                "Computes PR0 = (tid != 0) through ext_pred_o_0.",
+                "Carries simple-branching control metadata in the coalesced test vector.",
             ],
         }
     if kernel == "compute_store_addrs":
@@ -280,6 +354,7 @@ def _pgraph_payload_for_kernel(
     build_dir: Path,
     bitstream_addr: int,
     is_last_stage: bool = False,
+    branch_meta: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     report_path = _report_path(build_dir, kernel)
     report = _load_compile_report(report_path)
@@ -303,7 +378,11 @@ def _pgraph_payload_for_kernel(
             "num_stores": spec["num_stores"],
             "unrolling_factor": spec["unrolling_factor"],
             "lat": _latency_from_report(report, kernel),
-            "branch_meta": _no_branch_meta(is_return=is_last_stage),
+            "branch_meta": (
+                branch_meta
+                if branch_meta is not None
+                else _no_branch_meta(is_return=is_last_stage)
+            ),
             "barrier": 0,
             "parameter_load": spec["parameter_load"],
         },
@@ -317,15 +396,20 @@ def _emit_metadata_for_kernel(
     build_dir: Path,
     output_dir: Path,
     bitstream_addr: int,
+    output_stem: str | None = None,
+    branch_meta: dict[str, int] | None = None,
 ) -> Path:
     payload = _pgraph_payload_for_kernel(
         kernel=kernel,
         build_dir=build_dir,
         bitstream_addr=bitstream_addr,
         is_last_stage=True,
+        branch_meta=branch_meta,
     )
 
-    output_path = output_dir / f"fdr_meta_{kernel}.json"
+    if output_stem is None:
+        output_stem = f"fdr_meta_{kernel}"
+    output_path = output_dir / f"{output_stem}.json"
     with output_path.open("w", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2, sort_keys=True)
         stream.write("\n")
@@ -378,6 +462,35 @@ def _compute_full_mul_array_expected_writes(
     return writes
 
 
+def _compute_simple_branching_expected_writes(
+    *,
+    csr_values: dict[str, int],
+    thread_count: int,
+) -> list[dict[str, int]]:
+    """Expected writes for if (tid == 0) add else multiply."""
+    base_a = csr_values["csrX0"]
+    base_b = csr_values["csrX1"]
+    base_c = csr_values["csrX2"]
+    stride = csr_values["csrX3"]
+    lane_offsets = [csr_values[f"csrX{4 + l}"] for l in range(NUM_MEM_LANES)]
+
+    writes: list[dict[str, int]] = []
+    for tid in range(thread_count):
+        for lane in range(NUM_MEM_LANES):
+            a_addr = base_a + tid * stride + lane_offsets[lane]
+            b_addr = base_b + tid * stride + lane_offsets[lane]
+            a_val = _axi_read_mock(a_addr)
+            b_val = _axi_read_mock(b_addr)
+            if tid == 0:
+                data = (a_val + b_val) & DATA_MASK
+            else:
+                data = (a_val * b_val) & DATA_MASK
+            store_addr = base_c + tid * stride + lane_offsets[lane]
+            writes.append({"addr": store_addr, "data": data, "strb": 3})
+
+    return writes
+
+
 def _build_coalesced_test_vector(
     *,
     kernels: tuple[str, ...],
@@ -397,11 +510,17 @@ def _build_coalesced_test_vector(
 
     for idx, kernel in enumerate(kernels):
         bitstream_addr = bitstream_base + idx * bitstream_stride
+        branch_meta = (
+            _simple_branching_branch_meta_for_kernel(kernel)
+            if kernels == SIMPLE_BRANCHING_KERNEL_STAGES
+            else None
+        )
         stage_payload = _pgraph_payload_for_kernel(
             kernel=kernel,
             build_dir=build_dir,
             bitstream_addr=bitstream_addr,
             is_last_stage=(idx == len(kernels) - 1),
+            branch_meta=branch_meta,
         )
         stage_artifacts.append(
             {
@@ -422,6 +541,11 @@ def _build_coalesced_test_vector(
     expected_writes: list[dict[str, int]] = []
     if kernels == FULL_MUL_ARRAY_KERNEL_STAGES:
         expected_writes = _compute_full_mul_array_expected_writes(
+            csr_values=runtime_csr_values,
+            thread_count=thread_count,
+        )
+    elif kernels == SIMPLE_BRANCHING_KERNEL_STAGES:
+        expected_writes = _compute_simple_branching_expected_writes(
             csr_values=runtime_csr_values,
             thread_count=thread_count,
         )
@@ -474,7 +598,12 @@ def _emit_coalesced_test_vector(
         bitstream_stride=bitstream_stride,
         thread_count=thread_count,
     )
-    bundle_name = "full_mul_array" if len(kernels) > 1 else kernels[0]
+    if kernels == FULL_MUL_ARRAY_KERNEL_STAGES:
+        bundle_name = "full_mul_array"
+    elif kernels == SIMPLE_BRANCHING_KERNEL_STAGES:
+        bundle_name = "simple_branching"
+    else:
+        bundle_name = kernels[0]
     output_path = output_dir / f"{bundle_name}_test_vector.json"
     with output_path.open("w", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2, sort_keys=True)
@@ -494,7 +623,7 @@ def main() -> None:
     build_dir = (
         args.build_dir
         if args.build_dir is not None
-        else (DEFAULT_NOPRED_BUILD_DIR if args.nopred else DEFAULT_BUILD_DIR)
+        else (DEFAULT_BUILD_DIR if args.pred else DEFAULT_NOPRED_BUILD_DIR)
     ).resolve()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -502,6 +631,8 @@ def main() -> None:
     kernels = (
         FULL_MUL_ARRAY_KERNEL_STAGES
         if args.kernel == "full_mul_array"
+        else SIMPLE_BRANCHING_KERNEL_STAGES
+        if args.kernel == "simple-branching"
         else (args.kernel,)
     )
 
@@ -510,11 +641,22 @@ def main() -> None:
     print(f"  Output dir: {output_dir}")
 
     for idx, kernel in enumerate(kernels):
+        output_stem = (
+            f"fdr_meta_simple_branching_{kernel}"
+            if args.kernel == "simple-branching"
+            else None
+        )
         output_path = _emit_metadata_for_kernel(
             kernel=kernel,
             build_dir=build_dir,
             output_dir=output_dir,
             bitstream_addr=args.bitstream_base + idx * args.bitstream_stride,
+            output_stem=output_stem,
+            branch_meta=(
+                _simple_branching_branch_meta_for_kernel(kernel)
+                if args.kernel == "simple-branching"
+                else None
+            ),
         )
         print(f"  {kernel}: {output_path}")
 

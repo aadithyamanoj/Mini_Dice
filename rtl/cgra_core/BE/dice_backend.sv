@@ -22,6 +22,8 @@ module dice_backend
     input logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_i,
     input logic [        DICE_MEM_DATA_WIDTH-1:0] cm_wr_data_i,
     input logic                                   cm_wr_valid_i,
+    output logic                                  prog_active_o,
+    output logic                                  prog_active_buffer_o,
 
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
@@ -156,6 +158,8 @@ module dice_backend
   logic [        CmChunkCount-1:0] cgra_cm1_chunk_en_li;
   logic                            prog_ready_lo;
   logic                            prog_busy_lo;
+  logic                            prog_active_lo;
+  logic                            prog_active_bank_lo;
   logic [                     1:0] cm_bank_valid_lo;
   logic                            prog_v_li;
   logic                            prog_handshake_li;
@@ -399,6 +403,8 @@ module dice_backend
       .bank_i      (prog_pending_buffer_q),
       .ready_o     (prog_ready_lo),
       .busy_o      (prog_busy_lo),
+      .prog_active_o(prog_active_lo),
+      .prog_active_bank_o(prog_active_bank_lo),
       .bank_valid_o(cm_bank_valid_lo),
       .prog_dout_o (cgra_prog_dout_o),
       .prog_we_o   (cgra_prog_we_o),
@@ -458,6 +464,9 @@ module dice_backend
       .ldst_valid_i(ldst_valid_li),
       .ldst_ready_o(ldst_ready_lo)
   );
+
+  assign prog_active_o        = prog_active_lo;
+  assign prog_active_buffer_o = prog_active_bank_lo;
 
   // =========================================================================
   // LDST FIFO

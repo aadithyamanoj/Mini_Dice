@@ -64,6 +64,8 @@ module dice_core
   logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_lo;
   logic [AxiDataWidth-1:0] cm_wr_data_lo;
   logic cm_wr_valid_lo;
+  logic prog_active_lo;
+  logic prog_active_buffer_lo;
 
 
   assign frontend_brt_info.has_pending_eblock = hw_cta_pending_lo;
@@ -87,6 +89,8 @@ module dice_core
       .cm_wr_data_o  (cm_wr_data_lo),
       .cm_wr_valid_o (cm_wr_valid_lo),
       .pred_regs_i   (frontend_pred_regs),
+      .prog_active_i (prog_active_lo),
+      .prog_active_buffer_i(prog_active_buffer_lo),
 
       .eblock_commit_valid_i  (bct_pop_valid),
       .eblock_commit_id_i     (bct_pop_e_block_id),
@@ -117,6 +121,8 @@ module dice_core
       .cm_wr_addr_i  (cm_wr_addr_lo),
       .cm_wr_data_i  (cm_wr_data_lo),
       .cm_wr_valid_i (cm_wr_valid_lo),
+      .prog_active_o (prog_active_lo),
+      .prog_active_buffer_o(prog_active_buffer_lo),
 
       // CGRA scan chain / bitstream outputs
       .cgra_prog_dout_o(cgra_prog_dout_o),

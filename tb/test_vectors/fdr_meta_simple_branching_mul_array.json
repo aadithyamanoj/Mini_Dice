@@ -1,0 +1,36 @@
+{
+  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
+  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
+  "kernel": "mul_array",
+  "notes": [
+    "Consumes GPRs 0..7 as mul operands.",
+    "Assumes result writeback targets GPRs 0..3."
+  ],
+  "pgraph_meta_t": {
+    "barrier": 0,
+    "bitstream_addr": 1536,
+    "bitstream_length": 135,
+    "branch_meta": {
+      "branch_ena": 1,
+      "branch_jump_target_offset": 2,
+      "branch_neg_pred": 0,
+      "branch_pred_reg": 0,
+      "branch_reconv_offset": 0,
+      "branch_uni": 1,
+      "is_return": 0
+    },
+    "in_regs_bitmap": 255,
+    "lat": 5,
+    "ld_dest_regs": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "num_stores": 0,
+    "out_regs_bitmap": 15,
+    "parameter_load": 0,
+    "unrolling_factor": 0
+  }
+}

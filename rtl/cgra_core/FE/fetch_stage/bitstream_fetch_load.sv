@@ -14,6 +14,8 @@ module bitstream_fetch_load
     //from decoder
     input logic                       meta_valid_i,
     input logic [DICE_ADDR_WIDTH-1:0] bitstream_addr_i,
+    input logic                       prog_active_i,
+    input logic                       prog_active_buffer_i,
 
     // Direct write interface to configuration memory DFFs
     output logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_o,
@@ -93,8 +95,13 @@ module bitstream_fetch_load
         ar_sent_d   = 1'b0;
         if (meta_valid_i) begin
           if (!done_streaming_o) begin
-            if (cm0_valid_q || cm1_valid_q) cm_select_d = ~cm_select_q;
-            else cm_select_d = 1'b0;
+            if (prog_active_i) begin
+              cm_select_d = ~prog_active_buffer_i;
+            end else if (cm0_valid_q || cm1_valid_q) begin
+              cm_select_d = ~cm_select_q;
+            end else begin
+              cm_select_d = 1'b0;
+            end
 
             addr_d       = bitstream_addr_i;
             state_d      = StateStreaming;

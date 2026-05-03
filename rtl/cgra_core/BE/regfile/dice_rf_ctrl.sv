@@ -170,7 +170,7 @@ module dice_rf_ctrl
 
   // LDST special regs command from cache response
   assign ldst_special_in = assemble_special_wr(ldst_convert);
-  assign cgra_special_valid = |cgra_special.const_mask || |cgra_special.pred_mask;
+  assign cgra_special_valid = cgra_valid_i && (|cgra_special.const_mask || |cgra_special.pred_mask);
 
   // Extract TID for per-TID pred writes (single coalesced command only)
   logic [TID_WIDTH-1:0] ldst_special_tid_in;
@@ -339,15 +339,15 @@ module dice_rf_ctrl
       //       ld_dest_regs_i[1], ld_dest_regs_i[2], ld_dest_regs_i[3], num_stores_i);
       // end
 
-      // if (rf_rd_valid_o) begin
-      //   $display(
-      //       "[BE:dice_rf_ctrl] t=%0t RF read data ready: tid=%0d eblock=%0d gpr_data={%h,%h,%h,%h,%h,%h,%h,%h}",
-      //       $time, tid_o, e_block_id_o, rd_data_o[0*DATA_WIDTH+:DATA_WIDTH],
-      //       rd_data_o[1*DATA_WIDTH+:DATA_WIDTH], rd_data_o[2*DATA_WIDTH+:DATA_WIDTH],
-      //       rd_data_o[3*DATA_WIDTH+:DATA_WIDTH], rd_data_o[4*DATA_WIDTH+:DATA_WIDTH],
-      //       rd_data_o[5*DATA_WIDTH+:DATA_WIDTH], rd_data_o[6*DATA_WIDTH+:DATA_WIDTH],
-      //       rd_data_o[7*DATA_WIDTH+:DATA_WIDTH]);
-      // end
+      if (rf_rd_valid_o) begin
+        $display(
+            "[BE:dice_rf_ctrl] t=%0t RF read data ready: tid=%0d eblock=%0d gpr_data={%h,%h,%h,%h,%h,%h,%h,%h}",
+            $time, tid_o, e_block_id_o, rd_data_o[0*DATA_WIDTH+:DATA_WIDTH],
+            rd_data_o[1*DATA_WIDTH+:DATA_WIDTH], rd_data_o[2*DATA_WIDTH+:DATA_WIDTH],
+            rd_data_o[3*DATA_WIDTH+:DATA_WIDTH], rd_data_o[4*DATA_WIDTH+:DATA_WIDTH],
+            rd_data_o[5*DATA_WIDTH+:DATA_WIDTH], rd_data_o[6*DATA_WIDTH+:DATA_WIDTH],
+            rd_data_o[7*DATA_WIDTH+:DATA_WIDTH]);
+      end
 
       if (cgra_valid_i && (|cgra_wr_bitmap_i)) begin
         $display(

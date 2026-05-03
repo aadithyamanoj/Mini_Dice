@@ -73,7 +73,7 @@ module tb_chip_top;
   localparam logic [15:0] CTRL_CGRA_RESET = 16'h0002;
   localparam logic [15:0] CTRL_BSLOAD_EN = 16'h0004;
 
-  localparam string DEFAULT_TEST_VECTOR = "full_mul_array_test_vector";
+  localparam string DEFAULT_TEST_VECTOR = "simple_branching_test_vector";
   localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors";
 
   // --------------------------------------------------------------------------
@@ -675,7 +675,7 @@ module tb_chip_top;
   initial begin
     int unsigned ok;
 
-    $fsdbDumpfile("tb_chip_top.fsdb");
+    $fsdbDumpfile("waveform.fsdb");
     $fsdbDumpvars(0, tb_chip_top, "+struct", "+mda");
 
     init_paths();
