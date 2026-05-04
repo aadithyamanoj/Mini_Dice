@@ -15,7 +15,7 @@ CSR launch values and optional expected AXI writes.
 
 Usage:
     python3 gen_memfile.py kernel_simple.json [--mem-data-width 2048] [--output-dir .]
-    python3 gen_memfile.py full_mul_array_test_vector.json --nopred
+    python3 gen_memfile.py full_mul_array_test_vector.json --pred
 """
 
 import argparse
@@ -41,8 +41,8 @@ MINI_DICE_TRAD_BUILD_DIR = (
     / "build"
 )
 MINI_DICE_NOPRED_BUILD_DIR = MINI_DICE_TRAD_BUILD_DIR.with_name("build_nopred")
-MINI_DICE_BUILD_DIR = MINI_DICE_TRAD_BUILD_DIR
-PREFER_SELECTED_BUILD_DIR = False
+MINI_DICE_BUILD_DIR = MINI_DICE_NOPRED_BUILD_DIR
+PREFER_SELECTED_BUILD_DIR = True
 
 
 def _resolve_existing_path(description: str, *candidates: Path) -> Path:
@@ -143,7 +143,12 @@ def _load_pkg_parameter(path: Path, name: str) -> int:
     match = param_re.search(text)
     if not match:
         raise KeyError(f"Could not find parameter {name} in {path}")
-    return int(_strip_sv_comment(match.group(1)), 0)
+    value_text = _strip_sv_comment(match.group(1)).strip()
+    if value_text.startswith("`"):
+        define_name = value_text[1:]
+        if define_name in RTL_DEFINES:
+            return RTL_DEFINES[define_name]
+    return int(value_text, 0)
 
 
 DICE_CONFIG_VH = _resolve_existing_path(
@@ -625,14 +630,19 @@ def main():
     parser.add_argument(
         "--nopred",
         action="store_true",
-        help="Prefer build_nopred CGRA binaries and bitstream sizing",
+        help="Prefer build_nopred CGRA binaries and bitstream sizing (default)",
+    )
+    parser.add_argument(
+        "--pred",
+        action="store_true",
+        help="Prefer traditional predicate-network build binaries and bitstream sizing",
     )
     parser.add_argument(
         "--build-dir",
         type=Path,
         default=None,
         help="Override mini_dice build directory used for fallback binaries and "
-             "bitstream sizing (default: build, or build_nopred with --nopred)",
+             "bitstream sizing (default: build_nopred, or build with --pred)",
     )
     args = parser.parse_args()
 
@@ -640,9 +650,9 @@ def main():
     MINI_DICE_BUILD_DIR = (
         args.build_dir
         if args.build_dir is not None
-        else (MINI_DICE_NOPRED_BUILD_DIR if args.nopred else MINI_DICE_TRAD_BUILD_DIR)
+        else (MINI_DICE_TRAD_BUILD_DIR if args.pred else MINI_DICE_NOPRED_BUILD_DIR)
     ).resolve()
-    PREFER_SELECTED_BUILD_DIR = args.nopred or args.build_dir is not None
+    PREFER_SELECTED_BUILD_DIR = True
     bitstream_size = _selected_bitstream_size(MINI_DICE_BUILD_DIR)
 
     # Metadata local memory width is fixed by tb_dice_core.sv.

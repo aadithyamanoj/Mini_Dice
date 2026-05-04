@@ -1,15 +1,15 @@
 {
-  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
-  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
-  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
-  "kernel": "mul_array",
+  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
+  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.fasm",
+  "kernel": "add_array",
   "notes": [
-    "Consumes GPRs 0..7 as mul operands.",
+    "Consumes GPRs 0..7 as add operands.",
     "Assumes result writeback targets GPRs 0..3."
   ],
   "pgraph_meta_t": {
     "barrier": 0,
-    "bitstream_addr": 1024,
+    "bitstream_addr": 2048,
     "bitstream_length": 135,
     "branch_meta": {
       "branch_ena": 0,

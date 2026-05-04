@@ -10,7 +10,7 @@
   ],
   "pgraph_meta_t": {
     "barrier": 0,
-    "bitstream_addr": 2048,
+    "bitstream_addr": 3072,
     "bitstream_length": 135,
     "branch_meta": {
       "branch_ena": 0,

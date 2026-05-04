@@ -21,6 +21,8 @@ module fdr_top
     // SIMT stack status
     input simt_stack_status_entry_t simt_status_i,
     input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
+    input logic prog_active_i,
+    input logic prog_active_buffer_i,
 
     // Branch prediction outputs (to CS stage)
     output branch_predict_interface_t bh_branch_predict_info_o,
@@ -164,6 +166,8 @@ module fdr_top
       .flush_i         (predict_miss_internal),
       .meta_valid_i    (bitstream_addr_valid_internal),
       .bitstream_addr_i(bitstream_addr),
+      .prog_active_i   (prog_active_i),
+      .prog_active_buffer_i(prog_active_buffer_i),
       .cm_wr_addr_o    (cm_wr_addr_o),
       .cm_wr_data_o    (cm_wr_data_o),
       .cm_wr_valid_o   (cm_wr_valid_o),

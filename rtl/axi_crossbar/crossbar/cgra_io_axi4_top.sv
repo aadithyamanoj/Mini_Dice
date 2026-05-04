@@ -14,8 +14,8 @@
 //   TX (chip → FPGA): fpga_mem AW/W/AR (chip as master) + fpga_mst R/B (chip as slave)
 //   RX (FPGA → chip): fpga_mem R/B (FPGA SRAM responds)  + fpga_mst AW/W/AR (FPGA host)
 //
-// Only DDR bsg_link pins are exposed at the module boundary; there are no
-// flat AXI4 master ports.
+// Only core-side bsg_link flit streams are exposed at the module boundary; the
+// source-synchronous DDR PHY lives outside this module at chip_top.
 // =============================================================================
 
 `ifndef AXI_TYPEDEF_SVH_
@@ -78,21 +78,15 @@ module cgra_io_axi4_top
     output logic                  dfetch_rvalid_o,
     input  logic                  dfetch_rready_i,
 
-    // bsg_link upstream (chip → FPGA SRAM): source-synchronous DDR
-    input logic io_master_clk_i,  // IO master clock for upstream link
-    input logic upstream_io_link_reset_i,  // IO-domain reset for upstream link
-    input logic async_token_reset_i,  // Async token counter reset
-    input logic token_clk_i,  // Token credit clock from FPGA downstream
-    output logic upstream_io_clk_r_o,  // Forwarded clock to FPGA
-    output logic [CHANNEL_WIDTH-1:0] upstream_io_data_r_o,  // DDR data to FPGA
-    output logic upstream_io_valid_r_o,  // DDR valid to FPGA
+    // Core-side stream from the external bsg_link wrapper.
+    input  logic [FLIT_WIDTH-1:0] link_rx_data_i,
+    input  logic                  link_rx_valid_i,
+    output logic                  link_rx_yumi_o,
 
-    // bsg_link downstream (FPGA SRAM → chip): source-synchronous DDR
-    input logic downstream_io_link_reset_i,  // IO-domain reset for downstream link
-    input logic downstream_io_clk_i,  // Forwarded clock from FPGA
-    input logic [CHANNEL_WIDTH-1:0] downstream_io_data_i,  // DDR data from FPGA
-    input logic downstream_io_valid_i,  // DDR valid from FPGA
-    output logic downstream_core_token_r_o,  // Token credit back to FPGA upstream
+    // Core-side stream to the external bsg_link wrapper.
+    output logic [FLIT_WIDTH-1:0] link_tx_data_o,
+    output logic                  link_tx_valid_o,
+    input  logic                  link_tx_ready_i,
 
     // CSR slave port (on-chip)
     output mst_req_t  cgra_csr_req_o,
@@ -271,9 +265,9 @@ module cgra_io_axi4_top
   end
 
   // --------------------------------------------------------------------------
-  // top_level_io — bsg_link DDR physical layer + axi_link_tx/rx
-  //   TX path: crossbar AW/W/AR → axi_link_tx → bsg_link_ddr_upstream → DDR pins
-  //   RX path: DDR pins → bsg_link_ddr_downstream → axi_link_rx → R/B to crossbar
+  // top_level_io — AXI packetizer/depacketizer around core-side link streams.
+  //   TX path: crossbar AW/W/AR -> axi_link_tx -> link_tx_*
+  //   RX path: link_rx_* -> axi_link_rx -> R/B to crossbar
   // --------------------------------------------------------------------------
   top_level_io #(
       .flit_width_p                   (FLIT_WIDTH),
@@ -308,21 +302,13 @@ module cgra_io_axi4_top
   ) u_top_level_io (
       .core_clk_i                (clk_i),
       .reset_i                   (rst_i),
-      // bsg_link upstream control
-      .io_master_clk_i           (io_master_clk_i),
-      .upstream_io_link_reset_i  (upstream_io_link_reset_i),
-      .async_token_reset_i       (async_token_reset_i),
-      .token_clk_i               (token_clk_i),
-      // bsg_link downstream control
-      .downstream_io_link_reset_i(downstream_io_link_reset_i),
-      .downstream_io_clk_i       (downstream_io_clk_i),
-      .downstream_io_data_i      (downstream_io_data_i),
-      .downstream_io_valid_i     (downstream_io_valid_i),
-      // DDR physical outputs
-      .upstream_io_clk_r_o       (upstream_io_clk_r_o),
-      .upstream_io_data_r_o      (upstream_io_data_r_o),
-      .upstream_io_valid_r_o     (upstream_io_valid_r_o),
-      .downstream_core_token_r_o (downstream_core_token_r_o),
+      // Core-side bsg_link streams.
+      .link_rx_data_i            (link_rx_data_i),
+      .link_rx_valid_i           (link_rx_valid_i),
+      .link_rx_yumi_o            (link_rx_yumi_o),
+      .link_tx_data_o            (link_tx_data_o),
+      .link_tx_valid_o           (link_tx_valid_o),
+      .link_tx_ready_i           (link_tx_ready_i),
       // TX: chip → FPGA SRAM (AW/W/AR requests)
       .tx_awvalid_i              (xbar_mem_req.aw_valid),
       .tx_awready_o              (tx_awready),

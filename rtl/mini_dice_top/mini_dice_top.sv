@@ -4,7 +4,7 @@
 // Top-level integration of dice_core + cgra_io_axi4_top + cgra_io_csr.
 //
 // Connections:
-//   FPGA AXI4 → crossbar → fpga_mem → bsg_link DDR → FPGA SRAM
+//   FPGA AXI4 → crossbar → fpga_mem → external bsg_link DDR → FPGA SRAM
 //   FPGA AXI4 → crossbar → cgra_csr → cgra_io_csr
 //   cgra_io_csr regs 0-7  → cta_if (start/start_pc) + boundary (cgra_reset, bsload_en)
 //   cgra_io_csr regs 8-15 → dice_core csrX0-7 (kernel arguments)
@@ -63,21 +63,15 @@ module mini_dice_top
     // output logic                      fpga_axi_i_r_valid,
     // input  logic                      fpga_axi_i_r_ready,
 
-    // bsg_link upstream (chip → FPGA SRAM): source-synchronous DDR
-    input  logic                     io_master_clk_i,
-    input  logic                     upstream_io_link_reset_i,
-    input  logic                     async_token_reset_i,
-    input  logic                     token_clk_i,
-    output logic                     upstream_io_clk_r_o,
-    output logic [CHANNEL_WIDTH-1:0] upstream_io_data_r_o,
-    output logic                     upstream_io_valid_r_o,
+    // Core-side stream from the external bsg_link wrapper.
+    input  logic [FLIT_WIDTH-1:0]    link_rx_data_i,
+    input  logic                     link_rx_valid_i,
+    output logic                     link_rx_yumi_o,
 
-    // bsg_link downstream (FPGA SRAM → chip): source-synchronous DDR
-    input  logic                     downstream_io_link_reset_i,
-    input  logic                     downstream_io_clk_i,
-    input  logic [CHANNEL_WIDTH-1:0] downstream_io_data_i,
-    input  logic                     downstream_io_valid_i,
-    output logic                     downstream_core_token_r_o,
+    // Core-side stream to the external bsg_link wrapper.
+    output logic [FLIT_WIDTH-1:0]    link_tx_data_o,
+    output logic                     link_tx_valid_o,
+    input  logic                     link_tx_ready_i,
 
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
@@ -259,21 +253,13 @@ module mini_dice_top
       .dfetch_rvalid_o (dfetch_rvalid),
       .dfetch_rready_i (dfetch_rready),
 
-      // bsg_link upstream
-      .io_master_clk_i         (io_master_clk_i),
-      .upstream_io_link_reset_i(upstream_io_link_reset_i),
-      .async_token_reset_i     (async_token_reset_i),
-      .token_clk_i             (token_clk_i),
-      .upstream_io_clk_r_o     (upstream_io_clk_r_o),
-      .upstream_io_data_r_o    (upstream_io_data_r_o),
-      .upstream_io_valid_r_o   (upstream_io_valid_r_o),
-
-      // bsg_link downstream
-      .downstream_io_link_reset_i(downstream_io_link_reset_i),
-      .downstream_io_clk_i       (downstream_io_clk_i),
-      .downstream_io_data_i      (downstream_io_data_i),
-      .downstream_io_valid_i     (downstream_io_valid_i),
-      .downstream_core_token_r_o (downstream_core_token_r_o),
+      // Core-side bsg_link streams
+      .link_rx_data_i (link_rx_data_i),
+      .link_rx_valid_i(link_rx_valid_i),
+      .link_rx_yumi_o (link_rx_yumi_o),
+      .link_tx_data_o (link_tx_data_o),
+      .link_tx_valid_o(link_tx_valid_o),
+      .link_tx_ready_i(link_tx_ready_i),
 
       // CSR slave port
       .cgra_csr_req_o (csr_req),
