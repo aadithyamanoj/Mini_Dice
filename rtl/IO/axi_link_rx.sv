@@ -56,21 +56,20 @@ module axi_link_rx
   //   3'b001 = READ_REQ
   //   3'b010 = READ_RESP
   //   3'b011 = WRITE_RESP
+  //   3'b100 = META_REQ
   //
   // Header flit layout (32 bits):
-  //   WRITE_REQ : [31:29] opcode, [28:16] length, [15:0] address
-  //   READ_REQ  : [31:29] opcode, [28] is_meta, [27:16] len_or_meta[11:0],
-  //               [15:0] address
-  //               When is_meta=0 the 12-bit field is a beat length and AR
-  //               replays the requested burst. When is_meta=1 the 12-bit
-  //               field is sideband metadata; AR fires once (arlen=0) and
-  //               aruser_o = {is_meta, metadata[11:0]} mirrors the header.
-  //   READ_RESP : [31:29] opcode, [28:16] length, [15:2] reserved, [1:0] rresp
-  //   WRITE_RESP: [31:29] opcode, [28:16] 1,      [15:0] 16'b0
+  //   WRITE_REQ : [31:29] opcode, [28:16] length,        [15:0] address
+  //   READ_REQ  : [31:29] opcode, [28:16] length,        [15:0] address
+  //   META_REQ  : [31:29] opcode, [28:16] aruser[12:0],  [15:0] address
+  //               AR fires once (arlen=0) with aruser_o = header[28:16].
+  //   READ_RESP : [31:29] opcode, [28:16] length,        [15:2] reserved, [1:0] rresp
+  //   WRITE_RESP: [31:29] opcode, [28:16] 1,             [15:0] 16'b0
   //
   // RX reconstructs all five AXI channels from the simplified transport:
   //   WRITE_REQ  -> AW + W burst
   //   READ_REQ   -> AR burst
+  //   META_REQ   -> AR single beat with aruser_o[12]=1
   //   READ_RESP  -> R burst
   //   WRITE_RESP -> B response
   //
@@ -90,7 +89,8 @@ module axi_link_rx
     OP_WRITE_REQ  = 3'b000,
     OP_READ_REQ   = 3'b001,
     OP_READ_RESP  = 3'b010,
-    OP_WRITE_RESP = 3'b011
+    OP_WRITE_RESP = 3'b011,
+    OP_META_REQ   = 3'b100
   } pkt_opcode_e;
 
   typedef enum logic [2:0] {
@@ -103,9 +103,8 @@ module axi_link_rx
 
   localparam int beat_count_width_lp = 13;
   localparam int drop_count_width_lp = 14;
-  localparam int rd_meta_width_lp    = 12;
   localparam int req_desc_width_lp   = addr_width_p + beat_count_width_lp;
-  localparam int rd_req_desc_width_lp = addr_width_p + 1 + rd_meta_width_lp;
+  localparam int rd_req_desc_width_lp = addr_width_p + 1 + beat_count_width_lp;
   localparam int r_desc_width_lp     = beat_count_width_lp + 2;
   localparam logic [2:0] axi_size_lp  = 3'b010;
   localparam logic [1:0] axi_burst_lp = 2'b01;
@@ -116,10 +115,12 @@ module axi_link_rx
     logic [beat_count_width_lp-1:0] beats;
   } req_desc_s;
 
+  // For non-meta reads, `payload` is the AXI burst length. For meta reads,
+  // it is the 13-bit aruser carried in the META_REQ header.
   typedef struct packed {
-    logic [addr_width_p-1:0]     addr;
-    logic                        is_meta;
-    logic [rd_meta_width_lp-1:0] payload;
+    logic [addr_width_p-1:0]        addr;
+    logic                           is_meta;
+    logic [beat_count_width_lp-1:0] payload;
   } rd_req_desc_s;
 
   typedef struct packed {
@@ -303,21 +304,11 @@ module axi_link_rx
   logic [beat_count_width_lp-1:0] hdr_len;
   logic [addr_width_p-1:0]        hdr_addr;
   logic                           hdr_len_valid;
-  logic                           hdr_rd_is_meta;
-  logic [rd_meta_width_lp-1:0]    hdr_rd_payload;
-  logic                           hdr_rd_len_valid;
 
   assign hdr_opcode    = link_fifo_data_lo[31:29];
   assign hdr_len       = link_fifo_data_lo[28:16];
   assign hdr_addr      = link_fifo_data_lo[15:0];
   assign hdr_len_valid = (hdr_len != '0) && (hdr_len <= beat_count_width_lp'(max_axi_beats_lp));
-
-  // READ_REQ uses bit [28] as the metadata flag, splitting [28:16] into a
-  // 1-bit flag plus a 12-bit length-or-metadata payload.
-  assign hdr_rd_is_meta   = link_fifo_data_lo[28];
-  assign hdr_rd_payload   = link_fifo_data_lo[27:16];
-  assign hdr_rd_len_valid = (hdr_rd_payload != '0)
-                            && (hdr_rd_payload <= rd_meta_width_lp'(max_axi_beats_lp));
 
   always_comb begin
     state_n           = state_r;
@@ -363,26 +354,27 @@ module axi_link_rx
 
             OP_READ_REQ: begin
               // READ_REQ has no payload; one header flit publishes AR directly.
-              // Metadata reads carry 12 bits of sideband in the header and AR
-              // fires once with aruser driven from the descriptor.
-              if (hdr_rd_is_meta) begin
-                if (rd_desc_push_ready_lo) begin
-                  link_fifo_yumi_li    = 1'b1;
-                  rd_desc_push_v_li    = 1'b1;
-                  rd_desc_push_data_li = {hdr_addr, 1'b1, hdr_rd_payload};
-                  state_n              = RX_IDLE;
-                end
-              end
-              else if (hdr_rd_len_valid && rd_desc_push_ready_lo) begin
+              if (hdr_len_valid && rd_desc_push_ready_lo) begin
                 link_fifo_yumi_li    = 1'b1;
                 rd_desc_push_v_li    = 1'b1;
-                rd_desc_push_data_li = {hdr_addr, 1'b0, hdr_rd_payload};
+                rd_desc_push_data_li = {hdr_addr, 1'b0, hdr_len};
                 state_n              = RX_IDLE;
               end
-              else if (!hdr_rd_len_valid) begin
+              else if (!hdr_len_valid) begin
                 link_fifo_yumi_li = 1'b1;
                 state_n           = RX_DROP;
                 payload_rem_n     = '0;
+              end
+            end
+
+            OP_META_REQ: begin
+              // META_REQ has no payload; AR fires once and the header's
+              // middle 13 bits are forwarded verbatim onto aruser_o.
+              if (rd_desc_push_ready_lo) begin
+                link_fifo_yumi_li    = 1'b1;
+                rd_desc_push_v_li    = 1'b1;
+                rd_desc_push_data_li = {hdr_addr, 1'b1, hdr_len};
+                state_n              = RX_IDLE;
               end
             end
 
@@ -578,7 +570,7 @@ module axi_link_rx
                      : (rd_desc_cast.payload[7:0] - 8'd1);
   assign arsize_o  = axi_size_lp;
   assign arburst_o = axi_burst_lp;
-  assign aruser_o  = {rd_desc_cast.is_meta, rd_desc_cast.payload};
+  assign aruser_o  = rd_desc_cast.is_meta ? rd_desc_cast.payload : 13'b0;
   assign rd_desc_yumi_li = arvalid_o && arready_i;
 
   // --------------------------------------------------------------------------
