@@ -80,7 +80,7 @@ module tb_chip_top;
   // Clock / reset drivers (TB-side logic, mapped to PAD below)
   // --------------------------------------------------------------------------
   bit   clk_i;
-  logic rst_i = 1'b1;       // FPGA endpoint/core reset
+  logic rst_i = 1'b1;  // FPGA endpoint/core reset
   logic hard_reset = 1'b1;  // chip hard reset on PAD[45]
   logic ep_upstream_io_link_reset = 1'b1;
   logic ep_async_token_reset = 1'b0;
@@ -91,8 +91,8 @@ module tb_chip_top;
   // --------------------------------------------------------------------------
   // PAD bus — chip_top inout
   // --------------------------------------------------------------------------
-  wire [47:0] PAD;
-  logic [47:0] pad_drv;
+  wire  [  47:0] PAD;
+  logic [  47:0] pad_drv;
 
   // EP upstream outputs -> chip downstream inputs.
   wire           ep_up_clk_r;
@@ -126,16 +126,16 @@ module tb_chip_top;
 
   function automatic int dn_data_pad(input int bit_idx);
     case (bit_idx)
-      0:  dn_data_pad = 0;
-      1:  dn_data_pad = 1;
-      2:  dn_data_pad = 2;
-      3:  dn_data_pad = 3;
-      4:  dn_data_pad = 4;
-      5:  dn_data_pad = 5;
-      6:  dn_data_pad = 6;
-      7:  dn_data_pad = 7;
-      8:  dn_data_pad = 37;
-      9:  dn_data_pad = 36;
+      0: dn_data_pad = 0;
+      1: dn_data_pad = 1;
+      2: dn_data_pad = 2;
+      3: dn_data_pad = 3;
+      4: dn_data_pad = 4;
+      5: dn_data_pad = 5;
+      6: dn_data_pad = 6;
+      7: dn_data_pad = 7;
+      8: dn_data_pad = 37;
+      9: dn_data_pad = 36;
       10: dn_data_pad = 39;
       11: dn_data_pad = 38;
       12: dn_data_pad = 41;
@@ -148,16 +148,16 @@ module tb_chip_top;
 
   function automatic int up_data_pad(input int bit_idx);
     case (bit_idx)
-      0:  up_data_pad = 22;
-      1:  up_data_pad = 23;
-      2:  up_data_pad = 20;
-      3:  up_data_pad = 21;
-      4:  up_data_pad = 18;
-      5:  up_data_pad = 19;
-      6:  up_data_pad = 16;
-      7:  up_data_pad = 17;
-      8:  up_data_pad = 28;
-      9:  up_data_pad = 29;
+      0: up_data_pad = 22;
+      1: up_data_pad = 23;
+      2: up_data_pad = 20;
+      3: up_data_pad = 21;
+      4: up_data_pad = 18;
+      5: up_data_pad = 19;
+      6: up_data_pad = 16;
+      7: up_data_pad = 17;
+      8: up_data_pad = 28;
+      9: up_data_pad = 29;
       10: up_data_pad = 30;
       11: up_data_pad = 31;
       12: up_data_pad = 32;
@@ -234,6 +234,8 @@ module tb_chip_top;
   logic          ep_rx_arready;
   logic [AW-1:0] ep_rx_araddr;
   logic [   7:0] ep_rx_arlen;
+  logic          ep_rx_aruser_is_meta;
+  logic [  11:0] ep_rx_aruser;
   logic          ep_rx_rvalid;
   logic          ep_rx_rready = 1'b0;
   logic [DW-1:0] ep_rx_rdata;
@@ -313,53 +315,57 @@ module tb_chip_top;
 
       .tx_awvalid_i(ep_tx_awvalid),
       .tx_awready_o(ep_tx_awready),
-      .tx_awaddr_i (ep_tx_awaddr),
-      .tx_awlen_i  (ep_tx_awlen),
-      .tx_awsize_i (ep_tx_awsize),
+      .tx_awaddr_i(ep_tx_awaddr),
+      .tx_awlen_i(ep_tx_awlen),
+      .tx_awsize_i(ep_tx_awsize),
       .tx_awburst_i(ep_tx_awburst),
-      .tx_wvalid_i (ep_tx_wvalid),
-      .tx_wready_o (ep_tx_wready),
-      .tx_wdata_i  (ep_tx_wdata),
-      .tx_wlast_i  (ep_tx_wlast),
+      .tx_wvalid_i(ep_tx_wvalid),
+      .tx_wready_o(ep_tx_wready),
+      .tx_wdata_i(ep_tx_wdata),
+      .tx_wlast_i(ep_tx_wlast),
       .tx_arvalid_i(ep_tx_arvalid),
       .tx_arready_o(ep_tx_arready),
-      .tx_araddr_i (ep_tx_araddr),
-      .tx_arlen_i  (ep_tx_arlen),
-      .tx_arsize_i (ep_tx_arsize),
+      .tx_araddr_i(ep_tx_araddr),
+      .tx_arlen_i(ep_tx_arlen),
+      .tx_arsize_i(ep_tx_arsize),
       .tx_arburst_i(ep_tx_arburst),
-      .tx_rvalid_i (ep_tx_rvalid),
-      .tx_rready_o (ep_tx_rready),
-      .tx_rdata_i  (ep_tx_rdata),
-      .tx_rresp_i  (ep_tx_rresp),
-      .tx_rlast_i  (ep_tx_rlast),
-      .tx_bvalid_i (ep_tx_bvalid),
-      .tx_bready_o (ep_tx_bready),
-      .tx_bresp_i  (ep_tx_bresp),
+      .tx_aruser_is_meta_i(1'b0),
+      .tx_aruser_i(12'b0),
+      .tx_rvalid_i(ep_tx_rvalid),
+      .tx_rready_o(ep_tx_rready),
+      .tx_rdata_i(ep_tx_rdata),
+      .tx_rresp_i(ep_tx_rresp),
+      .tx_rlast_i(ep_tx_rlast),
+      .tx_bvalid_i(ep_tx_bvalid),
+      .tx_bready_o(ep_tx_bready),
+      .tx_bresp_i(ep_tx_bresp),
 
       .rx_awvalid_o(ep_rx_awvalid),
       .rx_awready_i(1'b1),
-      .rx_awaddr_o (ep_rx_awaddr),
-      .rx_awlen_o  (ep_rx_awlen),
-      .rx_awsize_o (),
+      .rx_awaddr_o(ep_rx_awaddr),
+      .rx_awlen_o(ep_rx_awlen),
+      .rx_awsize_o(),
       .rx_awburst_o(),
-      .rx_wvalid_o (ep_rx_wvalid),
-      .rx_wready_i (1'b1),
-      .rx_wdata_o  (ep_rx_wdata),
-      .rx_wlast_o  (ep_rx_wlast),
+      .rx_wvalid_o(ep_rx_wvalid),
+      .rx_wready_i(1'b1),
+      .rx_wdata_o(ep_rx_wdata),
+      .rx_wlast_o(ep_rx_wlast),
       .rx_arvalid_o(ep_rx_arvalid),
       .rx_arready_i(ep_rx_arready),
-      .rx_araddr_o (ep_rx_araddr),
-      .rx_arlen_o  (ep_rx_arlen),
-      .rx_arsize_o (),
+      .rx_araddr_o(ep_rx_araddr),
+      .rx_arlen_o(ep_rx_arlen),
+      .rx_arsize_o(),
       .rx_arburst_o(),
-      .rx_rvalid_o (ep_rx_rvalid),
-      .rx_rready_i (ep_rx_rready),
-      .rx_rdata_o  (ep_rx_rdata),
-      .rx_rresp_o  (ep_rx_rresp),
-      .rx_rlast_o  (ep_rx_rlast),
-      .rx_bvalid_o (ep_rx_bvalid),
-      .rx_bready_i (ep_rx_bready),
-      .rx_bresp_o  (ep_rx_bresp)
+      .rx_aruser_is_meta_o(ep_rx_aruser_is_meta),
+      .rx_aruser_o(ep_rx_aruser),
+      .rx_rvalid_o(ep_rx_rvalid),
+      .rx_rready_i(ep_rx_rready),
+      .rx_rdata_o(ep_rx_rdata),
+      .rx_rresp_o(ep_rx_rresp),
+      .rx_rlast_o(ep_rx_rlast),
+      .rx_bvalid_o(ep_rx_bvalid),
+      .rx_bready_i(ep_rx_bready),
+      .rx_bresp_o(ep_rx_bresp)
   );
 
   // --------------------------------------------------------------------------
@@ -376,7 +382,9 @@ module tb_chip_top;
   logic           [   7:0] rd_arlen_q;
   logic           [   7:0] rd_beat_idx_q;
   logic           [   1:0] rd_kind_q;
-  logic           [  15:0] csr_values     [0:7];
+  logic                    rd_aruser_is_meta_q;
+  logic           [  11:0] rd_aruser_q;
+  logic           [  15:0] csr_values          [0:7];
   logic           [  15:0] start_pc_val;
   dice_cta_desc_t          launch_desc;
 
@@ -391,6 +399,17 @@ module tb_chip_top;
     endcase
   endfunction
 
+  function automatic logic [DW-1:0] pack_read_beat(
+      input logic [1:0] kind, input logic [AW-1:0] base, input int unsigned beat_idx,
+      input logic is_meta, input logic [11:0] meta);
+    logic [DW-1:0] word;
+    begin
+      word = DW'(fetch_beat(kind, base, beat_idx));
+      if (is_meta) word[27:16] = meta;
+      return word;
+    end
+  endfunction
+
   logic          ep_aw_pending;
   logic [AW-1:0] ep_aw_addr_lat;
 
@@ -398,18 +417,20 @@ module tb_chip_top;
 
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
-      rd_state_q     <= RD_IDLE;
-      rd_base_addr_q <= '0;
-      rd_arlen_q     <= '0;
-      rd_beat_idx_q  <= '0;
-      rd_kind_q      <= '0;
-      ep_tx_rvalid   <= 1'b0;
-      ep_tx_rlast    <= 1'b0;
-      ep_tx_rdata    <= '0;
-      ep_tx_rresp    <= '0;
-      ep_tx_bvalid   <= 1'b0;
-      ep_aw_pending  <= 1'b0;
-      ep_aw_addr_lat <= '0;
+      rd_state_q          <= RD_IDLE;
+      rd_base_addr_q      <= '0;
+      rd_arlen_q          <= '0;
+      rd_beat_idx_q       <= '0;
+      rd_kind_q           <= '0;
+      rd_aruser_is_meta_q <= 1'b0;
+      rd_aruser_q         <= '0;
+      ep_tx_rvalid        <= 1'b0;
+      ep_tx_rlast         <= 1'b0;
+      ep_tx_rdata         <= '0;
+      ep_tx_rresp         <= '0;
+      ep_tx_bvalid        <= 1'b0;
+      ep_aw_pending       <= 1'b0;
+      ep_aw_addr_lat      <= '0;
     end else begin
       unique case (rd_state_q)
         RD_IDLE: begin
@@ -419,14 +440,18 @@ module tb_chip_top;
             else if (ep_rx_arlen > 8'd8) kind = 2'd2;
             else kind = 2'd0;
             rd_base_addr_q <= ep_rx_araddr;
-            rd_arlen_q     <= ep_rx_arlen;
-            rd_beat_idx_q  <= '0;
-            rd_kind_q      <= kind;
-            ep_tx_rdata    <= DW'(fetch_beat(kind, ep_rx_araddr, 0));
-            ep_tx_rlast    <= (ep_rx_arlen == 8'd0);
-            ep_tx_rresp    <= 2'b00;
-            ep_tx_rvalid   <= 1'b1;
-            rd_state_q     <= RD_ACTIVE;
+            rd_arlen_q <= ep_rx_arlen;
+            rd_beat_idx_q <= '0;
+            rd_kind_q <= kind;
+            rd_aruser_is_meta_q <= ep_rx_aruser_is_meta;
+            rd_aruser_q <= ep_rx_aruser;
+            ep_tx_rdata <= pack_read_beat(
+                kind, ep_rx_araddr, 0, ep_rx_aruser_is_meta, ep_rx_aruser
+            );
+            ep_tx_rlast <= (ep_rx_arlen == 8'd0);
+            ep_tx_rresp <= 2'b00;
+            ep_tx_rvalid <= 1'b1;
+            rd_state_q <= RD_ACTIVE;
           end
         end
         RD_ACTIVE: begin
@@ -438,8 +463,10 @@ module tb_chip_top;
             end else begin
               automatic int unsigned next_idx = int'(rd_beat_idx_q) + 1;
               rd_beat_idx_q <= rd_beat_idx_q + 8'd1;
-              ep_tx_rdata   <= DW'(fetch_beat(rd_kind_q, rd_base_addr_q, next_idx));
-              ep_tx_rlast   <= (rd_beat_idx_q + 8'd1 == rd_arlen_q);
+              ep_tx_rdata <= pack_read_beat(
+                  rd_kind_q, rd_base_addr_q, next_idx, rd_aruser_is_meta_q, rd_aruser_q
+              );
+              ep_tx_rlast <= (rd_beat_idx_q + 8'd1 == rd_arlen_q);
             end
           end
         end
@@ -470,6 +497,7 @@ module tb_chip_top;
 
   int unsigned cyc_count;
   int unsigned complete_seen_cycle;
+  localparam int unsigned POST_COMPLETE_DRAIN_CYC = 1024;
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
       cyc_count           <= 0;
@@ -478,13 +506,14 @@ module tb_chip_top;
       cyc_count <= cyc_count + 1;
       if (u_dut.u_mini_dice_top.u_csr.complete_sticky_r && complete_seen_cycle == 0)
         complete_seen_cycle <= cyc_count;
-      if (complete_seen_cycle != 0) begin
+      if ((complete_seen_cycle != 0)
+          && ((cyc_count - complete_seen_cycle) >= POST_COMPLETE_DRAIN_CYC)) begin
         if (dice_core_tb_check_done() != 0) begin
-          $display("[TB] PASS: CSR complete observed and DPI write diff clean");
+          $display("[TB] PASS: CSR complete observed and DPI write diff clean after drain");
           print_param_debug();
           $finish;
         end
-        $fatal(1, "CSR complete observed but DPI write diff failed");
+        $fatal(1, "CSR complete observed but DPI write diff failed after drain");
       end
       if (cyc_count >= TIMEOUT_CYC) begin
         $display("[TB] TIMEOUT at %0d cycles", cyc_count);
@@ -502,11 +531,13 @@ module tb_chip_top;
     if (!rst_i) begin
       if (ep_rx_arvalid && ep_rx_arready)
         $display(
-            "[EP] t=%0t AR addr=0x%04x len=%0d kind=%0d",
+            "[EP] t=%0t AR addr=0x%04x len=%0d kind=%0d is_meta=%0b meta=0x%03x",
             $time,
             ep_rx_araddr,
             ep_rx_arlen,
-            (ep_rx_araddr >= start_pc_val) ? 2'd1 : (ep_rx_arlen > 8'd8) ? 2'd2 : 2'd0
+            (ep_rx_araddr >= start_pc_val) ? 2'd1 : (ep_rx_arlen > 8'd8) ? 2'd2 : 2'd0,
+            ep_rx_aruser_is_meta,
+            ep_rx_aruser
         );
       if (ep_rx_awvalid && !ep_aw_pending)
         $display("[EP] t=%0t AW addr=0x%04x", $time, ep_rx_awaddr);
@@ -530,13 +561,21 @@ module tb_chip_top;
             u_dut.u_mini_dice_top.bsfetch_req.ar.addr,
             u_dut.u_mini_dice_top.bsfetch_req.ar.len
         );
-      if (u_dut.u_mini_dice_top.dfetch_arvalid && u_dut.u_mini_dice_top.dfetch_arready)
+      if (|u_dut.u_mini_dice_top.dfetch_arvalid && |u_dut.u_mini_dice_top.dfetch_arready)
         $display(
-            "[HIER][DC] t=%0t dfetch AR addr=0x%04x", $time, u_dut.u_mini_dice_top.dfetch_araddr
+            "[HIER][DC] t=%0t dfetch AR valid=%b ready=%b addr=%p",
+            $time,
+            u_dut.u_mini_dice_top.dfetch_arvalid,
+            u_dut.u_mini_dice_top.dfetch_arready,
+            u_dut.u_mini_dice_top.dfetch_araddr
         );
-      if (u_dut.u_mini_dice_top.dfetch_awvalid && u_dut.u_mini_dice_top.dfetch_awready)
+      if (|u_dut.u_mini_dice_top.dfetch_awvalid && |u_dut.u_mini_dice_top.dfetch_awready)
         $display(
-            "[HIER][DC] t=%0t dfetch AW addr=0x%04x", $time, u_dut.u_mini_dice_top.dfetch_awaddr
+            "[HIER][DC] t=%0t dfetch AW valid=%b ready=%b addr=%p",
+            $time,
+            u_dut.u_mini_dice_top.dfetch_awvalid,
+            u_dut.u_mini_dice_top.dfetch_awready,
+            u_dut.u_mini_dice_top.dfetch_awaddr
         );
       if (u_dut.u_mini_dice_top.u_io_top.xbar_mem_req.ar_valid &&
         u_dut.u_mini_dice_top.u_io_top.xbar_mem_resp.ar_ready)
@@ -636,7 +675,7 @@ module tb_chip_top;
   // --------------------------------------------------------------------------
   task automatic bsg_link_bringup();
     begin
-      hard_reset                 = 1'b1;
+      hard_reset                  = 1'b1;
       rst_i                       = 1'b1;
       ep_upstream_io_link_reset   = 1'b1;
       ep_downstream_io_link_reset = 1'b1;

@@ -49,10 +49,14 @@ module tb_axi4_full_crossbar;
   // DUT I/O signals
   // -------------------------------------------------------------------------
   slv_req_t  fpga_mst_req,  dfetch_req,  mfetch_req,  bsfetch_req;
+  slv_req_t  unused_dfetch_req;
   slv_resp_t fpga_mst_resp, dfetch_resp, mfetch_resp, bsfetch_resp;
+  slv_resp_t unused_dfetch_resp_1, unused_dfetch_resp_2, unused_dfetch_resp_3;
 
   mst_req_t  fpga_mem_req,  cgra_csr_req;
   mst_resp_t fpga_mem_resp, cgra_csr_resp;
+
+  assign unused_dfetch_req = '0;
 
   // -------------------------------------------------------------------------
   // DUT
@@ -64,8 +68,14 @@ module tb_axi4_full_crossbar;
 
     .fpga_mst_req_i  ( fpga_mst_req   ),
     .fpga_mst_resp_o ( fpga_mst_resp  ),
-    .dfetch_req_i    ( dfetch_req     ),
-    .dfetch_resp_o   ( dfetch_resp    ),
+    .dfetch0_req_i   ( dfetch_req     ),
+    .dfetch0_resp_o  ( dfetch_resp    ),
+    .dfetch1_req_i   ( unused_dfetch_req ),
+    .dfetch1_resp_o  ( unused_dfetch_resp_1 ),
+    .dfetch2_req_i   ( unused_dfetch_req ),
+    .dfetch2_resp_o  ( unused_dfetch_resp_2 ),
+    .dfetch3_req_i   ( unused_dfetch_req ),
+    .dfetch3_resp_o  ( unused_dfetch_resp_3 ),
     .mfetch_req_i    ( mfetch_req     ),
     .mfetch_resp_o   ( mfetch_resp    ),
     .bsfetch_req_i   ( bsfetch_req    ),

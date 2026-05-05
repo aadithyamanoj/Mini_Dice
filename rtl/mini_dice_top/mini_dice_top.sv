@@ -92,22 +92,28 @@ module mini_dice_top
   mst_resp_t csr_resp;
 
   // dfetch flat AXI4 (dice_core LDST FIFO → cgra_io_axi4_top)
-  logic [DICE_REG_DATA_WIDTH-1:0] dfetch_awaddr, dfetch_araddr;
-  logic [DICE_REG_DATA_WIDTH-1:0] dfetch_wdata, dfetch_rdata;
-  logic [1:0] dfetch_wstrb, dfetch_bresp, dfetch_rresp;
-  logic dfetch_awvalid, dfetch_awready;
-  logic dfetch_wvalid, dfetch_wready;
-  logic dfetch_bvalid, dfetch_bready;
-  logic dfetch_arvalid, dfetch_arready;
+  logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] dfetch_awaddr, dfetch_araddr;
+  logic [NUM_MEM_PORTS-1:0][AxiUserWidth-1:0] dfetch_aruser;
+  logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] dfetch_wdata;
+  logic [DATA_WIDTH-1:0] dfetch_rdata;
+  logic [NUM_MEM_PORTS-1:0][1:0] dfetch_wstrb, dfetch_bresp;
+  logic [1:0] dfetch_rresp;
+  logic [NUM_MEM_PORTS-1:0] dfetch_awvalid, dfetch_awready;
+  logic [NUM_MEM_PORTS-1:0] dfetch_wvalid, dfetch_wready;
+  logic [NUM_MEM_PORTS-1:0] dfetch_bvalid, dfetch_bready;
+  logic [NUM_MEM_PORTS-1:0] dfetch_arvalid, dfetch_arready;
   logic dfetch_rvalid, dfetch_rready;
 
-  logic [DATA_WIDTH-1:0]  dfetch_awaddr_axi, dfetch_araddr_axi;
-  logic [DATA_WIDTH-1:0]  dfetch_wdata_axi, dfetch_rdata_axi;
+  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0] dfetch_awaddr_axi, dfetch_araddr_axi;
+  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0] dfetch_wdata_axi;
+  logic [DATA_WIDTH-1:0] dfetch_rdata_axi;
 
-  assign dfetch_awaddr_axi = DATA_WIDTH'(dfetch_awaddr);
-  assign dfetch_araddr_axi = DATA_WIDTH'(dfetch_araddr);
-  assign dfetch_wdata_axi  = DATA_WIDTH'(dfetch_wdata);
-  assign dfetch_rdata      = DICE_REG_DATA_WIDTH'(dfetch_rdata_axi);
+  for (genvar dfetch_i = 0; dfetch_i < NUM_MEM_PORTS; dfetch_i++) begin : gen_dfetch_widen
+    assign dfetch_awaddr_axi[dfetch_i] = DATA_WIDTH'(dfetch_awaddr[dfetch_i]);
+    assign dfetch_araddr_axi[dfetch_i] = DATA_WIDTH'(dfetch_araddr[dfetch_i]);
+    assign dfetch_wdata_axi[dfetch_i]  = DATA_WIDTH'(dfetch_wdata[dfetch_i]);
+  end
+  assign dfetch_rdata = dfetch_rdata_axi;
 
   // CSR outputs
   logic                           csr_start;
@@ -184,6 +190,7 @@ module mini_dice_top
       .axi_bvalid_i (dfetch_bvalid),
       .axi_bready_o (dfetch_bready),
       .axi_araddr_o (dfetch_araddr),
+      .axi_aruser_o (dfetch_aruser),
       .axi_arvalid_o(dfetch_arvalid),
       .axi_arready_i(dfetch_arready),
       .axi_rdata_i  (dfetch_rdata),
@@ -249,6 +256,7 @@ module mini_dice_top
       .dfetch_bvalid_o (dfetch_bvalid),
       .dfetch_bready_i (dfetch_bready),
       .dfetch_araddr_i (dfetch_araddr_axi),
+      .dfetch_aruser_i (dfetch_aruser),
       .dfetch_arvalid_i(dfetch_arvalid),
       .dfetch_arready_o(dfetch_arready),
       .dfetch_rdata_o  (dfetch_rdata_axi),

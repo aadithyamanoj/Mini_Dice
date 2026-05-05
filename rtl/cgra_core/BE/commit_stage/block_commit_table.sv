@@ -22,6 +22,8 @@ module block_commit_table
     // Pending store update interface
     input  logic                                    store_update_valid_i,
     input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         store_update_e_block_id_i,
+    input  logic                                    exec_update_valid_i,
+    input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         exec_update_e_block_id_i,
     
     // E-block commit interface
     output logic                                    pop_valid_o,
@@ -50,6 +52,19 @@ module block_commit_table
     logic [2**DICE_EBLOCK_ID_WIDTH-1:0] ready_to_commit;
     logic [DICE_EBLOCK_ID_WIDTH-1:0] commit_idx;
     logic commit_found;
+    logic [2**DICE_EBLOCK_ID_WIDTH-1:0][S_W-1:0] store_reduce_count;
+
+    always_comb begin
+        store_reduce_count = '0;
+        if (store_update_valid_i) begin
+            store_reduce_count[store_update_e_block_id_i] =
+                store_reduce_count[store_update_e_block_id_i] + S_W'(1);
+        end
+        if (exec_update_valid_i) begin
+            store_reduce_count[exec_update_e_block_id_i] =
+                store_reduce_count[exec_update_e_block_id_i] + S_W'(1);
+        end
+    end
 
     // Entry insert logic
     always_ff @(posedge clk_i) begin
@@ -76,10 +91,13 @@ module block_commit_table
                     commit_table[update_e_block_id_i].pending_reads - update_reduce_count_i;
             end
 
-            // Handle pending store count updates (store AXI completions)
-            if (store_update_valid_i && commit_table[store_update_e_block_id_i].valid) begin
-                commit_table[store_update_e_block_id_i].pending_stores <=
-                    commit_table[store_update_e_block_id_i].pending_stores - S_W'(1);
+            // Handle pending store count updates. Store AW/W retire events and
+            // the per-eblock execution-done token both use this counter.
+            for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
+                if ((store_reduce_count[i] != '0) && commit_table[i].valid) begin
+                    commit_table[i].pending_stores <=
+                        commit_table[i].pending_stores - store_reduce_count[i];
+                end
             end
 
             // Handle commit/pop
@@ -179,14 +197,17 @@ module block_commit_table
                   update_e_block_id_i, commit_table[update_e_block_id_i].pending_reads,
                   update_reduce_count_i, $time);
 
-    // Pending stores must not underflow on an update
-    assert_no_store_underflow: assert property (
-        @(posedge clk_i) disable iff (rst_i)
-        (store_update_valid_i && commit_table[store_update_e_block_id_i].valid) |->
-        (commit_table[store_update_e_block_id_i].pending_stores >= S_W'(1))
-    ) else $error("Error: Pending stores underflow for entry %0d. Current: %0d at time %0t",
-                  store_update_e_block_id_i,
-                  commit_table[store_update_e_block_id_i].pending_stores, $time);
+    always_ff @(posedge clk_i) begin
+        if (!rst_i) begin
+            for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
+                if ((store_reduce_count[i] != '0) && commit_table[i].valid
+                    && (commit_table[i].pending_stores < store_reduce_count[i])) begin
+                    $error("Error: Pending stores underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
+                           i, commit_table[i].pending_stores, store_reduce_count[i], $time);
+                end
+            end
+        end
+    end
 `endif // SYNTHESIS
 
 endmodule

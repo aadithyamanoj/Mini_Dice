@@ -35,6 +35,8 @@ module axi_link_rx
    ,output logic [7:0]              arlen_o
    ,output logic [2:0]              arsize_o
    ,output logic [1:0]              arburst_o
+   ,output logic                    aruser_is_meta_o
+   ,output logic [11:0]             aruser_o
 
    ,output logic                    rvalid_o
    ,input  logic                    rready_i
@@ -57,7 +59,13 @@ module axi_link_rx
   //   3'b011 = WRITE_RESP
   //
   // Header flit layout (32 bits):
-  //   requests  : [31:29] opcode, [28:16] length, [15:0] address
+  //   WRITE_REQ : [31:29] opcode, [28:16] length, [15:0] address
+  //   READ_REQ  : [31:29] opcode, [28] is_meta, [27:16] len_or_meta[11:0],
+  //               [15:0] address
+  //               When is_meta=0 the 12-bit field is a beat length and AR
+  //               replays the requested burst. When is_meta=1 the 12-bit
+  //               field is sideband metadata; AR fires once (arlen=0) and
+  //               {aruser_is_meta_o, aruser_o} mirrors the header.
   //   READ_RESP : [31:29] opcode, [28:16] length, [15:2] reserved, [1:0] rresp
   //   WRITE_RESP: [31:29] opcode, [28:16] 1,      [15:0] 16'b0
   //
@@ -96,7 +104,9 @@ module axi_link_rx
 
   localparam int beat_count_width_lp = 13;
   localparam int drop_count_width_lp = 14;
+  localparam int rd_meta_width_lp    = 12;
   localparam int req_desc_width_lp   = addr_width_p + beat_count_width_lp;
+  localparam int rd_req_desc_width_lp = addr_width_p + 1 + rd_meta_width_lp;
   localparam int r_desc_width_lp     = beat_count_width_lp + 2;
   localparam logic [2:0] axi_size_lp  = 3'b010;
   localparam logic [1:0] axi_burst_lp = 2'b01;
@@ -106,6 +116,12 @@ module axi_link_rx
     logic [addr_width_p-1:0]        addr;
     logic [beat_count_width_lp-1:0] beats;
   } req_desc_s;
+
+  typedef struct packed {
+    logic [addr_width_p-1:0]     addr;
+    logic                        is_meta;
+    logic [rd_meta_width_lp-1:0] payload;
+  } rd_req_desc_s;
 
   typedef struct packed {
     logic [beat_count_width_lp-1:0] beats;
@@ -152,10 +168,10 @@ module axi_link_rx
   logic                        wr_desc_v_lo, wr_desc_yumi_li;
   logic [req_desc_width_lp-1:0] wr_desc_data_lo;
 
-  logic                        rd_desc_push_v_li, rd_desc_push_ready_lo;
-  logic [req_desc_width_lp-1:0] rd_desc_push_data_li;
-  logic                        rd_desc_v_lo, rd_desc_yumi_li;
-  logic [req_desc_width_lp-1:0] rd_desc_data_lo;
+  logic                            rd_desc_push_v_li, rd_desc_push_ready_lo;
+  logic [rd_req_desc_width_lp-1:0] rd_desc_push_data_li;
+  logic                            rd_desc_v_lo, rd_desc_yumi_li;
+  logic [rd_req_desc_width_lp-1:0] rd_desc_data_lo;
 
   logic                        w_data_push_v_li, w_data_push_ready_lo;
   logic [31:0]                 w_data_push_data_li;
@@ -194,7 +210,7 @@ module axi_link_rx
   );
 
   bsg_fifo_1r1w_small #(
-    .width_p            (req_desc_width_lp),
+    .width_p            (rd_req_desc_width_lp),
     .els_p              (ar_desc_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -288,11 +304,21 @@ module axi_link_rx
   logic [beat_count_width_lp-1:0] hdr_len;
   logic [addr_width_p-1:0]        hdr_addr;
   logic                           hdr_len_valid;
+  logic                           hdr_rd_is_meta;
+  logic [rd_meta_width_lp-1:0]    hdr_rd_payload;
+  logic                           hdr_rd_len_valid;
 
   assign hdr_opcode    = link_fifo_data_lo[31:29];
   assign hdr_len       = link_fifo_data_lo[28:16];
   assign hdr_addr      = link_fifo_data_lo[15:0];
   assign hdr_len_valid = (hdr_len != '0) && (hdr_len <= beat_count_width_lp'(max_axi_beats_lp));
+
+  // READ_REQ uses bit [28] as the metadata flag, splitting [28:16] into a
+  // 1-bit flag plus a 12-bit length-or-metadata payload.
+  assign hdr_rd_is_meta   = link_fifo_data_lo[28];
+  assign hdr_rd_payload   = link_fifo_data_lo[27:16];
+  assign hdr_rd_len_valid = (hdr_rd_payload != '0)
+                            && (hdr_rd_payload <= rd_meta_width_lp'(max_axi_beats_lp));
 
   always_comb begin
     state_n           = state_r;
@@ -338,13 +364,23 @@ module axi_link_rx
 
             OP_READ_REQ: begin
               // READ_REQ has no payload; one header flit publishes AR directly.
-              if (hdr_len_valid && rd_desc_push_ready_lo) begin
+              // Metadata reads carry 12 bits of sideband in the header and AR
+              // fires once with aruser driven from the descriptor.
+              if (hdr_rd_is_meta) begin
+                if (rd_desc_push_ready_lo) begin
+                  link_fifo_yumi_li    = 1'b1;
+                  rd_desc_push_v_li    = 1'b1;
+                  rd_desc_push_data_li = {hdr_addr, 1'b1, hdr_rd_payload};
+                  state_n              = RX_IDLE;
+                end
+              end
+              else if (hdr_rd_len_valid && rd_desc_push_ready_lo) begin
                 link_fifo_yumi_li    = 1'b1;
                 rd_desc_push_v_li    = 1'b1;
-                rd_desc_push_data_li = {hdr_addr, hdr_len};
+                rd_desc_push_data_li = {hdr_addr, 1'b0, hdr_rd_payload};
                 state_n              = RX_IDLE;
               end
-              else if (!hdr_len_valid) begin
+              else if (!hdr_rd_len_valid) begin
                 link_fifo_yumi_li = 1'b1;
                 state_n           = RX_DROP;
                 payload_rem_n     = '0;
@@ -534,14 +570,17 @@ module axi_link_rx
   // READ_REQ packets replay directly as AR bursts because they carry only one
   // address flit plus the burst length from the header.
 
-  req_desc_s rd_desc_cast;
-  assign rd_desc_cast = req_desc_s'(rd_desc_data_lo);
+  rd_req_desc_s rd_desc_cast;
+  assign rd_desc_cast = rd_req_desc_s'(rd_desc_data_lo);
 
   assign arvalid_o = rd_desc_v_lo;
   assign araddr_o  = rd_desc_cast.addr;
-  assign arlen_o   = rd_desc_cast.beats[7:0] - 8'd1;
+  assign arlen_o   = rd_desc_cast.is_meta ? 8'd0
+                     : (rd_desc_cast.payload[7:0] - 8'd1);
   assign arsize_o  = axi_size_lp;
   assign arburst_o = axi_burst_lp;
+  assign aruser_is_meta_o = rd_desc_cast.is_meta;
+  assign aruser_o  = rd_desc_cast.payload;
   assign rd_desc_yumi_li = arvalid_o && arready_i;
 
   // --------------------------------------------------------------------------
@@ -627,7 +666,7 @@ module axi_link_rx
       if (awvalid_o && (wr_desc_cast.beats == '0))
         $error("axi_link_rx attempted zero-length AW burst");
 
-      if (arvalid_o && (rd_desc_cast.beats == '0))
+      if (arvalid_o && !rd_desc_cast.is_meta && (rd_desc_cast.payload == '0))
         $error("axi_link_rx attempted zero-length AR burst");
 
       if (w_handshake && (wlast_o != (write_beats_left_r == beat_count_width_lp'(1))))

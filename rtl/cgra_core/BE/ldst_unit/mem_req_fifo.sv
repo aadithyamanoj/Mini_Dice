@@ -3,27 +3,31 @@
 // Request buffering path for per-thread CGRA memory ops.
 //
 // A small wide bundle FIFO absorbs each thread's 4-port CGRA burst, then a
-// PISO serializes those requests into the deeper single-request FIFO that
-// fronts the AXI-Lite master.
+// PISO serializes those requests into a small single-request FIFO that fronts
+// the AXI-style memory master.
 //
 // Flow:
-//   LOAD  : enqueue → issue AR → wait RVALID → pulse rsp_valid_o → pop
+//   LOAD  : enqueue → issue AR+metadata → wait packed RDATA → pulse rsp_valid_o → pop
 //   STORE : enqueue → issue AW+W → wait BVALID → pop (no RF writeback)
 //
 // One transaction in flight at a time (AXI-Lite has no ID fields).
 //
 // The enqueue port stores the AXI address separately from the RF writeback
-// destination. Loads issue enq_addr_i_* on AXI, then write the response back to
-// enq_rsp_addr_i_*; stores ignore the response destination.
+// destination. Loads issue enq_addr_i_* on AXI and send {TID, eblock,
+// enq_rsp_addr_i_*} on ARUSER. The returned 32-bit RDATA packs load data in
+// [15:0] and the echoed metadata in [27:16].
 
+`include "mem_req_fifo_4port.sv"
 `include "dice_define.vh"
 
-module mem_req_fifo
+module mem_req_fifo_legacy
   import dice_pkg::*;
   import DE_pkg::*;
 #(
-    parameter int DEPTH = DICE_NUM_MAX_THREADS_PER_CORE * NUM_MEM_PORTS,
     parameter int BUNDLE_FIFO_DEPTH = MEM_REQ_BUNDLE_FIFO_DEPTH,
+    parameter int DEPTH = BUNDLE_FIFO_DEPTH,
+    parameter int AXI_UW = 12,
+    parameter int AXI_RD_DW = 32,
     localparam int ENQ_PORTS_LP = 4,
     localparam int AXI_AW = 16,
     localparam int AXI_DW = 16
@@ -60,7 +64,8 @@ module mem_req_fifo
     input logic enq_op_i_3,
 
     // -------------------------------------------------------------------------
-    // AXI-Lite master — connect to cgra_mem_system_16bit crossbar
+    // AXI-style master — read metadata rides on ARUSER; read response metadata
+    // returns packed into RDATA[27:16].
     // -------------------------------------------------------------------------
     output logic [AXI_AW-1:0] axi_awaddr_o,
     output logic              axi_awvalid_o,
@@ -76,10 +81,11 @@ module mem_req_fifo
     output logic       axi_bready_o,
 
     output logic [AXI_AW-1:0] axi_araddr_o,
+    output logic [AXI_UW-1:0] axi_aruser_o,
     output logic              axi_arvalid_o,
     input  logic              axi_arready_i,
 
-    input  logic [AXI_DW-1:0] axi_rdata_i,
+    input  logic [AXI_RD_DW-1:0] axi_rdata_i,
     input  logic [       1:0] axi_rresp_i,
     input  logic              axi_rvalid_i,
     output logic              axi_rready_o,
@@ -96,8 +102,6 @@ module mem_req_fifo
     output logic [                  DICE_REG_ADDR_WIDTH-1:0] rsp_addr_o,
     output logic [                  DICE_REG_DATA_WIDTH-1:0] rsp_data_o,
 
-    // Pulses when one wide-bundle FIFO entry is handed to the PISO. The
-    // backend uses this to refund ingress bundle credits.
     output logic                            bundle_pop_o,
     // Store completion retire — pulses when a store AXI write finishes
     output logic                            store_pop_o,
@@ -118,7 +122,7 @@ module mem_req_fifo
   } mem_req_s;
 
   typedef struct packed {
-    logic [ENQ_PORTS_LP-1:0]                           valid;
+    logic [ENQ_PORTS_LP-1:0]                          valid;
     logic [$clog2(DICE_NUM_MAX_THREADS_PER_CORE)-1:0] tid;
     logic [DICE_EBLOCK_ID_WIDTH-1:0]                  e_block_id;
     logic [ENQ_PORTS_LP-1:0][AXI_AW-1:0]              addr;
@@ -126,6 +130,34 @@ module mem_req_fifo
     logic [ENQ_PORTS_LP-1:0][DICE_REG_ADDR_WIDTH-1:0] rsp_addr;
     logic [ENQ_PORTS_LP-1:0]                          op;
   } mem_req_bundle_s;
+
+  localparam int TID_W_LP = $clog2(DICE_NUM_MAX_THREADS_PER_CORE);
+  localparam int LOAD_META_W_LP = TID_W_LP + DICE_EBLOCK_ID_WIDTH + DICE_REG_ADDR_WIDTH;
+  localparam int LOAD_DATA_LSB_LP = 0;
+  localparam int LOAD_META_LSB_LP = DICE_REG_DATA_WIDTH;
+
+  initial begin
+    if (AXI_UW < LOAD_META_W_LP)
+      $error("mem_req_fifo requires AXI_UW >= %0d for load metadata", LOAD_META_W_LP);
+    if (AXI_RD_DW < DICE_REG_DATA_WIDTH + LOAD_META_W_LP)
+      $error("mem_req_fifo requires AXI_RD_DW >= %0d for packed load response",
+             DICE_REG_DATA_WIDTH + LOAD_META_W_LP);
+  end
+
+  function automatic logic [AXI_UW-1:0] pack_load_meta(
+      input logic [TID_W_LP-1:0] tid,
+      input logic [DICE_EBLOCK_ID_WIDTH-1:0] e_block_id,
+      input logic [DICE_REG_ADDR_WIDTH-1:0] rsp_addr
+  );
+    logic [AXI_UW-1:0] meta;
+    begin
+      meta = '0;
+      meta[0+:DICE_REG_ADDR_WIDTH] = rsp_addr;
+      meta[DICE_REG_ADDR_WIDTH+:DICE_EBLOCK_ID_WIDTH] = e_block_id;
+      meta[DICE_REG_ADDR_WIDTH+DICE_EBLOCK_ID_WIDTH+:TID_W_LP] = tid;
+      return meta;
+    end
+  endfunction
 
   mem_req_bundle_s bundle_req_li, bundle_head;
   mem_req_s [ENQ_PORTS_LP-1:0] piso_data_li;
@@ -182,14 +214,14 @@ module mem_req_fifo
     bundle_req_li.e_block_id = enq_e_block_id_i;
 
     for (int i = 0; i < ENQ_PORTS_LP; i++) begin
-      piso_data_li[i]             = '0;
-      piso_data_li[i].valid       = bundle_head.valid[i];
-      piso_data_li[i].tid         = bundle_head.tid;
-      piso_data_li[i].e_block_id  = bundle_head.e_block_id;
-      piso_data_li[i].addr        = bundle_head.addr[i];
-      piso_data_li[i].data        = bundle_head.data[i];
-      piso_data_li[i].rsp_addr    = bundle_head.rsp_addr[i];
-      piso_data_li[i].op          = bundle_head.op[i];
+      piso_data_li[i]            = '0;
+      piso_data_li[i].valid      = bundle_head.valid[i];
+      piso_data_li[i].tid        = bundle_head.tid;
+      piso_data_li[i].e_block_id = bundle_head.e_block_id;
+      piso_data_li[i].addr       = bundle_head.addr[i];
+      piso_data_li[i].data       = bundle_head.data[i];
+      piso_data_li[i].rsp_addr   = bundle_head.rsp_addr[i];
+      piso_data_li[i].op         = bundle_head.op[i];
     end
   end
 
@@ -221,12 +253,12 @@ module mem_req_fifo
       .yumi_i(piso_yumi_li)
   );
 
-  assign bundle_head = bundle_head_v_lo ? bundle_head_lo : '0;
-  assign serial_req_lo = piso_v_lo ? serial_req_bits_lo : '0;
-  assign head_req      = head_v_lo ? head_req_lo : '0;
-  assign enq_ready_o   = bundle_fifo_ready_lo;
+  assign bundle_head         = bundle_head_v_lo ? bundle_head_lo : '0;
+  assign serial_req_lo       = piso_v_lo ? serial_req_bits_lo : '0;
+  assign head_req            = head_v_lo ? head_req_lo : '0;
+  assign enq_ready_o         = bundle_fifo_ready_lo;
   assign bundle_fifo_yumi_li = bundle_head_v_lo & piso_ready_lo;
-  assign bundle_pop_o = bundle_fifo_yumi_li;
+  assign bundle_pop_o        = bundle_fifo_yumi_li;
 
   bsg_fifo_1r1w_small #(
       .width_p($bits(mem_req_s)),
@@ -251,6 +283,9 @@ module mem_req_fifo
   logic [                               AXI_DW-1:0] h_data;
   logic [                  DICE_REG_ADDR_WIDTH-1:0] h_rsp_addr;
   logic                                             h_op;
+  logic [                             TID_W_LP-1:0] rsp_meta_tid;
+  logic [                 DICE_EBLOCK_ID_WIDTH-1:0] rsp_meta_e_block_id;
+  logic [                  DICE_REG_ADDR_WIDTH-1:0] rsp_meta_addr;
   logic                                             rsp_is_gpr;
   logic                                             rsp_bank_ready;
 
@@ -260,8 +295,13 @@ module mem_req_fifo
   assign h_data = active_req_q.data;
   assign h_rsp_addr = active_req_q.rsp_addr;
   assign h_op = active_req_q.op;
-  assign rsp_is_gpr = (h_rsp_addr < DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS));
-  assign rsp_bank_ready = rsp_is_gpr ? rsp_data_ready_i[h_rsp_addr[$clog2(
+  assign rsp_meta_addr = axi_rdata_i[LOAD_META_LSB_LP+:DICE_REG_ADDR_WIDTH];
+  assign rsp_meta_e_block_id =
+      axi_rdata_i[LOAD_META_LSB_LP+DICE_REG_ADDR_WIDTH+:DICE_EBLOCK_ID_WIDTH];
+  assign rsp_meta_tid =
+      axi_rdata_i[LOAD_META_LSB_LP+DICE_REG_ADDR_WIDTH+DICE_EBLOCK_ID_WIDTH+:TID_W_LP];
+  assign rsp_is_gpr = (rsp_meta_addr < DICE_REG_ADDR_WIDTH'(DICE_NUM_BANKS));
+  assign rsp_bank_ready = rsp_is_gpr ? rsp_data_ready_i[rsp_meta_addr[$clog2(
       DICE_NUM_BANKS
   )-1:0]] : rsp_special_ready_i;
 
@@ -291,6 +331,7 @@ module mem_req_fifo
     axi_wvalid_o  = 1'b0;
     axi_bready_o  = 1'b0;
     axi_araddr_o  = '0;
+    axi_aruser_o  = '0;
     axi_arvalid_o = 1'b0;
     axi_rready_o  = 1'b0;
 
@@ -305,6 +346,7 @@ module mem_req_fifo
       ST_WAIT_B: axi_bready_o = 1'b1;
       ST_ISSUE_R: begin
         axi_araddr_o  = AXI_AW'(h_addr);
+        axi_aruser_o  = pack_load_meta(h_tid, h_e_block_id, h_rsp_addr);
         axi_arvalid_o = 1'b1;
       end
       ST_WAIT_R: axi_rready_o = axi_rvalid_i && rsp_bank_ready;
@@ -313,7 +355,7 @@ module mem_req_fifo
   end
 
   // -------------------------------------------------------------------------
-  // Response output — AXI data returns with the stored RF destination register.
+  // Response output — RDATA[15:0] is load data; RDATA[27:16] is load metadata.
   // -------------------------------------------------------------------------
   assign rsp_valid_o = (state == ST_WAIT_R) && axi_rvalid_i && rsp_bank_ready;
   assign head_yumi_li = ((state == ST_WAIT_B) && axi_bvalid_i)
@@ -324,10 +366,10 @@ module mem_req_fifo
   assign store_pop_e_block_id_o = h_e_block_id;
 
   always_comb begin
-    rsp_tid_o = h_tid;
-    rsp_e_block_id_o = h_e_block_id;
-    rsp_addr_o = h_rsp_addr;
-    rsp_data_o = axi_rdata_i;
+    rsp_tid_o = rsp_meta_tid;
+    rsp_e_block_id_o = rsp_meta_e_block_id;
+    rsp_addr_o = rsp_meta_addr;
+    rsp_data_o = axi_rdata_i[LOAD_DATA_LSB_LP+:DICE_REG_DATA_WIDTH];
   end
 
   // -------------------------------------------------------------------------

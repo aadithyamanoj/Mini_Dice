@@ -61,6 +61,8 @@ module top_level_io
    ,output logic [7:0]                                   rx_arlen_o
    ,output logic [2:0]                                   rx_arsize_o
    ,output logic [1:0]                                   rx_arburst_o
+   ,output logic                                         rx_aruser_is_meta_o
+   ,output logic [11:0]                                  rx_aruser_o
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
@@ -91,6 +93,8 @@ module top_level_io
    ,input  logic [7:0]                                   tx_arlen_i
    ,input  logic [2:0]                                   tx_arsize_i
    ,input  logic [1:0]                                   tx_arburst_i
+   ,input  logic                                         tx_aruser_is_meta_i
+   ,input  logic [11:0]                                  tx_aruser_i
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
@@ -186,6 +190,8 @@ module top_level_io
     .arlen_o        (rx_arlen_o),
     .arsize_o       (rx_arsize_o),
     .arburst_o      (rx_arburst_o),
+    .aruser_is_meta_o(rx_aruser_is_meta_o),
+    .aruser_o       (rx_aruser_o),
     .rvalid_o       (rx_rvalid_o),
     .rready_i       (rx_rready_i),
     .rdata_o        (rx_rdata_o),
@@ -227,6 +233,8 @@ module top_level_io
     .arlen_i        (tx_arlen_i),
     .arsize_i       (tx_arsize_i),
     .arburst_i      (tx_arburst_i),
+    .aruser_is_meta_i(tx_aruser_is_meta_i),
+    .aruser_i       (tx_aruser_i),
     .rvalid_i       (tx_rvalid_i),
     .rready_o       (tx_rready_o),
     .rdata_i        (tx_rdata_i),

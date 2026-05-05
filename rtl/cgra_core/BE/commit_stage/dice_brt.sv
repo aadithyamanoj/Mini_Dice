@@ -24,6 +24,8 @@ module dice_brt
   // Store retire signals from mem_req_fifo
   input  logic                               store_retire_valid_i,
   input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    store_retire_e_block_id_i,
+  input  logic                               exec_retire_valid_i,
+  input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    exec_retire_e_block_id_i,
 
   // Commit interface
   output logic                               eblock_commit_valid_o,
@@ -158,9 +160,11 @@ module dice_brt
     .update_e_block_id_i  (retire_evt_e_block_id_lo),
     .update_reduce_count_i(retire_evt_reduce_count_li),
 
-    // Store update interface — direct from mem_req_fifo (one at a time)
+    // Store update interface — direct from mem_req_fifo.
     .store_update_valid_i      (store_retire_valid_i),
     .store_update_e_block_id_i (store_retire_e_block_id_i),
+    .exec_update_valid_i       (exec_retire_valid_i),
+    .exec_update_e_block_id_i  (exec_retire_e_block_id_i),
 
     // Commit interface
     .pop_valid_o     (eblock_commit_valid_o),
