@@ -15,9 +15,7 @@ module block_commit_table
     input  logic [S_W-1:0]                          insert_pending_stores_i,
 
     // Pending read update interface
-    input  logic                                    update_valid_i,
-    input  logic [DICE_EBLOCK_ID_WIDTH-1:0]         update_e_block_id_i,
-    input  logic [2**DICE_HW_CTA_ID_WIDTH-1:0]      update_reduce_count_i,  // max 8
+    input  logic [2**DICE_EBLOCK_ID_WIDTH-1:0][R_W-1:0] read_reduce_count_i,
 
     // Pending store update interface
     input  logic                                    store_update_valid_i,
@@ -85,10 +83,14 @@ module block_commit_table
                 commit_table[insert_e_block_id_i].pending_stores <= insert_pending_stores_i;
             end
 
-            // Handle pending read count updates (load RF writebacks)
-            if (update_valid_i && commit_table[update_e_block_id_i].valid) begin
-                commit_table[update_e_block_id_i].pending_reads <=
-                    commit_table[update_e_block_id_i].pending_reads - update_reduce_count_i;
+            // Handle pending read count updates (load RF writebacks). The RF
+            // can retire multiple banks in one cycle, so dice_brt reduces the
+            // retire bundle into one count per eblock.
+            for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
+                if ((read_reduce_count_i[i] != '0) && commit_table[i].valid) begin
+                    commit_table[i].pending_reads <=
+                        commit_table[i].pending_reads - read_reduce_count_i[i];
+                end
             end
 
             // Handle pending store count updates. Store AW/W retire events and
@@ -175,31 +177,14 @@ module block_commit_table
     ) else $error("Invalid e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d",
                   insert_e_block_id_i, 2**DICE_EBLOCK_ID_WIDTH);
 
-    // Update e_block_id must be a valid table index
-    assert_update_id_in_range: assert property (
-        @(posedge clk_i) disable iff (rst_i)
-        update_valid_i |-> (update_e_block_id_i < 2**DICE_EBLOCK_ID_WIDTH)
-    ) else $error("Invalid update e_block_id %0d exceeds DICE_EBLOCK_ID_WIDTH %0d",
-                  update_e_block_id_i, 2**DICE_EBLOCK_ID_WIDTH);
-
-    // Update reduce count must not exceed the maximum of 8
-    assert_reduce_count_max: assert property (
-        @(posedge clk_i) disable iff (rst_i)
-        update_valid_i |-> (update_reduce_count_i <= 4'd8)
-    ) else $error("Invalid reduce count %0d exceeds maximum of 8", update_reduce_count_i);
-
-    // Pending reads must not underflow on an update
-    assert_no_read_underflow: assert property (
-        @(posedge clk_i) disable iff (rst_i)
-        (update_valid_i && commit_table[update_e_block_id_i].valid) |->
-        (commit_table[update_e_block_id_i].pending_reads >= update_reduce_count_i)
-    ) else $error("Error: Pending reads underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
-                  update_e_block_id_i, commit_table[update_e_block_id_i].pending_reads,
-                  update_reduce_count_i, $time);
-
     always_ff @(posedge clk_i) begin
         if (!rst_i) begin
             for (int i = 0; i < 2**DICE_EBLOCK_ID_WIDTH; i++) begin
+                if ((read_reduce_count_i[i] != '0) && commit_table[i].valid
+                    && (commit_table[i].pending_reads < read_reduce_count_i[i])) begin
+                    $error("Error: Pending reads underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
+                           i, commit_table[i].pending_reads, read_reduce_count_i[i], $time);
+                end
                 if ((store_reduce_count[i] != '0) && commit_table[i].valid
                     && (commit_table[i].pending_stores < store_reduce_count[i])) begin
                     $error("Error: Pending stores underflow for entry %0d. Current: %0d, Reduce: %0d at time %0t",
