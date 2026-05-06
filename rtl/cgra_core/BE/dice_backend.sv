@@ -459,6 +459,16 @@ module dice_backend
       .ldst_ready_o(ldst_ready_lo)
   );
 
+  // synthesis translate_off
+  always_ff @(posedge clk_i) begin
+    if (cgra_v_lo)
+      $display("[CGRA_ADDR] t=%0t eblock=%0d mem_addr_0=%h mem_addr_1=%h mem_addr_2=%h mem_addr_3=%h",
+               $time, cgra_e_block_id_lo,
+               cgra_mem_addr_lo_0, cgra_mem_addr_lo_1,
+               cgra_mem_addr_lo_2, cgra_mem_addr_lo_3);
+  end
+  // synthesis translate_on
+
   // =========================================================================
   // LDST FIFO
   // =========================================================================
@@ -610,15 +620,6 @@ module dice_backend
         $display("[BE:dice_backend] t=%0t commit emitted: eblock=%0d hw_cta_pending=%0b", $time,
                  eblock_commit_id_o, hw_cta_pending_o);
       end
-
-      // Watchdog: print fdr_ready_o blockers when stalled
-      // if (fdr_valid_i && !fdr_ready_o && !dispatch_busy
-      //     && !prog_busy_lo && !prog_pending_q) begin
-      //   $display(
-      //       "[BE:watchdog] t=%0t STALL cgra_v=%0b pipe_empty=%0b pipe_count=%0d",
-      //       $time, cgra_v_lo, cgra_pipeline_empty_lo,
-      //       cgra_pipeline_count_q);
-      // end
 
       fdr_valid_prev_q     <= fdr_valid_i;
       dispatch_busy_prev_q <= dispatch_busy;

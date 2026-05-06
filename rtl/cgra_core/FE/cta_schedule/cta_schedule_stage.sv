@@ -61,6 +61,10 @@ module cta_schedule_stage
   logic active_table_out_valid;
   logic active_table_out_ready;
   logic active_table_full;
+
+  // Complete channel: the external master asserts complete_ready to consume
+  // the completed-CTA entry from the active CTA table output buffer.
+  assign active_table_out_ready = cta_if_inst.complete_ready;
   active_cta_t active_cta_entry;
 
   // ---- SIMT init and misc control ----

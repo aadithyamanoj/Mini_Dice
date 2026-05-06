@@ -170,4 +170,12 @@ module dice_cgra_subs
       .prog_we_o(prog_we_o)
   );
 
+  // synthesis translate_off
+  always_ff @(posedge clk_i) begin
+    if (prog_done_li && !$past(prog_done_li))
+      $display("[CGRA_PROG] t=%0t prog_done asserted: mem_addr_o_0=%h mem_addr_o_1=%h mem_addr_o_2=%h mem_addr_o_3=%h",
+               $time, mem_addr_o_0, mem_addr_o_1, mem_addr_o_2, mem_addr_o_3);
+  end
+  // synthesis translate_on
+
 endmodule

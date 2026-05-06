@@ -234,4 +234,42 @@ module cgra_bitstream_buf_serial
     end
   end
 
+  // synthesis translate_off
+  always_ff @(posedge clk_i) begin : dbg_bank
+    logic [1:0] prev_bank_valid;
+    if (reset_i) begin
+      prev_bank_valid <= 2'b00;
+    end else begin
+      prev_bank_valid <= bank_valid_r;
+      if (bank_valid_r[0] && !prev_bank_valid[0]) begin
+        $display("[BSBUF] t=%0t bank0 now valid. chunk[0]=%08h chunk[1]=%08h chunk[2]=%08h chunk[3]=%08h chunk[4]=%08h chunk[5]=%08h",
+          $time,
+          bank_data_r[0][31:0],
+          bank_data_r[0][63:32],
+          bank_data_r[0][95:64],
+          bank_data_r[0][127:96],
+          bank_data_r[0][159:128],
+          bank_data_r[0][191:160]);
+        $display("[BSBUF] t=%0t bank0: chunk[6]=%08h chunk[7]=%08h chunk[8]=%08h chunk[9]=%08h chunk[10]=%08h",
+          $time,
+          bank_data_r[0][223:192],
+          bank_data_r[0][255:224],
+          bank_data_r[0][287:256],
+          bank_data_r[0][319:288],
+          bank_data_r[0][351:320]);
+      end
+      if (v_i && ready_o) begin
+        $display("[BSBUF] t=%0t prog START bank=%0d. chunk[0]=%08h chunk[1]=%08h chunk[2]=%08h chunk[3]=%08h chunk[4]=%08h chunk[5]=%08h",
+          $time, bank_i,
+          bank_data_r[bank_i][31:0],
+          bank_data_r[bank_i][63:32],
+          bank_data_r[bank_i][95:64],
+          bank_data_r[bank_i][127:96],
+          bank_data_r[bank_i][159:128],
+          bank_data_r[bank_i][191:160]);
+      end
+    end
+  end
+  // synthesis translate_on
+
 endmodule
