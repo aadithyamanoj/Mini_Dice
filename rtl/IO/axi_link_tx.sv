@@ -32,7 +32,7 @@ module axi_link_tx
    ,input  logic [7:0]              arlen_i
    ,input  logic [2:0]              arsize_i
    ,input  logic [1:0]              arburst_i
-   ,input  logic [12:0]             aruser_i
+   ,input  logic [13:0]             aruser_i
 
    ,input  logic                    rvalid_i
    ,output logic                    rready_o
@@ -66,9 +66,10 @@ module axi_link_tx
   //   WRITE_REQ : [31:29] opcode, [28:16] length,        [15:0] address
   //   READ_REQ  : [31:29] opcode, [28:16] length,        [15:0] address
   //   META_REQ  : [31:29] opcode, [28:16] aruser_i[12:0],[15:0] address
-  //               aruser_i[12] selects META_REQ over READ_REQ on AR
-  //               acceptance. The full 13-bit aruser is carried in the
-  //               middle field; no payload follows.
+  //               aruser_i[13] selects META_REQ over READ_REQ on AR
+  //               acceptance (TX-side only — never serialized). The lower
+  //               13 bits aruser_i[12:0] are carried verbatim in the
+  //               middle field as opaque metadata. No payload follows.
   //   READ_RESP : [31:29] opcode, [28:16] length,        [15:2] reserved, [1:0] rresp
   //   WRITE_RESP: [31:29] opcode, [28:16] 1,             [15:0] 16'b0
   //
@@ -419,12 +420,13 @@ module axi_link_tx
                                   : (r_accept && !r_capture_active_r) ? pkt_kind_e'(PKT_RD_RESP)
                                   : pkt_kind_e'(PKT_WR_RESP);
 
-  // aruser_i[12] selects META_REQ at the link layer. For META_REQ the full
-  // 13-bit aruser is captured into `payload` for transport; for READ_REQ
-  // `payload` carries the beat count instead.
+  // aruser_i[13] selects META_REQ at the link layer (TX-only — not
+  // serialized). For META_REQ the lower 13 bits aruser_i[12:0] are
+  // captured into `payload` for transport; for READ_REQ `payload`
+  // carries the beat count instead.
   assign rd_desc_push_v_li    = ar_accept;
-  assign rd_desc_push_data_li = {araddr_i, aruser_i[12],
-                                 aruser_i[12] ? aruser_i : ar_beats};
+  assign rd_desc_push_data_li = {araddr_i, aruser_i[13],
+                                 aruser_i[13] ? aruser_i[12:0] : ar_beats};
 
   assign b_resp_push_v_li     = b_accept;
   assign b_resp_push_data_li  = bresp_i;

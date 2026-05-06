@@ -35,7 +35,7 @@ module axi_link_rx
    ,output logic [7:0]              arlen_o
    ,output logic [2:0]              arsize_o
    ,output logic [1:0]              arburst_o
-   ,output logic [12:0]             aruser_o
+   ,output logic [13:0]             aruser_o
 
    ,output logic                    rvalid_o
    ,input  logic                    rready_i
@@ -62,14 +62,16 @@ module axi_link_rx
   //   WRITE_REQ : [31:29] opcode, [28:16] length,        [15:0] address
   //   READ_REQ  : [31:29] opcode, [28:16] length,        [15:0] address
   //   META_REQ  : [31:29] opcode, [28:16] aruser[12:0],  [15:0] address
-  //               AR fires once (arlen=0) with aruser_o = header[28:16].
+  //               AR fires once (arlen=0) with aruser_o[12:0] =
+  //               header[28:16] and aruser_o[13] = 1 (the meta flag is
+  //               recovered from the opcode, not the wire bits).
   //   READ_RESP : [31:29] opcode, [28:16] length,        [15:2] reserved, [1:0] rresp
   //   WRITE_RESP: [31:29] opcode, [28:16] 1,             [15:0] 16'b0
   //
   // RX reconstructs all five AXI channels from the simplified transport:
   //   WRITE_REQ  -> AW + W burst
   //   READ_REQ   -> AR burst
-  //   META_REQ   -> AR single beat with aruser_o[12]=1
+  //   META_REQ   -> AR single beat with aruser_o[13]=1
   //   READ_RESP  -> R burst
   //   WRITE_RESP -> B response
   //
@@ -570,7 +572,11 @@ module axi_link_rx
                      : (rd_desc_cast.payload[7:0] - 8'd1);
   assign arsize_o  = axi_size_lp;
   assign arburst_o = axi_burst_lp;
-  assign aruser_o  = rd_desc_cast.is_meta ? rd_desc_cast.payload : 13'b0;
+  // aruser_o[13] is the recovered meta flag (derived from opcode);
+  // aruser_o[12:0] is the metadata payload from the META_REQ header,
+  // or zero for a normal READ_REQ.
+  assign aruser_o  = {rd_desc_cast.is_meta,
+                      rd_desc_cast.is_meta ? rd_desc_cast.payload : 13'b0};
   assign rd_desc_yumi_li = arvalid_o && arready_i;
 
   // --------------------------------------------------------------------------
