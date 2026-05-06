@@ -35,3 +35,8 @@ sysProgressP*
 *~
 
 /tb/cgra_core/verification/vc_hdrs.h
+
+# Locally-cloned external trees (not submodules of Mini_Dice).
+# basejump_stl is referenced via $BSG_HOME at compile time; tracking it
+# in git here would require pulling in its corrupted nested submodules.
+/rtl/basejump_stl/

@@ -73,9 +73,9 @@ The scoreboard counts `expected` vs `seen` and reports any unexpected addresses.
 | Fetch addresses | covered |
 | Fetch backpressure | covered (8-cycle latency) |
 | AXI error response (SLVERR) | covered |
-| **ADD / SUB ALU paths** | **BLOCKED** on add_array bitstream for cgra-v0 |
-| **Branch / SIMT divergence** | **BLOCKED** on `branch_ena=1` kernel |
-| **Multi-thread per CTA (`tcount > 1`)** | **BLOCKED** on multi-thread kernel |
+| **ADD / SUB ALU paths** | not covered (no kernel) |
+| **Branch / SIMT divergence** | not covered (no kernel) |
+| **Multi-thread per CTA (`tcount > 1`)** | not covered (no kernel) |
 | AXI-Lite backpressure (LDST FIFO full) | not covered |
 | Mid-test reset / reset-during-prog | not covered |
 | Long-DAG kernels (10+ eblocks) | not covered |
