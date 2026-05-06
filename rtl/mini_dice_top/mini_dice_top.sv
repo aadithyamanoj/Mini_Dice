@@ -11,7 +11,8 @@
 //   dice_core mfetch/bsfetch (slv_req_t) → crossbar
 //   dice_core axi_* (dfetch) → crossbar
 //
-// grid_size and thread_count are tied to single-CTA defaults for now.
+// grid_size is tied to a single-CTA default for now. Thread count is
+// host-programmable through the CSR bank so smaller CTAs can be launched.
 // =============================================================================
 
 `ifndef AXI_TYPEDEF_SVH_
@@ -64,14 +65,14 @@ module mini_dice_top
     // input  logic                      fpga_axi_i_r_ready,
 
     // Core-side stream from the external bsg_link wrapper.
-    input  logic [FLIT_WIDTH-1:0]    link_rx_data_i,
-    input  logic                     link_rx_valid_i,
-    output logic                     link_rx_yumi_o,
+    input  logic [FLIT_WIDTH-1:0] link_rx_data_i,
+    input  logic                  link_rx_valid_i,
+    output logic                  link_rx_yumi_o,
 
     // Core-side stream to the external bsg_link wrapper.
-    output logic [FLIT_WIDTH-1:0]    link_tx_data_o,
-    output logic                     link_tx_valid_o,
-    input  logic                     link_tx_ready_i,
+    output logic [FLIT_WIDTH-1:0] link_tx_data_o,
+    output logic                  link_tx_valid_o,
+    input  logic                  link_tx_ready_i,
 
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
@@ -118,9 +119,10 @@ module mini_dice_top
   // CSR outputs
   logic                           csr_start;
   logic [                   15:0] csr_start_pc;
+  logic [                   15:0] csr_thread_count;
 
   // csrX kernel arguments: cgra_io_csr regs 8-15 → dice_core
-  logic [DICE_REG_DATA_WIDTH-1:0] csrX         [8];
+  logic [DICE_REG_DATA_WIDTH-1:0] csrX              [8];
   logic                           cta_complete_fire;
 
   // Legacy flat FPGA AXI4 host interface is no longer consumed by
@@ -135,8 +137,8 @@ module mini_dice_top
   // assign fpga_axi_i_r_valid  = 1'b0;
 
   // --------------------------------------------------------------------------
-  // cta_if — internal; driven from cgra_io_csr start/start_pc outputs
-  // grid_size and thread_count defaulted to single-CTA (1×1×1, 1 thread)
+  // cta_if — internal; driven from cgra_io_csr launch outputs.
+  // grid_size and cta_id remain single-CTA defaults for now.
   // --------------------------------------------------------------------------
   cta_if u_cta_if ();
 
@@ -147,7 +149,7 @@ module mini_dice_top
     u_cta_if.dispatch_data.kernel_desc.grid_size.x  = 1;
     u_cta_if.dispatch_data.kernel_desc.grid_size.y  = 1;
     u_cta_if.dispatch_data.kernel_desc.grid_size.z  = 1;
-    u_cta_if.dispatch_data.kernel_desc.thread_count = 16;
+    u_cta_if.dispatch_data.kernel_desc.thread_count = csr_thread_count[DICE_TID_WIDTH:0];
     u_cta_if.complete_ready                         = 1'b1;
   end
 
@@ -288,10 +290,11 @@ module mini_dice_top
       .axi_resp_o(csr_resp),
 
       // Regs 0-7: control outputs
-      .start_o     (csr_start),
-      .start_pc_o  (csr_start_pc),
-      .cgra_reset_o(csr_cgra_reset_o),
-      .bsload_en_o (csr_bsload_en_o),
+      .start_o       (csr_start),
+      .start_pc_o    (csr_start_pc),
+      .thread_count_o(csr_thread_count),
+      .cgra_reset_o  (csr_cgra_reset_o),
+      .bsload_en_o   (csr_bsload_en_o),
 
       // hw_* status exposed through CSR STATUS.
       .hw_busy_i          (1'b0),

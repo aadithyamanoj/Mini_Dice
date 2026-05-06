@@ -48,8 +48,6 @@ import "DPI-C" context function int unsigned dice_core_tb_check_done();
 module tb_chip_top;
   import dice_pkg::*;
   import DE_pkg::*;
-  import axi4_xbar_pkg::*;
-  import axi_pkg::*;
 
   // --------------------------------------------------------------------------
   // Parameters
@@ -62,11 +60,13 @@ module tb_chip_top;
   localparam int TIMEOUT_CYC = 70000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
+  localparam logic [1:0] BURST_INCR = 2'b01;
 
   localparam logic [AW-1:0] CSR_BASE = 16'hFF00;
   localparam logic [AW-1:0] REG_CTRL = CSR_BASE + 16'h0000;
   localparam logic [AW-1:0] REG_STARTPC = CSR_BASE + 16'h0002;
   localparam logic [AW-1:0] REG_STATUS = CSR_BASE + 16'h0004;
+  localparam logic [AW-1:0] REG_THREAD_COUNT = CSR_BASE + 16'h000c;
   localparam logic [AW-1:0] REG_CSRX0 = CSR_BASE + 16'h0010;
 
   localparam logic [15:0] CTRL_START = 16'h0001;
@@ -234,8 +234,8 @@ module tb_chip_top;
   logic          ep_rx_arready;
   logic [AW-1:0] ep_rx_araddr;
   logic [   7:0] ep_rx_arlen;
+  logic [  13:0] ep_rx_aruser;
   logic          ep_rx_aruser_is_meta;
-  logic [  11:0] ep_rx_aruser;
   logic          ep_rx_rvalid;
   logic          ep_rx_rready = 1'b0;
   logic [DW-1:0] ep_rx_rdata;
@@ -292,7 +292,6 @@ module tb_chip_top;
       .rx_w_data_fifo_els_p   (8),
       .rx_r_len_fifo_els_p    (4),
       .rx_r_data_fifo_els_p   (64),
-      .rx_b_resp_fifo_els_p   (4),
       .tx_link_fifo_els_p     (64),
       .tx_aw_desc_fifo_els_p  (2),
       .tx_ar_desc_fifo_els_p  (2),
@@ -300,7 +299,6 @@ module tb_chip_top;
       .tx_w_data_fifo_els_p   (8),
       .tx_r_len_fifo_els_p    (4),
       .tx_r_data_fifo_els_p   (64),
-      .tx_b_resp_fifo_els_p   (4),
       .tx_pkt_order_fifo_els_p(8)
   ) u_fpga_ep (
       .core_clk_i(clk_i),
@@ -315,58 +313,58 @@ module tb_chip_top;
 
       .tx_awvalid_i(ep_tx_awvalid),
       .tx_awready_o(ep_tx_awready),
-      .tx_awaddr_i(ep_tx_awaddr),
-      .tx_awlen_i(ep_tx_awlen),
-      .tx_awsize_i(ep_tx_awsize),
+      .tx_awaddr_i (ep_tx_awaddr),
+      .tx_awlen_i  (ep_tx_awlen),
+      .tx_awsize_i (ep_tx_awsize),
       .tx_awburst_i(ep_tx_awburst),
-      .tx_wvalid_i(ep_tx_wvalid),
-      .tx_wready_o(ep_tx_wready),
-      .tx_wdata_i(ep_tx_wdata),
-      .tx_wlast_i(ep_tx_wlast),
+      .tx_wvalid_i (ep_tx_wvalid),
+      .tx_wready_o (ep_tx_wready),
+      .tx_wdata_i  (ep_tx_wdata),
+      .tx_wlast_i  (ep_tx_wlast),
       .tx_arvalid_i(ep_tx_arvalid),
       .tx_arready_o(ep_tx_arready),
-      .tx_araddr_i(ep_tx_araddr),
-      .tx_arlen_i(ep_tx_arlen),
-      .tx_arsize_i(ep_tx_arsize),
+      .tx_araddr_i (ep_tx_araddr),
+      .tx_arlen_i  (ep_tx_arlen),
+      .tx_arsize_i (ep_tx_arsize),
       .tx_arburst_i(ep_tx_arburst),
-      .tx_aruser_is_meta_i(1'b0),
-      .tx_aruser_i(12'b0),
-      .tx_rvalid_i(ep_tx_rvalid),
-      .tx_rready_o(ep_tx_rready),
-      .tx_rdata_i(ep_tx_rdata),
-      .tx_rresp_i(ep_tx_rresp),
-      .tx_rlast_i(ep_tx_rlast),
-      .tx_bvalid_i(ep_tx_bvalid),
-      .tx_bready_o(ep_tx_bready),
-      .tx_bresp_i(ep_tx_bresp),
+      .tx_aruser_i (14'b0),
+      .tx_rvalid_i (ep_tx_rvalid),
+      .tx_rready_o (ep_tx_rready),
+      .tx_rdata_i  (ep_tx_rdata),
+      .tx_rresp_i  (ep_tx_rresp),
+      .tx_rlast_i  (ep_tx_rlast),
+      .tx_bvalid_i (ep_tx_bvalid),
+      .tx_bready_o (ep_tx_bready),
+      .tx_bresp_i  (ep_tx_bresp),
 
       .rx_awvalid_o(ep_rx_awvalid),
       .rx_awready_i(1'b1),
-      .rx_awaddr_o(ep_rx_awaddr),
-      .rx_awlen_o(ep_rx_awlen),
-      .rx_awsize_o(),
+      .rx_awaddr_o (ep_rx_awaddr),
+      .rx_awlen_o  (ep_rx_awlen),
+      .rx_awsize_o (),
       .rx_awburst_o(),
-      .rx_wvalid_o(ep_rx_wvalid),
-      .rx_wready_i(1'b1),
-      .rx_wdata_o(ep_rx_wdata),
-      .rx_wlast_o(ep_rx_wlast),
+      .rx_wvalid_o (ep_rx_wvalid),
+      .rx_wready_i (1'b1),
+      .rx_wdata_o  (ep_rx_wdata),
+      .rx_wlast_o  (ep_rx_wlast),
       .rx_arvalid_o(ep_rx_arvalid),
       .rx_arready_i(ep_rx_arready),
-      .rx_araddr_o(ep_rx_araddr),
-      .rx_arlen_o(ep_rx_arlen),
-      .rx_arsize_o(),
+      .rx_araddr_o (ep_rx_araddr),
+      .rx_arlen_o  (ep_rx_arlen),
+      .rx_arsize_o (),
       .rx_arburst_o(),
-      .rx_aruser_is_meta_o(ep_rx_aruser_is_meta),
-      .rx_aruser_o(ep_rx_aruser),
-      .rx_rvalid_o(ep_rx_rvalid),
-      .rx_rready_i(ep_rx_rready),
-      .rx_rdata_o(ep_rx_rdata),
-      .rx_rresp_o(ep_rx_rresp),
-      .rx_rlast_o(ep_rx_rlast),
-      .rx_bvalid_o(ep_rx_bvalid),
-      .rx_bready_i(ep_rx_bready),
-      .rx_bresp_o(ep_rx_bresp)
+      .rx_aruser_o (ep_rx_aruser),
+      .rx_rvalid_o (ep_rx_rvalid),
+      .rx_rready_i (ep_rx_rready),
+      .rx_rdata_o  (ep_rx_rdata),
+      .rx_rresp_o  (ep_rx_rresp),
+      .rx_rlast_o  (ep_rx_rlast),
+      .rx_bvalid_o (ep_rx_bvalid),
+      .rx_bready_i (ep_rx_bready),
+      .rx_bresp_o  (ep_rx_bresp)
   );
+
+  assign ep_rx_aruser_is_meta = ep_rx_aruser[13];
 
   // --------------------------------------------------------------------------
   // FPGA memory model (identical to tb_mini_dice)
@@ -383,7 +381,7 @@ module tb_chip_top;
   logic           [   7:0] rd_beat_idx_q;
   logic           [   1:0] rd_kind_q;
   logic                    rd_aruser_is_meta_q;
-  logic           [  11:0] rd_aruser_q;
+  logic           [  12:0] rd_aruser_q;
   logic           [  15:0] csr_values          [0:7];
   logic           [  15:0] start_pc_val;
   dice_cta_desc_t          launch_desc;
@@ -401,11 +399,11 @@ module tb_chip_top;
 
   function automatic logic [DW-1:0] pack_read_beat(
       input logic [1:0] kind, input logic [AW-1:0] base, input int unsigned beat_idx,
-      input logic is_meta, input logic [11:0] meta);
+      input logic is_meta, input logic [12:0] meta);
     logic [DW-1:0] word;
     begin
       word = DW'(fetch_beat(kind, base, beat_idx));
-      if (is_meta) word[27:16] = meta;
+      if (is_meta) word[28:16] = meta;
       return word;
     end
   endfunction
@@ -444,9 +442,9 @@ module tb_chip_top;
             rd_beat_idx_q <= '0;
             rd_kind_q <= kind;
             rd_aruser_is_meta_q <= ep_rx_aruser_is_meta;
-            rd_aruser_q <= ep_rx_aruser;
+            rd_aruser_q <= ep_rx_aruser[12:0];
             ep_tx_rdata <= pack_read_beat(
-                kind, ep_rx_araddr, 0, ep_rx_aruser_is_meta, ep_rx_aruser
+                kind, ep_rx_araddr, 0, ep_rx_aruser_is_meta, ep_rx_aruser[12:0]
             );
             ep_tx_rlast <= (ep_rx_arlen == 8'd0);
             ep_tx_rresp <= 2'b00;
@@ -486,8 +484,12 @@ module tb_chip_top;
     end
   end
 
+`ifdef TB_RTL_HIER_DEBUG
   // --------------------------------------------------------------------------
-  // Completion / timeout monitor (hierarchy goes through u_dut.u_mini_dice_top)
+  // RTL-only completion / timeout monitor and deep debug probes.
+  //
+  // These use hierarchical references into RTL internals. Gate-level netlists
+  // do not preserve those names, so keep this block opt-in only.
   // --------------------------------------------------------------------------
   task automatic print_param_debug();
     $display("hello?");
@@ -537,7 +539,7 @@ module tb_chip_top;
             ep_rx_arlen,
             (ep_rx_araddr >= start_pc_val) ? 2'd1 : (ep_rx_arlen > 8'd8) ? 2'd2 : 2'd0,
             ep_rx_aruser_is_meta,
-            ep_rx_aruser
+            ep_rx_aruser[12:0]
         );
       if (ep_rx_awvalid && !ep_aw_pending)
         $display("[EP] t=%0t AW addr=0x%04x", $time, ep_rx_awaddr);
@@ -623,6 +625,7 @@ module tb_chip_top;
             u_dut.u_mini_dice_top.u_cta_if.dispatch_data.kernel_desc.start_pc
         );
     end
+`endif
 
   // --------------------------------------------------------------------------
   // AXI write + CSR write tasks (same as tb_mini_dice)
@@ -770,6 +773,8 @@ module tb_chip_top;
     for (int i = 0; i < 8; i++) csr_write(REG_CSRX0 + AW'(i * 2), csr_values[i]);
     $display("[TB] Setting start_pc = 0x%04x", start_pc_val);
     csr_write(REG_STARTPC, start_pc_val);
+    $display("[TB] Setting thread_count = %0d", launch_desc.kernel_desc.thread_count);
+    csr_write(REG_THREAD_COUNT, 16'(launch_desc.kernel_desc.thread_count));
     $display("[TB] Pulsing CTRL.start");
     csr_write(REG_CTRL, CTRL_START);
   endtask

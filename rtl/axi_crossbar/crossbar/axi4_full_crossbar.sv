@@ -26,7 +26,7 @@
 //   Strobe width  :  2 b
 //   ID width      :  4 b per master; 6 b at every slave port
 //                    (crossbar appends log2(4)=2 b for global uniqueness)
-//   User width    :  1 b
+//   User width    : 14 b
 //   Reset polarity: active-high (rst_i)  — inverted internally for AXI IP
 // =============================================================================
 
@@ -47,7 +47,7 @@ package axi4_xbar_pkg;
   localparam int unsigned AxiAddrWidth = 16;
   localparam int unsigned AxiDataWidth = 32;
   localparam int unsigned AxiStrbWidth = AxiDataWidth / 8;  // 4
-  localparam int unsigned AxiUserWidth = 12;
+  localparam int unsigned AxiUserWidth = 14;
 
   // ---------------------------------------------------------------------------
   // Crossbar topology

@@ -26,7 +26,7 @@ module mem_req_fifo_legacy
 #(
     parameter int BUNDLE_FIFO_DEPTH = MEM_REQ_BUNDLE_FIFO_DEPTH,
     parameter int DEPTH = BUNDLE_FIFO_DEPTH,
-    parameter int AXI_UW = 12,
+    parameter int AXI_UW = 14,
     parameter int AXI_RD_DW = 32,
     localparam int ENQ_PORTS_LP = 4,
     localparam int AXI_AW = 16,
@@ -137,8 +137,9 @@ module mem_req_fifo_legacy
   localparam int LOAD_META_LSB_LP = DICE_REG_DATA_WIDTH;
 
   initial begin
-    if (AXI_UW < LOAD_META_W_LP)
-      $error("mem_req_fifo requires AXI_UW >= %0d for load metadata", LOAD_META_W_LP);
+    if (AXI_UW < LOAD_META_W_LP + 1)
+      $error("mem_req_fifo requires AXI_UW >= %0d for load metadata plus is_meta",
+             LOAD_META_W_LP + 1);
     if (AXI_RD_DW < DICE_REG_DATA_WIDTH + LOAD_META_W_LP)
       $error("mem_req_fifo requires AXI_RD_DW >= %0d for packed load response",
              DICE_REG_DATA_WIDTH + LOAD_META_W_LP);
@@ -155,6 +156,7 @@ module mem_req_fifo_legacy
       meta[0+:DICE_REG_ADDR_WIDTH] = rsp_addr;
       meta[DICE_REG_ADDR_WIDTH+:DICE_EBLOCK_ID_WIDTH] = e_block_id;
       meta[DICE_REG_ADDR_WIDTH+DICE_EBLOCK_ID_WIDTH+:TID_W_LP] = tid;
+      meta[AXI_UW-1] = 1'b1;
       return meta;
     end
   endfunction
