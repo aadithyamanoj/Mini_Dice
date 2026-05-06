@@ -123,6 +123,13 @@ module tb_top;
   // -------------------------------------------------------------------------
   // UVM config DB + test launch
   // -------------------------------------------------------------------------
+  // Hierarchical probes: capture the bits actually shifted INTO the CGRA scan
+  // chain (between the bitstream buffer and dice_top), which is what we want
+  // to verify rather than the chain's serial output.
+  // -------------------------------------------------------------------------
+  assign vif.cgra_prog_din    = u_dut.u_dice_backend.u_dice_cgra_rf.cgra_subs_inst.prog_din_li;
+  assign vif.cgra_prog_we_in  = u_dut.u_dice_backend.u_dice_cgra_rf.cgra_subs_inst.prog_we_li;
+
   initial begin
     uvm_config_db #(virtual dice_core_vif)::set(null, "uvm_test_top.*", "vif", vif);
     run_test();

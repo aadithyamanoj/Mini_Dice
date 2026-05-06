@@ -35,6 +35,9 @@ class dice_core_env extends uvm_env;
     axil_agnt.ap.connect(sb.axil_fifo.analysis_export);
     cta_agnt.dispatch_ap.connect(sb.cta_dispatch_fifo.analysis_export);
     cta_agnt.complete_ap.connect(sb.cta_complete_fifo.analysis_export);
+    cgra_mon.bs_ap.connect(sb.prog_fifo.analysis_export);
+    mfetch_agnt.ap.connect(sb.mfetch_fifo.analysis_export);
+    bsfetch_agnt.ap.connect(sb.bsfetch_fifo.analysis_export);
   endfunction
 
 endclass

@@ -36,8 +36,9 @@ class axil_slave_monitor extends uvm_monitor;
       do @(posedge vif.clk); while (!(vif.axi_awvalid && vif.axi_awready));
       saved_addr = vif.axi_awaddr;
 
-      // Capture W
-      do @(posedge vif.clk); while (!(vif.axi_wvalid && vif.axi_wready));
+      // Capture W — check current cycle first; AW and W fire on the same cycle
+      if (!(vif.axi_wvalid && vif.axi_wready))
+        do @(posedge vif.clk); while (!(vif.axi_wvalid && vif.axi_wready));
       saved_data = vif.axi_wdata;
       saved_strb = vif.axi_wstrb;
 

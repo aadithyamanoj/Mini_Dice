@@ -40,10 +40,15 @@ interface dice_core_vif
   logic [15:0] csrX [0:7];
 
   // -------------------------------------------------------------------------
-  // CGRA scan-chain programming outputs
+  // CGRA scan-chain programming outputs (top-level)
   // -------------------------------------------------------------------------
   logic cgra_prog_dout;
   logic cgra_prog_we;
+
+  // Internal probes: bits actually being shifted INTO the chain
+  // (driven by hierarchical-reference assigns in tb_top)
+  logic cgra_prog_din;
+  logic cgra_prog_we_in;
 
   // -------------------------------------------------------------------------
   // AXI-Lite master (flat signals, LDST FIFO → crossbar)

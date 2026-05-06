@@ -17,6 +17,7 @@ package dice_core_uvm_pkg;
   `include "mem_seq_item.sv"
   `include "axil_seq_item.sv"
   `include "cgra_prog_item.sv"
+  `include "cgra_bitstream_item.sv"
 
   // CTA agent
   `include "cta_driver.sv"
@@ -43,5 +44,12 @@ package dice_core_uvm_pkg;
   // Tests
   `include "dice_core_base_test.sv"
   `include "dice_core_smoke_test.sv"
+  `include "dice_core_multi_cta_test.sv"
+  `include "dice_core_full_mul_array_test.sv"
+  `include "dice_core_fetch_latency_test.sv"
+  `include "dice_core_multi_cta_full_test.sv"
+  `include "dice_core_mul_edge_data_test.sv"
+  `include "dice_core_axil_error_test.sv"
+  `include "dice_core_mul_random_data_test.sv"
 
 endpackage

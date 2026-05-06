@@ -79,10 +79,16 @@ class mem_slave_driver extends uvm_driver #(mem_seq_item);
     // Optional latency before responding
     repeat (resp_latency) @(posedge vif.clk);
 
-    // Drive R channel beat by beat
+    // Drive R channel beat by beat.
+    // Each 32-bit AXI beat packs two consecutive 16-bit mem_model words:
+    //   data[15:0]  = mem_model[base + 2*i]
+    //   data[31:16] = mem_model[base + 2*i + 1]
     for (int i = 0; i < beats; i++) begin
-      logic [15:0] addr_i = item.addr + 16'(i);
-      logic [15:0] data_i = mem_model.exists(addr_i) ? mem_model[addr_i] : 16'hDEAD;
+      logic [15:0] addr_lo = item.addr + 16'(2*i);
+      logic [15:0] addr_hi = item.addr + 16'(2*i + 1);
+      logic [31:0] data_i;
+      data_i[15:0]  = mem_model.exists(addr_lo) ? mem_model[addr_lo] : 16'hDEAD;
+      data_i[31:16] = mem_model.exists(addr_hi) ? mem_model[addr_hi] : 16'h0000;
 
       set_r(item.id, data_i, 2'b00, (i == beats - 1));
 
@@ -105,7 +111,7 @@ class mem_slave_driver extends uvm_driver #(mem_seq_item);
     else                    vif.bsfetch_resp.ar_ready  = val;
   endfunction
 
-  function void set_r(logic [3:0] id, logic [15:0] data,
+  function void set_r(logic [3:0] id, logic [31:0] data,
                       logic [1:0] resp, logic last);
     if (port_sel == MFETCH) begin
       vif.mfetch_resp.r.id   = id;
