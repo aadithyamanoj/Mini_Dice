@@ -18,7 +18,6 @@ module top_level_io
    ,parameter int rx_w_data_fifo_els_p = 8
    ,parameter int rx_r_len_fifo_els_p  = 4
    ,parameter int rx_r_data_fifo_els_p = 8
-   ,parameter int rx_b_resp_fifo_els_p = 4
    ,parameter int tx_link_fifo_els_p   = 8
    ,parameter int tx_aw_desc_fifo_els_p = 2
    ,parameter int tx_ar_desc_fifo_els_p = 2
@@ -26,8 +25,12 @@ module top_level_io
    ,parameter int tx_w_data_fifo_els_p = 8
    ,parameter int tx_r_len_fifo_els_p  = 4
    ,parameter int tx_r_data_fifo_els_p = 8
-   ,parameter int tx_b_resp_fifo_els_p = 4
    ,parameter int tx_pkt_order_fifo_els_p = 8
+   // Depth of the locally-synthesized fake-B counter. Sized for the max
+   // number of in-flight write bursts the upstream master can have
+   // outstanding before pulsing bready; 16 is generous for any AXI master
+   // we expect to see here.
+   ,parameter int fake_b_max_outstanding_p = 16
    )
   (input  logic                                          core_clk_i
    ,input logic                                          reset_i
@@ -216,8 +219,7 @@ module top_level_io
     .w_len_fifo_els_p   (rx_w_len_fifo_els_p),
     .w_data_fifo_els_p  (rx_w_data_fifo_els_p),
     .r_len_fifo_els_p   (rx_r_len_fifo_els_p),
-    .r_data_fifo_els_p  (rx_r_data_fifo_els_p),
-    .b_resp_fifo_els_p  (rx_b_resp_fifo_els_p)
+    .r_data_fifo_els_p  (rx_r_data_fifo_els_p)
   ) axi_link_rx_i (
     .clk_i          (core_clk_i),
     .reset_i        (reset_i),
@@ -245,10 +247,7 @@ module top_level_io
     .rready_i       (rx_rready_i),
     .rdata_o        (rx_rdata_o),
     .rresp_o        (rx_rresp_o),
-    .rlast_o        (rx_rlast_o),
-    .bvalid_o       (rx_bvalid_o),
-    .bready_i       (rx_bready_i),
-    .bresp_o        (rx_bresp_o)
+    .rlast_o        (rx_rlast_o)
   );
 
   axi_link_tx #(
@@ -261,7 +260,6 @@ module top_level_io
     .w_data_fifo_els_p    (tx_w_data_fifo_els_p),
     .r_len_fifo_els_p     (tx_r_len_fifo_els_p),
     .r_data_fifo_els_p    (tx_r_data_fifo_els_p),
-    .b_resp_fifo_els_p    (tx_b_resp_fifo_els_p),
     .pkt_order_fifo_els_p (tx_pkt_order_fifo_els_p)
   ) axi_link_tx_i (
     .clk_i          (core_clk_i),
@@ -291,13 +289,63 @@ module top_level_io
     .tx_r_len_v_i   (tx_r_len_v_lo),
     .tx_r_len_i     (tx_r_len_lo),
     .tx_r_len_yumi_o(tx_r_len_yumi_li),
-    .bvalid_i       (tx_bvalid_i),
-    .bready_o       (tx_bready_o),
-    .bresp_i        (tx_bresp_i),
     .link_tx_v_o    (link_tx_core_valid_li),
     .link_tx_data_o (link_tx_core_data_li),
     .link_tx_ready_i(link_tx_core_ready_lo)
   );
+
+  // --------------------------------------------------------------------------
+  // B-channel handling without WRITE_RESP packets
+  // --------------------------------------------------------------------------
+  // The link no longer carries WRITE_RESP, so each accepted write must get
+  // its B beat synthesized locally:
+  //
+  //   * Master-facing rx_b* (chip-as-master writes going out via axi_link_tx):
+  //     A counter tracks every WLAST accepted on tx_w*. While the counter is
+  //     non-zero we present a B beat on rx_bvalid_o; the counter decrements
+  //     on each rx_b handshake. BRESP is hard-coded to OKAY because the
+  //     real slave's response is not visible here — write errors cannot be
+  //     reported back to the master. Strict-FIFO ordering on the link still
+  //     guarantees that any read-after-write the master issues after seeing
+  //     fake B reaches the slave after the corresponding WRITE_REQ.
+  //
+  //   * Slave-facing tx_b* (chip-as-slave write responses from local AXI):
+  //     The local slave still emits a real B per accepted AW. We hold
+  //     tx_bready_o high so the slave never stalls, and the response is
+  //     silently discarded — it has no path across the link.
+  //
+  // The far end of the link must perform the symmetric trick on its own
+  // master/slave sides. Both ends must agree to drop WRITE_RESP, otherwise
+  // a stale link from the previous protocol would deadlock.
+
+  localparam int fake_b_count_width_lp =
+      (fake_b_max_outstanding_p <= 1) ? 1 : $clog2(fake_b_max_outstanding_p + 1);
+
+  logic                              fake_b_push, fake_b_pop;
+  logic [fake_b_count_width_lp-1:0]  fake_b_count_r, fake_b_count_n;
+
+  assign fake_b_push = tx_wvalid_i && tx_wready_o && tx_wlast_i;
+  assign fake_b_pop  = rx_bvalid_o && rx_bready_i;
+
+  always_comb begin
+    fake_b_count_n = fake_b_count_r;
+    case ({fake_b_push, fake_b_pop})
+      2'b10:   fake_b_count_n = fake_b_count_r + fake_b_count_width_lp'(1);
+      2'b01:   fake_b_count_n = fake_b_count_r - fake_b_count_width_lp'(1);
+      default: fake_b_count_n = fake_b_count_r;
+    endcase
+  end
+
+  always_ff @(posedge core_clk_i) begin
+    if (reset_i) fake_b_count_r <= '0;
+    else         fake_b_count_r <= fake_b_count_n;
+  end
+
+  assign rx_bvalid_o = (fake_b_count_r != '0);
+  assign rx_bresp_o  = 2'b00;  // OKAY — slave error codes are not observable
+
+  // Permanently accept the local slave's B response and drop it.
+  assign tx_bready_o = 1'b1;
 
   bsg_link_ddr_upstream #(
     .width_p                        (flit_width_p),

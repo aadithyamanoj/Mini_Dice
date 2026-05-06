@@ -8,7 +8,6 @@ module axi_link_rx
    ,parameter int w_data_fifo_els_p   = 8
    ,parameter int r_len_fifo_els_p    = 4
    ,parameter int r_data_fifo_els_p   = 8
-   ,parameter int b_resp_fifo_els_p   = 4
    )
   (input  logic                     clk_i
    ,input logic                     reset_i
@@ -42,10 +41,6 @@ module axi_link_rx
    ,output logic [31:0]             rdata_o
    ,output logic [1:0]              rresp_o
    ,output logic                    rlast_o
-
-   ,output logic                    bvalid_o
-   ,input  logic                    bready_i
-   ,output logic [1:0]              bresp_o
    );
 
   // --------------------------------------------------------------------------
@@ -55,7 +50,6 @@ module axi_link_rx
   //   3'b000 = WRITE_REQ
   //   3'b001 = READ_REQ
   //   3'b010 = READ_RESP
-  //   3'b011 = WRITE_RESP
   //   3'b100 = META_REQ
   //
   // Header flit layout (32 bits):
@@ -66,14 +60,16 @@ module axi_link_rx
   //               header[28:16] and aruser_o[13] = 1 (the meta flag is
   //               recovered from the opcode, not the wire bits).
   //   READ_RESP : [31:29] opcode, [28:16] length,        [15:2] reserved, [1:0] rresp
-  //   WRITE_RESP: [31:29] opcode, [28:16] 1,             [15:0] 16'b0
   //
-  // RX reconstructs all five AXI channels from the simplified transport:
+  // RX reconstructs four AXI channels from the simplified transport:
   //   WRITE_REQ  -> AW + W burst
   //   READ_REQ   -> AR burst
   //   META_REQ   -> AR single beat with aruser_o[13]=1
   //   READ_RESP  -> R burst
-  //   WRITE_RESP -> B response
+  //
+  // The B (write-response) channel is intentionally not driven here; the
+  // upstream wrapper synthesizes a fake B beat per accepted write so the
+  // local AXI master sees write completion without the link round-trip.
   //
   // Strict FIFO assumption:
   //   No AXI IDs or reorder logic exist here. Associations rely purely on
@@ -91,7 +87,6 @@ module axi_link_rx
     OP_WRITE_REQ  = 3'b000,
     OP_READ_REQ   = 3'b001,
     OP_READ_RESP  = 3'b010,
-    OP_WRITE_RESP = 3'b011,
     OP_META_REQ   = 3'b100
   } pkt_opcode_e;
 
@@ -99,8 +94,7 @@ module axi_link_rx
     RX_IDLE      = 3'd0,
     RX_WR_DATA   = 3'd1,
     RX_R_DATA    = 3'd2,
-    RX_B_RESP    = 3'd3,
-    RX_DROP      = 3'd4
+    RX_DROP      = 3'd3
   } rx_state_e;
 
   localparam int beat_count_width_lp = 13;
@@ -190,11 +184,6 @@ module axi_link_rx
   logic                        r_data_v_lo, r_data_yumi_li;
   logic [31:0]                 r_data_lo;
 
-  logic                      b_resp_push_v_li, b_resp_push_ready_lo;
-  logic [1:0]                b_resp_push_data_li;
-  logic                      b_resp_v_lo, b_resp_yumi_li;
-  logic [1:0]                b_resp_lo;
-
   bsg_fifo_1r1w_small #(
     .width_p            (req_desc_width_lp),
     .els_p              (aw_desc_fifo_els_p),
@@ -275,22 +264,6 @@ module axi_link_rx
     .yumi_i (r_data_yumi_li)
   );
 
-  bsg_fifo_1r1w_small #(
-    .width_p            (2),
-    .els_p              (b_resp_fifo_els_p),
-    .harden_p           (0),
-    .ready_THEN_valid_p (0)
-  ) b_resp_fifo_i (
-    .clk_i  (clk_i),
-    .reset_i(reset_i),
-    .v_i    (b_resp_push_v_li),
-    .data_i (b_resp_push_data_li),
-    .ready_o(b_resp_push_ready_lo),
-    .v_o    (b_resp_v_lo),
-    .data_o (b_resp_lo),
-    .yumi_i (b_resp_yumi_li)
-  );
-
   // --------------------------------------------------------------------------
   // Parser FSM
   // --------------------------------------------------------------------------
@@ -329,8 +302,6 @@ module axi_link_rx
     r_desc_push_data_li  = '0;
     r_data_push_v_li     = 1'b0;
     r_data_push_data_li  = link_fifo_data_lo;
-    b_resp_push_v_li     = 1'b0;
-    b_resp_push_data_li  = link_fifo_data_lo[1:0];
 
     unique case (state_r)
       RX_IDLE: begin
@@ -398,19 +369,6 @@ module axi_link_rx
               end
             end
 
-            OP_WRITE_RESP: begin
-              // WRITE_RESP must always carry exactly one padded BRESP flit.
-              link_fifo_yumi_li = 1'b1;
-              if (hdr_len == beat_count_width_lp'(1))
-                state_n = RX_B_RESP;
-              else begin
-                state_n       = RX_DROP;
-                payload_rem_n = (hdr_len == '0)
-                                ? drop_count_width_lp'(1)
-                                : drop_count_width_lp'({1'b0, hdr_len});
-              end
-            end
-
             default: begin
               link_fifo_yumi_li = 1'b1;
               state_n           = RX_DROP;
@@ -449,15 +407,6 @@ module axi_link_rx
           else begin
             cur_beats_n = cur_beats_r - beat_count_width_lp'(1);
           end
-        end
-      end
-
-      RX_B_RESP: begin
-        if (link_fifo_v_lo && b_resp_push_ready_lo) begin
-          // BRESP is transported in the low bits of one padded flit.
-          link_fifo_yumi_li = 1'b1;
-          b_resp_push_v_li  = 1'b1;
-          state_n           = RX_IDLE;
         end
       end
 
@@ -643,15 +592,6 @@ module axi_link_rx
       r_resp_hold_r  <= r_resp_hold_n;
     end
   end
-
-  // --------------------------------------------------------------------------
-  // AXI B reconstruction
-  // --------------------------------------------------------------------------
-  // Each WRITE_RESP packet becomes exactly one AXI B beat.
-
-  assign bvalid_o       = b_resp_v_lo;
-  assign bresp_o        = b_resp_lo;
-  assign b_resp_yumi_li = bvalid_o && bready_i;
 
 `ifndef SYNTHESIS
   always_ff @(posedge clk_i) begin
