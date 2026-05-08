@@ -144,9 +144,6 @@ module mini_dice_top
     u_cta_if.dispatch_valid                         = csr_start;
     u_cta_if.dispatch_data                          = '0;
     u_cta_if.dispatch_data.kernel_desc.start_pc     = DICE_ADDR_WIDTH'(csr_start_pc);
-    u_cta_if.dispatch_data.kernel_desc.grid_size.x  = 1;
-    u_cta_if.dispatch_data.kernel_desc.grid_size.y  = 1;
-    u_cta_if.dispatch_data.kernel_desc.grid_size.z  = 1;
     u_cta_if.dispatch_data.kernel_desc.thread_count = 16;
     u_cta_if.complete_ready                         = 1'b1;
   end

@@ -32,7 +32,8 @@ module simt_stack_controller
 
     // ============== STACK STATUS ==============
     output logic stack_empty_o,
-    output logic stack_full_o
+    output logic stack_full_o,
+    output logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count_o
 );
 
   // ===========================================================================
@@ -126,10 +127,12 @@ module simt_stack_controller
   logic stack_full_internal;
   logic init_fire;
   logic update_fire;
+  logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count_internal;
 
   // Output status signals - direct pass-through from single stack
   assign stack_empty_o = stack_empty_internal;
   assign stack_full_o = stack_full_internal;
+  assign stack_entry_count_o = stack_entry_count_internal;
 
   // Output data signals - direct pass-through from single stack
   assign stack_top_valid_o = stack_out_valid && !stack_empty_internal;
@@ -166,7 +169,8 @@ module simt_stack_controller
       .top_active_mask_o      (stack_top_active_mask_int),
       .out_valid_o            (stack_out_valid),
       .stack_empty_o          (stack_empty_internal),
-      .stack_full_o           (stack_full_internal)
+      .stack_full_o           (stack_full_internal),
+      .stack_entry_count_o    (stack_entry_count_internal)
   );
 
   // ===========================================================================
@@ -192,7 +196,7 @@ module simt_stack_controller
   // 1        | 0         | 1       | 0       | not_taken==stack_reconv| POP
   // 1        | 0         | 1       | 0       | not_taken!=stack_reconv| MODIFY
   // 1        | 0         | 0       | 1       | 3 distinct PCs         | PUSH_TWO
-  // 1        | 0         | 0       | 1       | one path == reconv     | PUSH_ONE
+  // 1        | 0         | 0       | 1       | taken == reconv        | PUSH_ONE
   // 1        | 0         | 0       | 1       | otherwise              | MODIFY
   // ============================================================
 
