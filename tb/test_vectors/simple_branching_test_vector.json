@@ -109,12 +109,12 @@
         "bitstream_addr": 1536,
         "bitstream_length": 135,
         "branch_meta": {
-          "branch_ena": 1,
-          "branch_jump_target_offset": 2,
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
           "branch_neg_pred": 0,
           "branch_pred_reg": 0,
           "branch_reconv_offset": 0,
-          "branch_uni": 1,
+          "branch_uni": 0,
           "is_return": 0
         },
         "in_regs_bitmap": 255,
@@ -559,7 +559,7 @@
   "stage_artifacts": [
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.fasm",
       "kernel": "load_mul_array_a",
       "notes": [
@@ -570,7 +570,7 @@
     },
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
       "kernel": "load_mul_array_b",
       "notes": [
@@ -581,7 +581,7 @@
     },
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred.fasm",
       "kernel": "gen_tid_nonzero_pred",
       "notes": [
@@ -591,7 +591,7 @@
     },
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
       "kernel": "mul_array",
       "notes": [
@@ -601,7 +601,7 @@
     },
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.fasm",
       "kernel": "add_array",
       "notes": [
@@ -611,7 +611,7 @@
     },
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
       "kernel": "compute_store_addrs",
       "notes": [
@@ -621,7 +621,7 @@
     },
     {
       "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
-      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
+      "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
       "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
       "kernel": "store_mul_array",
       "notes": [

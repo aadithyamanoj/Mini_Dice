@@ -124,6 +124,8 @@ module simt_stack_controller
 
   logic stack_empty_internal;
   logic stack_full_internal;
+  logic init_fire;
+  logic update_fire;
 
   // Output status signals - direct pass-through from single stack
   assign stack_empty_o = stack_empty_internal;
@@ -138,6 +140,9 @@ module simt_stack_controller
   // Handshake ready signals
   assign update_ready_o = (current_state_q == StateIdle) && (init_valid_i == 1'b0);
   assign init_ready_o = (current_state_q == StateIdle);
+  assign init_fire = (current_state_q == StateIdle) && (init_valid_i == 1'b1);
+  assign update_fire = (current_state_q == StateIdle) && (init_valid_i == 1'b0) &&
+                       (update_valid_i == 1'b1);
 
   // With 1 CTA, the effective active mask is just the stack top active mask
   assign effective_active_mask = stack_top_active_mask_int;
@@ -187,7 +192,7 @@ module simt_stack_controller
   // 1        | 0         | 1       | 0       | not_taken==stack_reconv| POP
   // 1        | 0         | 1       | 0       | not_taken!=stack_reconv| MODIFY
   // 1        | 0         | 0       | 1       | 3 distinct PCs         | PUSH_TWO
-  // 1        | 0         | 0       | 1       | taken == reconv        | PUSH_ONE
+  // 1        | 0         | 0       | 1       | one path == reconv     | PUSH_ONE
   // 1        | 0         | 0       | 1       | otherwise              | MODIFY
   // ============================================================
 
@@ -223,12 +228,10 @@ module simt_stack_controller
 
     // Real divergence - threads split
     if (in_has_divergence) begin
-      three_distinct_pcs = (next_pc != reconv_pc) &&
-                           (not_taken_pc != reconv_pc) &&
-                           (reconv_pc != stack_reconv_pc);
+      three_distinct_pcs = (next_pc != reconv_pc) && (not_taken_pc != reconv_pc);
       if (three_distinct_pcs) return DIV_PUSH_TWO;
 
-      taken_equals_reconv = (next_pc == reconv_pc) && (reconv_pc != stack_reconv_pc);
+      taken_equals_reconv = (next_pc == reconv_pc) || (not_taken_pc == reconv_pc);
       if (taken_equals_reconv) return DIV_PUSH_ONE;
 
       return DIV_MODIFY_ONLY;
@@ -320,13 +323,17 @@ module simt_stack_controller
           new_top_entry_next.active_mask = effective_active_mask;
         end
         DIV_PUSH_ONE: begin
-          // Modify top to reconvergence point, push not-taken path
+          // Modify top to reconvergence point, push the path that has not reconverged.
           new_top_entry_next.pc = branch_reconvergence_pc_q;
           new_top_entry_next.reconvergence_pc = stack_top_reconvergence_pc_int;
           new_top_entry_next.active_mask = effective_active_mask;
-          push_entry_1_next.pc = branch_not_taken_pc_q;
+          push_entry_1_next.pc = (update_next_pc_q == branch_reconvergence_pc_q)
+                                   ? branch_not_taken_pc_q
+                                   : update_next_pc_q;
           push_entry_1_next.reconvergence_pc = branch_reconvergence_pc_q;
-          push_entry_1_next.active_mask = not_taken_active_mask;
+          push_entry_1_next.active_mask = (update_next_pc_q == branch_reconvergence_pc_q)
+                                            ? not_taken_active_mask
+                                            : taken_active_mask;
         end
         DIV_PUSH_TWO: begin
           // Modify top to reconvergence point, push both paths
@@ -355,7 +362,7 @@ module simt_stack_controller
     stack_push = 1'b0;
     stack_modify_top = 1'b0;
     stack_pop = 1'b0;
-    stack_read_top = 1'b1;  // Always read to keep top valid
+    stack_read_top = 1'b0;
     stack_push_next_pc = '0;
     stack_push_reconvergence_pc = '0;
     stack_push_active_mask = '0;
@@ -387,6 +394,10 @@ module simt_stack_controller
         stack_pop = 1'b1;
       end
 
+      StateIdle, StateReadTop, StateFinalRead: begin
+        stack_read_top = 1'b1;
+      end
+
       StateInitPush: begin
         stack_push = 1'b1;
         stack_push_next_pc = init_pc_q;
@@ -410,9 +421,9 @@ module simt_stack_controller
 
     case (current_state_q)
       StateIdle: begin
-        if (init_valid_i == 1'b1) begin
+        if (init_fire == 1'b1) begin
           next_state = StateInitPush;
-        end else if (update_valid_i == 1'b1) begin
+        end else if (update_fire == 1'b1) begin
           next_state = StateReadTop;
         end
       end
@@ -505,21 +516,28 @@ module simt_stack_controller
       push_entry_2_q <= '0;
 
     end else begin
-      // -------- State Transition --------
-      current_state_q <= next_state;
-
-      // -------- Input Capture (Init Priority) --------
-      if ((current_state_q == StateIdle) && (init_valid_i == 1'b1)) begin
+      // -------- State Transition and Input Capture --------
+      // Keep request acceptance atomic with payload capture. This prevents the FSM
+      // from leaving idle for a request whose inputs were not captured on the same edge.
+      if (init_fire == 1'b1) begin
+        current_state_q <= StateInitPush;
         init_pc_q               <= init_pc_i;
         init_reconvergence_pc_q <= init_reconvergence_pc_i;
         init_thread_count_q     <= init_thread_count_i;
 
-      end else if ((current_state_q == StateIdle) && (update_valid_i == 1'b1)) begin
+      end else if (update_fire == 1'b1) begin
+        current_state_q <= StateReadTop;
         update_with_divergence_q <= update_with_divergence_i;
         update_next_pc_q <= update_next_pc_i;
         predicate_regs_value_q <= predicate_regs_value_i;
         branch_not_taken_pc_q <= branch_not_taken_pc_i;
         branch_reconvergence_pc_q <= branch_reconvergence_pc_i;
+
+      end else if (current_state_q == StateIdle) begin
+        current_state_q <= StateIdle;
+
+      end else begin
+        current_state_q <= next_state;
       end
 
       // -------- Register Computed Divergence Values --------
