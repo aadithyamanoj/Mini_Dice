@@ -40,7 +40,7 @@ module tb_dice_cgra_subs_vector_mul;
   localparam int WORDS_PER_CHUNK   = DICE_MEM_DATA_WIDTH / 32;
 
   localparam string DEFAULT_BITSTREAM_FILE =
-      "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
+      "/homes/enorman/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
 
   logic clk_i;
   logic reset_i;

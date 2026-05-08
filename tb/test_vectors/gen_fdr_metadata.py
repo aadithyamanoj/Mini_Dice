@@ -173,9 +173,24 @@ def _simple_branch_meta() -> dict[str, int]:
     }
 
 
+def _simple_branch_mul_skip_meta() -> dict[str, int]:
+    """Unconditionally skip the taken add pgraph after the not-taken mul path."""
+    return {
+        "branch_ena": 1,
+        "branch_uni": 1,
+        "branch_pred_reg": 0,
+        "branch_neg_pred": 0,
+        "is_return": 0,
+        "branch_jump_target_offset": 2,
+        "branch_reconv_offset": 0,
+    }
+
+
 def _simple_branching_branch_meta_for_kernel(kernel: str) -> dict[str, int] | None:
     if kernel == "gen_tid_nonzero_pred":
         return _simple_branch_meta()
+    if kernel == "mul_array":
+        return _simple_branch_mul_skip_meta()
     return None
 
 

@@ -1,7 +1,7 @@
 +incdir+$DICE_HOME/rtl/cgra_core/cgra_subsystem/regfile
 +incdir+$DICE_HOME/rtl/
-+incdir+/data/amanoj3/basejump_stl/bsg_dataflow
-+incdir+/data/amanoj3/basejump_stl/bsg_misc
++incdir+/data/enorman/basejump_stl/bsg_dataflow
++incdir+/data/enorman/basejump_stl/bsg_misc
 
 
 $DICE_HOME/rtl/DE_pkg.sv
