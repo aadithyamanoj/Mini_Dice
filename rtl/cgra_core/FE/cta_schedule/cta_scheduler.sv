@@ -53,7 +53,6 @@ module cta_scheduler
     scheduled_eblock.data.schedule_active_mask = stack_top_active_mask_i;
     scheduled_eblock.data.schedule_prefetch_block = cta_branch_resolving;
     scheduled_eblock.data.schedule_cta_id = active_cta_entry_i.cta_id;
-    scheduled_eblock.data.schedule_grid_size = active_cta_entry_i.grid_size;
   end
 
   assign has_live_eblock_o = |eblock_live_q;

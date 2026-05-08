@@ -96,7 +96,8 @@ module dice_core
       .eblock_commit_valid_i  (bct_pop_valid),
       .eblock_commit_id_i     (bct_pop_e_block_id),
       .brt_info_i             (frontend_brt_info),
-      .brt_info_write_enable_i('1)
+      .brt_info_write_enable_i('1),
+      .simt_stack_entry_count_o()
   );
 
   // =========================================================================

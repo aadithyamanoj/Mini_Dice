@@ -32,7 +32,10 @@ module dice_frontend
     input logic                       eblock_commit_valid_i,
     input logic [EBLOCK_ID_WIDTH-1:0] eblock_commit_id_i,
     input block_retire_status_t       brt_info_i,
-    input logic                       brt_info_write_enable_i
+    input logic                       brt_info_write_enable_i,
+
+    // SIMT stack observability for future CSR plumbing
+    output logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] simt_stack_entry_count_o
 );
 
   // =========================================================================
@@ -75,7 +78,8 @@ module dice_frontend
       .simt_update_valid_i     (simt_update_valid),
       .simt_update_ready_o     (simt_update_ready),
       .simt_update_stack_data_i(simt_update_stack_data),
-      .simt_status_o           (simt_status)
+      .simt_status_o           (simt_status),
+      .simt_stack_entry_count_o(simt_stack_entry_count_o)
   );
 
   // =========================================================================

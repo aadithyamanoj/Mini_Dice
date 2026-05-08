@@ -49,7 +49,7 @@ module tb_dice_top_vector_mul;
   localparam int BITSTREAM_SIZE_BITS    = 1666;
 
   localparam string DEFAULT_BITSTREAM_FILE =
-      "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
+      "/homes/enorman/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
 
   logic clk_i;
   logic reset_i;

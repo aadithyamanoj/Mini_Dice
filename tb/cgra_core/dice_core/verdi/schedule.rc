@@ -6,7 +6,7 @@ viewPort 0 27 1920 958 832 65
 
 ; File list:
 ; openDirFile [-d delimiter] [-s time_offset] [-rf auto_bus_rule_file] path_name file_name
-openDirFile -d / "" "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/tb_dice_core.fsdb"
+openDirFile -d / "" "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/tb_dice_core.fsdb"
 
 ; file time scale:
 ; fileTimeScale ### s|ms|us|ns|ps
@@ -46,7 +46,7 @@ curSTATUS ByChange
 
 
 addGroup "G1"
-activeDirFile "" "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/tb_dice_core.fsdb"
+activeDirFile "" "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/tb_dice_core.fsdb"
 addSignal -h 16 /tb_dice_core/u_dut/u_cta_schedule_stage/cta_scheduler_inst/clk_i
 addGroup "G2"
 addGroup "G3"
@@ -82,7 +82,7 @@ addGroup "G6"
 
 ; getSignalForm Scope Hierarchy Status
 ; active file of getSignalForm
-activeDirFile "" "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dice_core/tb_dice_core.fsdb"
+activeDirFile "" "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dice_core/tb_dice_core.fsdb"
 
 GETSIGNALFORM_SCOPE_HIERARCHY_BEGIN
 getSignalForm close

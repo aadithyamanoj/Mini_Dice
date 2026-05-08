@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.bin",
-  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
-  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.fasm",
+  "binary_output_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.bin",
+  "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
+  "fasm_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.fasm",
   "kernel": "add_array",
   "notes": [
     "Consumes GPRs 0..7 as add operands.",

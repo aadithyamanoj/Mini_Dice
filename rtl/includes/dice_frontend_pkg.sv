@@ -9,6 +9,7 @@ package dice_frontend_pkg;
   parameter int SIMT_STACK_COUNT = `DICE_NUM_MAX_CTA_PER_CORE;
   parameter int SIMT_STACK_THREAD_WIDTH = `DICE_NUM_MAX_THREADS_PER_CORE;
   parameter int SIMT_STACK_DEPTH = `DICE_SIMT_STACK_DEPTH;
+  parameter int SIMT_STACK_ENTRY_COUNT_WIDTH = $clog2(SIMT_STACK_DEPTH + 1);
 
   parameter int REG_NUM = `DICE_GPR_NUM + `DICE_PR_NUM + `DICE_CR_NUM;
   parameter int REG_INDEX_WIDTH = $clog2(REG_NUM);  // Width to index a register
@@ -33,7 +34,6 @@ package dice_frontend_pkg;
   // Contains all information needed to execute a p-graph including branch metadata
   typedef struct packed {
     logic [DICE_ADDR_WIDTH-1:0]                                   bitstream_addr;
-    logic [BITSTREAM_LENGTH_WIDTH-1:0]                            bitstream_length;
     logic [1:0]                                                   unrolling_factor;
     logic [7:0]                                                   lat;
     logic [REG_NUM-1:0]                                           in_regs_bitmap;
@@ -50,7 +50,6 @@ package dice_frontend_pkg;
   typedef logic [`DICE_NUM_MAX_THREADS_PER_CORE-1:0] thread_mask_t;
 
   typedef struct packed {
-    logic [BITSTREAM_LENGTH_WIDTH-1:0]                            bitstream_length;
     logic [REG_NUM-1:0]                                           in_regs_bitmap;
     logic [REG_NUM-1:0]                                           out_regs_bitmap;
     logic [`DICE_CGRA_MEM_PORTS-1:0][REG_INDEX_WIDTH-1:0]         ld_dest_regs;
@@ -67,14 +66,12 @@ package dice_frontend_pkg;
     thread_mask_t               schedule_active_mask;     // Initial mask from scheduler
     logic                       schedule_prefetch_block;
     dice_cta_id_t               schedule_cta_id;
-    dice_grid_size_t            schedule_grid_size;
   } schedule_eblock_t;
 
 
   typedef struct packed {
     logic [EBLOCK_ID_WIDTH-1:0]               schedule_eblock_id;
     dice_cta_id_t                             schedule_cta_id;
-    dice_grid_size_t                          schedule_grid_size;
     logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] real_active_mask;
     fdr_meta_t                                metadata;
     logic                                     loaded_buffer;
@@ -85,7 +82,6 @@ package dice_frontend_pkg;
   typedef struct packed {
     logic            cta_valid;
     dice_cta_id_t    cta_id;
-    dice_grid_size_t grid_size;
   } active_cta_t;
 
 

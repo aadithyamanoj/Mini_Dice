@@ -6,12 +6,12 @@ viewPort 0 25 1800 721 293 114
 
 ; File list:
 ; openDirFile [-d delimiter] [-s time_offset] [-rf auto_bus_rule_file] path_name file_name
-openDirFile -d / "" "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb"
+openDirFile -d / "" "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb"
 
 ; file time scale:
 ; fileTimeScale ### s|ms|us|ns|ps
 
-individualSetFormt -File /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb -UDEC /dice_rf_ctrl_tb/cgra_tid_i[35:0]
+individualSetFormt -File /data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb -UDEC /dice_rf_ctrl_tb/cgra_tid_i[35:0]
 
 ; signal spacing:
 signalSpacing 5
@@ -48,7 +48,7 @@ curSTATUS ByChange
 
 
 addGroup "G1"
-activeDirFile "" "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb"
+activeDirFile "" "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb"
 addSignal -h 16 /dice_rf_ctrl_tb/clk_i
 addSignal -h 16 -holdScope reset_i
 addGroup "G2"
@@ -71,7 +71,7 @@ addGroup "G7"
 
 ; getSignalForm Scope Hierarchy Status
 ; active file of getSignalForm
-activeDirFile "" "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb"
+activeDirFile "" "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb"
 
 GETSIGNALFORM_SCOPE_HIERARCHY_BEGIN
 getSignalForm close

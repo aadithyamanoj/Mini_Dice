@@ -34,7 +34,8 @@ module cta_schedule_stage_syn_wrap
   output logic               simt_update_ready_o,
   input  simt_stack_update_t simt_update_stack_data_i,
 
-  output simt_stack_status_entry_t simt_status_o
+  output simt_stack_status_entry_t simt_status_o,
+  output logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] simt_stack_entry_count_o
 );
 
   cta_if       cta_if_inst ();
@@ -69,7 +70,8 @@ module cta_schedule_stage_syn_wrap
       .simt_update_valid_i     (simt_update_valid_i),
       .simt_update_ready_o     (simt_update_ready_o),
       .simt_update_stack_data_i(simt_update_stack_data_i),
-      .simt_status_o           (simt_status_o)
+      .simt_status_o           (simt_status_o),
+      .simt_stack_entry_count_o(simt_stack_entry_count_o)
   );
 
 endmodule

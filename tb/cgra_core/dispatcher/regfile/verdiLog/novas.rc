@@ -224,7 +224,7 @@ Selection-LineWidth = 1
 [FSM_Dlg-Print]
 Orientation = Landscape
 [FileBrowser]
-LoadSimulationResults = "\"/home/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\"" "\"/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\"" "\"/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfil\
+LoadSimulationResults = "\"/home/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\"" "\"/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\"" "\"/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfil\
 e/reg_wr_buffer_tb.fsdb\""
 [Form]
 version = Verdi_X-2025.06
@@ -414,7 +414,7 @@ HighlightSafetyObject = TRUE
 3 = string (session file name)
 4 = string (session file name)
 5 = string (session file name)
-1 = /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/verdiLog/novas_autosave.ses
+1 = /data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/verdiLog/novas_autosave.ses
 [Signal List]
 sigListBackgroundColor = ID_WHITE
 [Simulation]
@@ -485,7 +485,7 @@ bSVTBMode = TRUE
 SimMode = TRUE
 interactiveDebugging = TRUE
 KeepBreakPoints = FALSE
-vcs_svPath = /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv
+vcs_svPath = /data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv
 [SimulationPlus2]
 eventDumpUnfinish = FALSE
 [Source]
@@ -978,9 +978,9 @@ printBasic = 1 0 0 TRUE FALSE
 printDest = -printer {}
 printSignature = {%f %h %t} {}
 curveWindow_Drag&Drop_Mode = TRUE
-RecentFile1 = "\"/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/reg_wr_buffer_tb.fsdb\""
-RecentFile2 = "\"/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\""
-RecentFile3 = "\"/home/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\""
+RecentFile1 = "\"/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/reg_wr_buffer_tb.fsdb\""
+RecentFile2 = "\"/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\""
+RecentFile3 = "\"/home/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/addr_swizzle_tb.fsdb\""
 open_file_time_range = FALSE
 legend_window_font = -f COURIER12 -c ID_CYAN5
 value_window_font = -f COURIER12 -c ID_CYAN5
@@ -1090,7 +1090,7 @@ InputPinStatus = 1
 OutputPinStatus = 2
 RevisedComponentColor = ID_BLUE5
 SpareCellColor = ID_RED5
-UserName = amanoj3
+UserName = enorman
 CommentFormat = Novas ECO updated by ${UserName} ${Date} ${Time}
 PrefixN = eco_n
 PrefixP = eco_p
