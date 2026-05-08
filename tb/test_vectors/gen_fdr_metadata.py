@@ -53,7 +53,23 @@ DEFAULT_START_PC = 0x1000
 DEFAULT_PC_STRIDE = 0x0100
 DEFAULT_BITSTREAM_BASE = 0x0000
 DEFAULT_BITSTREAM_STRIDE = 0x0200
-DEFAULT_THREAD_COUNT = 16
+
+
+def _rtl_define_int(name: str, fallback: int) -> int:
+    config_path = REPO_ROOT / "rtl" / "includes" / "dice_config.vh"
+    try:
+        lines = config_path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return fallback
+
+    for line in lines:
+        fields = line.split("//", 1)[0].split()
+        if len(fields) >= 3 and fields[0] == "`define" and fields[1] == name:
+            return int(fields[2], 0)
+    return fallback
+
+
+DEFAULT_THREAD_COUNT = _rtl_define_int("DICE_NUM_MAX_THREADS_PER_CORE", 32)
 DEFAULT_AFFINE_CSR_VALUES = {
     "csrX0": 1,       # A-side base
     "csrX1": 128,     # B-side base
@@ -127,7 +143,7 @@ def parse_args() -> argparse.Namespace:
         "--thread-count",
         type=int,
         default=DEFAULT_THREAD_COUNT,
-        help="CTA thread_count to place in dice_cta_desc_t (default: 16)",
+        help=f"CTA thread_count to place in dice_cta_desc_t (default: {DEFAULT_THREAD_COUNT})",
     )
     return parser.parse_args()
 

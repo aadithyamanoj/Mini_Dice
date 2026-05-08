@@ -8,7 +8,6 @@ module axi_link_tx
    ,parameter int w_data_fifo_els_p     = 8
    ,parameter int r_len_fifo_els_p      = 4
    ,parameter int r_data_fifo_els_p     = 8
-   ,parameter int b_resp_fifo_els_p     = 4
    ,parameter int pkt_order_fifo_els_p  = 8
    )
   (input  logic                     clk_i
@@ -32,8 +31,7 @@ module axi_link_tx
    ,input  logic [7:0]              arlen_i
    ,input  logic [2:0]              arsize_i
    ,input  logic [1:0]              arburst_i
-   ,input  logic                    aruser_is_meta_i
-   ,input  logic [11:0]             aruser_i
+   ,input  logic [13:0]             aruser_i
 
    ,input  logic                    rvalid_i
    ,output logic                    rready_o
@@ -43,10 +41,6 @@ module axi_link_tx
    ,input  logic                    tx_r_len_v_i
    ,input  logic [7:0]              tx_r_len_i
    ,output logic                    tx_r_len_yumi_o
-
-   ,input  logic                    bvalid_i
-   ,output logic                    bready_o
-   ,input  logic [1:0]              bresp_i
 
    ,output logic                    link_tx_v_o
    ,output logic [flit_width_p-1:0] link_tx_data_o
@@ -60,28 +54,31 @@ module axi_link_tx
   //   3'b000 = WRITE_REQ
   //   3'b001 = READ_REQ
   //   3'b010 = READ_RESP
-  //   3'b011 = WRITE_RESP
+  //   3'b100 = META_REQ
   //
   // Header flit layout (32 bits):
-  //   WRITE_REQ : [31:29] opcode, [28:16] length, [15:0] address
-  //   READ_REQ  : [31:29] opcode, [28] is_meta, [27:16] len_or_meta[11:0],
-  //               [15:0] address
-  //               aruser_is_meta_i -> is_meta
-  //               aruser_i[11:0]   -> metadata payload (used iff is_meta=1)
-  //               When is_meta=0 the 12-bit field is arlen+1; when is_meta=1
-  //               it is sideband metadata. No payload follows either way.
-  //   READ_RESP : [31:29] opcode, [28:16] length, [15:2] reserved, [1:0] rresp
-  //   WRITE_RESP: [31:29] opcode, [28:16] 1,      [15:0] 16'b0
+  //   WRITE_REQ : [31:29] opcode, [28:16] length,        [15:0] address
+  //   READ_REQ  : [31:29] opcode, [28:16] length,        [15:0] address
+  //   META_REQ  : [31:29] opcode, [28:16] aruser_i[12:0],[15:0] address
+  //               aruser_i[13] selects META_REQ over READ_REQ on AR
+  //               acceptance (TX-side only — never serialized). The lower
+  //               13 bits aruser_i[12:0] are carried verbatim in the
+  //               middle field as opaque metadata. No payload follows.
+  //   READ_RESP : [31:29] opcode, [28:16] length,        [15:2] reserved, [1:0] rresp
   //
-  // AXI semantics are preserved at the module boundary:
+  // AXI semantics at the module boundary:
   //   requests  : AW, W, AR
-  //   responses : R, B
+  //   responses : R
+  //   The B (write-response) channel is intentionally not carried by this
+  //   link. The upstream wrapper is expected to synthesize a fake B beat
+  //   per accepted write burst (BRESP=OKAY) so the AXI master sees write
+  //   completion locally; per-write error reporting is therefore lost.
   //
   // Transport:
   //   WRITE_REQ  = header(opcode,len,addr) + len W beats
-  //   READ_REQ   = header(opcode,is_meta ? metadata : len,addr)
+  //   READ_REQ   = header(opcode,len,addr)
+  //   META_REQ   = header(opcode,0,addr)
   //   READ_RESP  = header(opcode,len,rresp) + len R beats
-  //   WRITE_RESP = header(opcode,1,0)      + padded BRESP flit
   //
   // Strict FIFO assumption:
   //   No AXI IDs or reorder logic exist here. Associations rely purely on
@@ -99,27 +96,24 @@ module axi_link_tx
     OP_WRITE_REQ  = 3'b000,
     OP_READ_REQ   = 3'b001,
     OP_READ_RESP  = 3'b010,
-    OP_WRITE_RESP = 3'b011
+    OP_META_REQ   = 3'b100
   } pkt_opcode_e;
 
   typedef enum logic [1:0] {
     PKT_WR_REQ  = 2'd0,
     PKT_RD_REQ  = 2'd1,
-    PKT_RD_RESP = 2'd2,
-    PKT_WR_RESP = 2'd3
+    PKT_RD_RESP = 2'd2
   } pkt_kind_e;
 
-  typedef enum logic [2:0] {
-    TX_IDLE    = 3'd0,
-    TX_HEADER  = 3'd1,
-    TX_DATA    = 3'd2,
-    TX_RESP    = 3'd3
+  typedef enum logic [1:0] {
+    TX_IDLE    = 2'd0,
+    TX_HEADER  = 2'd1,
+    TX_DATA    = 2'd2
   } tx_state_e;
 
   localparam int beat_count_width_lp = 13;
-  localparam int rd_meta_width_lp    = 12;
   localparam int wr_desc_width_lp    = addr_width_p + beat_count_width_lp;
-  localparam int rd_desc_width_lp    = addr_width_p + 1 + rd_meta_width_lp;
+  localparam int rd_desc_width_lp    = addr_width_p + 1 + beat_count_width_lp;
   localparam int r_desc_width_lp     = beat_count_width_lp + 2;
   localparam logic [2:0] axi_size_lp   = 3'b010;
   localparam logic [1:0] axi_burst_lp  = 2'b01;
@@ -129,10 +123,12 @@ module axi_link_tx
     logic [beat_count_width_lp-1:0] beats;
   } req_desc_s;
 
+  // For non-meta reads, `payload` carries the AXI burst length. For meta
+  // reads, it carries the captured aruser_i[12:0] for transport to RX.
   typedef struct packed {
-    logic [addr_width_p-1:0]     addr;
-    logic                        is_meta;
-    logic [rd_meta_width_lp-1:0] payload;
+    logic [addr_width_p-1:0]        addr;
+    logic                           is_meta;
+    logic [beat_count_width_lp-1:0] payload;
   } rd_req_desc_s;
 
   typedef struct packed {
@@ -178,11 +174,6 @@ module axi_link_tx
   logic [31:0]              r_data_push_data_li;
   logic                     r_data_v_lo, r_data_yumi_li;
   logic [31:0]              r_data_lo;
-
-  logic                     b_resp_push_v_li, b_resp_push_ready_lo;
-  logic [1:0]               b_resp_push_data_li;
-  logic                     b_resp_v_lo, b_resp_yumi_li;
-  logic [1:0]               b_resp_lo;
 
   logic                     pkt_order_push_v_li, pkt_order_push_ready_lo;
   logic [1:0]               pkt_order_push_data_li;
@@ -287,22 +278,6 @@ module axi_link_tx
 
   bsg_fifo_1r1w_small #(
     .width_p            (2),
-    .els_p              (b_resp_fifo_els_p),
-    .harden_p           (0),
-    .ready_THEN_valid_p (0)
-  ) b_resp_fifo_i (
-    .clk_i  (clk_i),
-    .reset_i(reset_i),
-    .v_i    (b_resp_push_v_li),
-    .data_i (b_resp_push_data_li),
-    .ready_o(b_resp_push_ready_lo),
-    .v_o    (b_resp_v_lo),
-    .data_o (b_resp_lo),
-    .yumi_i (b_resp_yumi_li)
-  );
-
-  bsg_fifo_1r1w_small #(
-    .width_p            (2),
     .els_p              (pkt_order_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -324,9 +299,9 @@ module axi_link_tx
   // order FIFO unambiguous when several AXI channels become ready together.
   // The round-robin pointer avoids permanently favoring one class.
 
-  logic [3:0] start_req, start_grant;
+  logic [2:0] start_req, start_grant;
   logic [1:0] rr_start_r, rr_start_n;
-  logic aw_req, ar_req, r_start_req, b_req;
+  logic aw_req, ar_req, r_start_req;
 
   logic [beat_count_width_lp-1:0] aw_beats, ar_beats;
   logic [beat_count_width_lp-1:0] tx_r_beats_li;
@@ -349,21 +324,19 @@ module axi_link_tx
   assign r_start_req = rvalid_i && !r_capture_active_r
                        && tx_r_len_v_i && r_data_push_ready_lo && r_desc_push_ready_lo
                        && pkt_order_push_ready_lo;
-  assign b_req       = bvalid_i && b_resp_push_ready_lo && pkt_order_push_ready_lo;
 
   assign start_req[pkt_kind_e'(PKT_WR_REQ)]  = aw_req;
   assign start_req[pkt_kind_e'(PKT_RD_REQ)]  = ar_req;
   assign start_req[pkt_kind_e'(PKT_RD_RESP)] = r_start_req;
-  assign start_req[pkt_kind_e'(PKT_WR_RESP)] = b_req;
 
   integer start_scan_i;
   integer start_scan_idx;
   always_comb begin
     start_grant = '0;
-    for (start_scan_i = 0; start_scan_i < 4; start_scan_i++) begin
+    for (start_scan_i = 0; start_scan_i < 3; start_scan_i++) begin
       start_scan_idx = rr_start_r + start_scan_i;
-      if (start_scan_idx >= 4)
-        start_scan_idx = start_scan_idx - 4;
+      if (start_scan_idx >= 3)
+        start_scan_idx = start_scan_idx - 3;
       if ((start_grant == '0) && start_req[start_scan_idx])
         start_grant[start_scan_idx] = 1'b1;
     end
@@ -374,8 +347,7 @@ module axi_link_tx
     if (start_grant != '0) begin
       if (start_grant[0]) rr_start_n = 2'd1;
       if (start_grant[1]) rr_start_n = 2'd2;
-      if (start_grant[2]) rr_start_n = 2'd3;
-      if (start_grant[3]) rr_start_n = 2'd0;
+      if (start_grant[2]) rr_start_n = 2'd0;
     end
   end
 
@@ -396,37 +368,31 @@ module axi_link_tx
   logic [beat_count_width_lp-1:0] w_accept_beats_left_r, w_accept_beats_left_n;
   logic [beat_count_width_lp-1:0] w_accept_loaded_beats;
   logic w_accept_active_r, w_accept_active_n;
-  logic aw_accept, ar_accept, r_accept, b_accept, w_accept;
+  logic aw_accept, ar_accept, r_accept, w_accept;
   logic r_final_accept;
 
   assign aw_accept = start_grant[pkt_kind_e'(PKT_WR_REQ)];
   assign ar_accept = start_grant[pkt_kind_e'(PKT_RD_REQ)];
-  assign b_accept  = start_grant[pkt_kind_e'(PKT_WR_RESP)];
 
   assign awready_o = aw_accept;
   assign arready_o = ar_accept;
-  assign bready_o  = b_accept;
 
   assign wr_desc_push_v_li    = aw_accept;
   assign wr_desc_push_data_li = {awaddr_i, aw_beats};
   assign w_len_push_v_li      = aw_accept;
   assign w_len_push_data_li   = aw_beats;
-  assign pkt_order_push_v_li  = aw_accept || ar_accept || b_accept || (r_accept && !r_capture_active_r);
+  assign pkt_order_push_v_li  = aw_accept || ar_accept || (r_accept && !r_capture_active_r);
   assign pkt_order_push_data_li = aw_accept ? pkt_kind_e'(PKT_WR_REQ)
                                   : ar_accept ? pkt_kind_e'(PKT_RD_REQ)
-                                  : (r_accept && !r_capture_active_r) ? pkt_kind_e'(PKT_RD_RESP)
-                                  : pkt_kind_e'(PKT_WR_RESP);
+                                  : pkt_kind_e'(PKT_RD_RESP);
 
-  // aruser_is_meta_i selects metadata-mode reads; aruser_i is the metadata
-  // sideband. For non-metadata reads we forward the AXI burst length (which
-  // always fits in 12 bits since AXI4 caps arlen at 8 bits).
+  // aruser_i[13] selects META_REQ at the link layer (TX-only — not
+  // serialized). For META_REQ the lower 13 bits aruser_i[12:0] are
+  // captured into `payload` for transport; for READ_REQ `payload`
+  // carries the beat count instead.
   assign rd_desc_push_v_li    = ar_accept;
-  assign rd_desc_push_data_li = {araddr_i, aruser_is_meta_i,
-                                 aruser_is_meta_i ? aruser_i
-                                                  : ar_beats[rd_meta_width_lp-1:0]};
-
-  assign b_resp_push_v_li     = b_accept;
-  assign b_resp_push_data_li  = bresp_i;
+  assign rd_desc_push_data_li = {araddr_i, aruser_i[13],
+                                 aruser_i[13] ? aruser_i[12:0] : ar_beats};
 
   assign w_accept_loaded_beats = w_accept_active_r ? w_accept_beats_left_r : w_len_data_lo;
   assign wready_o = w_data_push_ready_lo
@@ -540,7 +506,6 @@ module axi_link_tx
   // The serializer is intentionally simple:
   //   TX_HEADER emits the 32-bit header flit {opcode, beats, addr}
   //   TX_DATA   streams W or R payload beats from the corresponding FIFO
-  //   TX_RESP   emits the padded BRESP flit when required
   //
   // Only one packet is active at a time, and packet start order is supplied by
   // `pkt_order_fifo_i`, so no cross-packet reordering is possible.
@@ -552,7 +517,6 @@ module axi_link_tx
   logic [beat_count_width_lp-1:0] cur_data_beats_left_r, cur_data_beats_left_n;
   logic [1:0] cur_resp_r, cur_resp_n;
   logic                        cur_rd_is_meta_r, cur_rd_is_meta_n;
-  logic [rd_meta_width_lp-1:0] cur_rd_meta_r,    cur_rd_meta_n;
 
   req_desc_s    wr_desc_cast;
   rd_req_desc_s rd_desc_cast;
@@ -562,7 +526,7 @@ module axi_link_tx
   assign rd_desc_cast = rd_req_desc_s'(rd_desc_data_lo);
   assign r_desc_cast  = r_desc_s'(r_desc_data_lo);
 
-  logic start_wr_pkt, start_rd_pkt, start_r_pkt, start_b_pkt;
+  logic start_wr_pkt, start_rd_pkt, start_r_pkt;
   logic link_handshake;
 
   assign start_wr_pkt = (state_r == TX_IDLE) && pkt_order_v_lo
@@ -571,14 +535,11 @@ module axi_link_tx
                         && (pkt_order_lo == pkt_kind_e'(PKT_RD_REQ)) && rd_desc_v_lo;
   assign start_r_pkt  = (state_r == TX_IDLE) && pkt_order_v_lo
                         && (pkt_order_lo == pkt_kind_e'(PKT_RD_RESP)) && r_desc_v_lo;
-  assign start_b_pkt  = (state_r == TX_IDLE) && pkt_order_v_lo
-                        && (pkt_order_lo == pkt_kind_e'(PKT_WR_RESP)) && b_resp_v_lo;
 
-  assign pkt_order_yumi_li = start_wr_pkt || start_rd_pkt || start_r_pkt || start_b_pkt;
+  assign pkt_order_yumi_li = start_wr_pkt || start_rd_pkt || start_r_pkt;
   assign wr_desc_yumi_li   = start_wr_pkt;
   assign rd_desc_yumi_li   = start_rd_pkt;
   assign r_desc_yumi_li    = start_r_pkt;
-  assign b_resp_yumi_li    = start_b_pkt;
 
   assign w_data_yumi_li = (state_r == TX_DATA) && link_handshake
                           && (cur_kind_r == pkt_kind_e'(PKT_WR_REQ));
@@ -593,7 +554,6 @@ module axi_link_tx
     cur_data_beats_left_n = cur_data_beats_left_r;
     cur_resp_n            = cur_resp_r;
     cur_rd_is_meta_n      = cur_rd_is_meta_r;
-    cur_rd_meta_n         = cur_rd_meta_r;
 
     if (start_wr_pkt) begin
       // WRITE_REQ = header + address + W data beats.
@@ -604,20 +564,18 @@ module axi_link_tx
       cur_data_beats_left_n = wr_desc_cast.beats;
       cur_resp_n            = '0;
       cur_rd_is_meta_n      = 1'b0;
-      cur_rd_meta_n         = '0;
     end
     else if (start_rd_pkt) begin
-      // READ_REQ = header only. Metadata reads carry 12 bits of sideband
-      // metadata in the header slot that would otherwise hold the burst
-      // length.
+      // READ_REQ / META_REQ = header only. `payload` is either the burst
+      // length or the captured aruser content; either way it goes into the
+      // middle 13 bits of the header flit.
       state_n               = TX_HEADER;
       cur_kind_n            = pkt_kind_e'(PKT_RD_REQ);
       cur_addr_n            = rd_desc_cast.addr;
-      cur_beats_n           = {1'b0, rd_desc_cast.payload};
+      cur_beats_n           = rd_desc_cast.payload;
       cur_data_beats_left_n = '0;
       cur_resp_n            = '0;
       cur_rd_is_meta_n      = rd_desc_cast.is_meta;
-      cur_rd_meta_n         = rd_desc_cast.payload;
     end
     else if (start_r_pkt) begin
       // READ_RESP = header + R data beats.
@@ -628,18 +586,6 @@ module axi_link_tx
       cur_data_beats_left_n = r_desc_cast.beats;
       cur_resp_n            = r_desc_cast.resp;
       cur_rd_is_meta_n      = 1'b0;
-      cur_rd_meta_n         = '0;
-    end
-    else if (start_b_pkt) begin
-      // WRITE_RESP = header + one padded BRESP flit.
-      state_n               = TX_HEADER;
-      cur_kind_n            = pkt_kind_e'(PKT_WR_RESP);
-      cur_addr_n            = '0;
-      cur_beats_n           = beat_count_width_lp'(1);
-      cur_data_beats_left_n = '0;
-      cur_resp_n            = b_resp_lo;
-      cur_rd_is_meta_n      = 1'b0;
-      cur_rd_meta_n         = '0;
     end
     else if (link_handshake) begin
       unique case (state_r)
@@ -648,7 +594,7 @@ module axi_link_tx
             pkt_kind_e'(PKT_WR_REQ):  state_n = TX_DATA;
             pkt_kind_e'(PKT_RD_REQ):  state_n = TX_IDLE;
             pkt_kind_e'(PKT_RD_RESP): state_n = TX_DATA;
-            default:                  state_n = TX_RESP;
+            default:                  state_n = TX_IDLE;
           endcase
         end
 
@@ -660,17 +606,6 @@ module axi_link_tx
           else begin
             cur_data_beats_left_n = cur_data_beats_left_r - beat_count_width_lp'(1);
           end
-        end
-
-        TX_RESP: begin
-          state_n               = TX_IDLE;
-          cur_kind_n            = '0;
-          cur_addr_n            = '0;
-          cur_beats_n           = '0;
-          cur_data_beats_left_n = '0;
-          cur_resp_n            = '0;
-          cur_rd_is_meta_n      = 1'b0;
-          cur_rd_meta_n         = '0;
         end
 
         default: begin
@@ -689,7 +624,6 @@ module axi_link_tx
       cur_data_beats_left_r <= '0;
       cur_resp_r            <= '0;
       cur_rd_is_meta_r      <= 1'b0;
-      cur_rd_meta_r         <= '0;
     end
     else begin
       state_r               <= state_n;
@@ -699,7 +633,6 @@ module axi_link_tx
       cur_data_beats_left_r <= cur_data_beats_left_n;
       cur_resp_r            <= cur_resp_n;
       cur_rd_is_meta_r      <= cur_rd_is_meta_n;
-      cur_rd_meta_r         <= cur_rd_meta_n;
     end
   end
 
@@ -712,13 +645,10 @@ module axi_link_tx
         link_tx_v_o = 1'b1;
         unique case (cur_kind_r)
           pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ,  cur_beats_r, cur_addr_r};
-          pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = {OP_READ_REQ,
-                                                       cur_rd_is_meta_r,
-                                                       cur_rd_is_meta_r ? cur_rd_meta_r
-                                                                        : cur_beats_r[rd_meta_width_lp-1:0],
-                                                       cur_addr_r};
+          pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = {cur_rd_is_meta_r ? OP_META_REQ : OP_READ_REQ,
+                                                       cur_beats_r, cur_addr_r};
           pkt_kind_e'(PKT_RD_RESP): link_tx_data_o = {OP_READ_RESP,  cur_beats_r, 14'b0, cur_resp_r};
-          default:                  link_tx_data_o = {OP_WRITE_RESP, beat_count_width_lp'(1), 16'b0};
+          default:                  link_tx_data_o = '0;
         endcase
       end
 
@@ -731,11 +661,6 @@ module axi_link_tx
           link_tx_v_o    = r_data_v_lo;
           link_tx_data_o = r_data_lo;
         end
-      end
-
-      TX_RESP: begin
-        link_tx_v_o    = 1'b1;
-        link_tx_data_o = {30'b0, cur_resp_r};
       end
 
       default: begin

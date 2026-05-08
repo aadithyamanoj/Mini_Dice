@@ -71,6 +71,7 @@ module tb_mini_dice;
   localparam int TIMEOUT_CYC = 70000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
+  localparam int MAX_THREAD_COUNT = `DICE_NUM_MAX_THREADS_PER_CORE;
 
   // Address map constants (mirror axi4_xbar_pkg — CSR bank moved high so
   // fpga_mem can cover all of the CGRA's fetch/data addresses).
@@ -81,6 +82,7 @@ module tb_mini_dice;
   localparam logic [AW-1:0] REG_CTRL = CSR_BASE + 16'h0000;
   localparam logic [AW-1:0] REG_STARTPC = CSR_BASE + 16'h0002;
   localparam logic [AW-1:0] REG_STATUS = CSR_BASE + 16'h0004;
+  localparam logic [AW-1:0] REG_THREAD_COUNT = CSR_BASE + 16'h000c;
   localparam logic [AW-1:0] REG_CSRX0 = CSR_BASE + 16'h0010;  // ...0x1E
 
   // CTRL bits
@@ -259,8 +261,8 @@ module tb_mini_dice;
   logic          ep_rx_arready;
   logic [AW-1:0] ep_rx_araddr;
   logic [   7:0] ep_rx_arlen;
+  logic [  13:0] ep_rx_aruser;
   logic          ep_rx_aruser_is_meta;
-  logic [  11:0] ep_rx_aruser;
   logic          ep_rx_rvalid;
   logic          ep_rx_rready = 1'b0;
   logic [DW-1:0] ep_rx_rdata;
@@ -317,7 +319,6 @@ module tb_mini_dice;
       .rx_w_data_fifo_els_p   (8),
       .rx_r_len_fifo_els_p    (4),
       .rx_r_data_fifo_els_p   (64),
-      .rx_b_resp_fifo_els_p   (4),
       .tx_link_fifo_els_p     (64),
       .tx_aw_desc_fifo_els_p  (2),
       .tx_ar_desc_fifo_els_p  (2),
@@ -325,7 +326,6 @@ module tb_mini_dice;
       .tx_w_data_fifo_els_p   (8),
       .tx_r_len_fifo_els_p    (4),
       .tx_r_data_fifo_els_p   (64),
-      .tx_b_resp_fifo_els_p   (4),
       .tx_pkt_order_fifo_els_p(8)
   ) u_fpga_ep (
       .core_clk_i(clk_i),
@@ -355,8 +355,7 @@ module tb_mini_dice;
       .tx_arlen_i  (ep_tx_arlen),
       .tx_arsize_i (ep_tx_arsize),
       .tx_arburst_i(ep_tx_arburst),
-      .tx_aruser_is_meta_i(1'b0),
-      .tx_aruser_i(12'b0),
+      .tx_aruser_i(14'b0),
       .tx_rvalid_i (ep_tx_rvalid),
       .tx_rready_o (ep_tx_rready),
       .tx_rdata_i  (ep_tx_rdata),
@@ -383,7 +382,6 @@ module tb_mini_dice;
       .rx_arlen_o  (ep_rx_arlen),
       .rx_arsize_o (),
       .rx_arburst_o(),
-      .rx_aruser_is_meta_o(ep_rx_aruser_is_meta),
       .rx_aruser_o (ep_rx_aruser),
       .rx_rvalid_o (ep_rx_rvalid),
       .rx_rready_i (ep_rx_rready),
@@ -394,6 +392,8 @@ module tb_mini_dice;
       .rx_bready_i (ep_rx_bready),
       .rx_bresp_o  (ep_rx_bresp)
   );
+
+  assign ep_rx_aruser_is_meta = ep_rx_aruser[13];
 
   // --------------------------------------------------------------------------
   // FPGA memory model — burst-aware, classifies each AR by (address, length)
@@ -420,7 +420,7 @@ module tb_mini_dice;
   logic           [   7:0] rd_beat_idx_q;
   logic           [   1:0] rd_kind_q;  // 0=data, 1=meta, 2=bitstream
   logic                    rd_aruser_is_meta_q;
-  logic           [  11:0] rd_aruser_q;
+  logic           [  12:0] rd_aruser_q;
   logic           [  15:0] csr_values                                [0:7];
   logic           [  15:0] start_pc_val;
   dice_cta_desc_t          launch_desc;
@@ -440,11 +440,11 @@ module tb_mini_dice;
                                                    input logic [AW-1:0] base,
                                                    input int unsigned beat_idx,
                                                    input logic is_meta,
-                                                   input logic [11:0] meta);
+                                                   input logic [12:0] meta);
     logic [DW-1:0] word;
     begin
       word = DW'(fetch_beat(kind, base, beat_idx));
-      if (is_meta) word[27:16] = meta;
+      if (is_meta) word[28:16] = meta;
       return word;
     end
   endfunction
@@ -485,9 +485,9 @@ module tb_mini_dice;
             rd_beat_idx_q  <= '0;
             rd_kind_q      <= kind;
             rd_aruser_is_meta_q <= ep_rx_aruser_is_meta;
-            rd_aruser_q    <= ep_rx_aruser;
+            rd_aruser_q    <= ep_rx_aruser[12:0];
             ep_tx_rdata    <= pack_read_beat(kind, ep_rx_araddr, 0,
-                                             ep_rx_aruser_is_meta, ep_rx_aruser);
+                                             ep_rx_aruser_is_meta, ep_rx_aruser[12:0]);
             ep_tx_rlast    <= (ep_rx_arlen == 8'd0);
             ep_tx_rresp    <= 2'b00;
             ep_tx_rvalid   <= 1'b1;
@@ -913,13 +913,15 @@ module tb_mini_dice;
       if (launch_desc.kernel_desc.grid_size.x != 1 ||
           launch_desc.kernel_desc.grid_size.y != 1 ||
           launch_desc.kernel_desc.grid_size.z != 1 ||
-          launch_desc.kernel_desc.thread_count != 16 ||
+          launch_desc.kernel_desc.thread_count == 0 ||
+          launch_desc.kernel_desc.thread_count > MAX_THREAD_COUNT ||
           launch_desc.cta_id.x != 0 ||
           launch_desc.cta_id.y != 0 ||
           launch_desc.cta_id.z != 0) begin
         $fatal(
             1,
-            "[TB] mini_dice_top currently hardwires CTA grid=(1,1,1), thread_count=16, cta_id=(0,0,0); test vector CTA descriptor does not match");
+            "[TB] mini_dice_top expects CTA grid=(1,1,1), 1 <= thread_count <= %0d, cta_id=(0,0,0); test vector CTA descriptor does not match",
+            MAX_THREAD_COUNT);
       end
     end
   endtask
@@ -936,6 +938,9 @@ module tb_mini_dice;
 
       $display("[TB] Setting start_pc = 0x%04x", start_pc_val);
       csr_write(REG_STARTPC, start_pc_val);
+
+      $display("[TB] Setting thread_count = %0d", launch_desc.kernel_desc.thread_count);
+      csr_write(REG_THREAD_COUNT, 16'(launch_desc.kernel_desc.thread_count));
 
       $display("[TB] Pulsing CTRL.start");
       csr_write(REG_CTRL, CTRL_START);

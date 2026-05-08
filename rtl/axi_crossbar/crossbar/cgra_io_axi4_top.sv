@@ -9,7 +9,7 @@
 //   bsfetch   : CGRA frontend bitstream fetch (slv_req_t from dice_core)
 //
 // One bsg_link pair carries *both* AXI buses by multiplexing on axi_link_tx/rx
-// opcodes (WRITE_REQ / READ_REQ / READ_RESP / WRITE_RESP):
+// opcodes (WRITE_REQ / READ_REQ / META_REQ / READ_RESP):
 //
 //   TX (chip → FPGA): fpga_mem AW/W/AR (chip as master) + fpga_mst R/B (chip as slave)
 //   RX (FPGA → chip): fpga_mem R/B (FPGA SRAM responds)  + fpga_mst AW/W/AR (FPGA host)
@@ -136,8 +136,7 @@ module cgra_io_axi4_top
   logic      [           7:0] rx_fpga_arlen;
   logic      [           2:0] rx_fpga_arsize;
   logic      [           1:0] rx_fpga_arburst;
-  logic                       rx_fpga_aruser_is_meta;
-  logic      [AxiUserWidth-1:0] rx_fpga_aruser;
+  logic      [13:0]          rx_fpga_aruser;
 
   logic                       tx_fpga_bready;
   logic                       tx_fpga_rready;
@@ -161,7 +160,7 @@ module cgra_io_axi4_top
     fpga_mst_req.ar.size  = rx_fpga_arsize;
     fpga_mst_req.ar.burst = rx_fpga_arburst;
     fpga_mst_req.ar.id    = '0;
-    fpga_mst_req.ar.user  = rx_fpga_aruser_is_meta ? axi_user_t'(rx_fpga_aruser) : '0;
+    fpga_mst_req.ar.user  = axi_user_t'(rx_fpga_aruser);
     fpga_mst_req.r_ready  = tx_fpga_rready;
   end
 
@@ -228,10 +227,6 @@ module cgra_io_axi4_top
   logic tx_awready, tx_wready, tx_arready;
   logic tx_awready_link, tx_arready_link;
   logic aw_id_q_ready, ar_id_q_ready;
-  logic tx_aruser_is_meta;
-  localparam logic [$clog2(NoMasters)-1:0] DFETCH0_XBAR_SRC_ID = $clog2(NoMasters)'(1);
-  localparam logic [$clog2(NoMasters)-1:0] DFETCH3_XBAR_SRC_ID = $clog2(NoMasters)'(4);
-  logic [$clog2(NoMasters)-1:0] xbar_mem_ar_src_id;
   logic rx_rvalid, rx_rlast;
   logic [DATA_WIDTH-1:0] rx_rdata;
   logic [           1:0] rx_rresp;
@@ -279,11 +274,6 @@ module cgra_io_axi4_top
 
   assign ar_id_q_yumi = rx_rvalid && ar_id_q_v && xbar_mem_req.r_ready && rx_rlast;
   assign aw_id_q_yumi = rx_bvalid && aw_id_q_v && xbar_mem_req.b_ready;
-  assign xbar_mem_ar_src_id = xbar_mem_req.ar.id[MstIdWidth-1:SlvIdWidth];
-  assign tx_aruser_is_meta = xbar_mem_req.ar_valid
-                           && (xbar_mem_ar_src_id >= DFETCH0_XBAR_SRC_ID)
-                           && (xbar_mem_ar_src_id <= DFETCH3_XBAR_SRC_ID);
-
   always_comb begin
     xbar_mem_resp          = '0;
     // Ready signals come from axi_link_tx
@@ -326,7 +316,6 @@ module cgra_io_axi4_top
       .rx_w_data_fifo_els_p           (8),
       .rx_r_len_fifo_els_p            (4),
       .rx_r_data_fifo_els_p           (8),
-      .rx_b_resp_fifo_els_p           (4),
       // TX FIFO sizes
       .tx_link_fifo_els_p             (8),
       .tx_aw_desc_fifo_els_p          (2),
@@ -335,7 +324,6 @@ module cgra_io_axi4_top
       .tx_w_data_fifo_els_p           (8),
       .tx_r_len_fifo_els_p            (4),
       .tx_r_data_fifo_els_p           (8),
-      .tx_b_resp_fifo_els_p           (4),
       .tx_pkt_order_fifo_els_p        (8)
   ) u_top_level_io (
       .core_clk_i                (clk_i),
@@ -364,8 +352,7 @@ module cgra_io_axi4_top
       .tx_arlen_i                (xbar_mem_req.ar.len),
       .tx_arsize_i               (xbar_mem_req.ar.size),
       .tx_arburst_i              (xbar_mem_req.ar.burst),
-      .tx_aruser_is_meta_i       (tx_aruser_is_meta),
-      .tx_aruser_i               (xbar_mem_req.ar.user[AxiUserWidth-1:0]),
+      .tx_aruser_i               (xbar_mem_req.ar.user[13:0]),
       // TX: R/B from crossbar fpga_mst slave port → FPGA host
       .tx_rvalid_i               (fpga_mst_resp.r_valid),
       .tx_rready_o               (tx_fpga_rready),
@@ -401,7 +388,6 @@ module cgra_io_axi4_top
       .rx_arlen_o                (rx_fpga_arlen),
       .rx_arsize_o               (rx_fpga_arsize),
       .rx_arburst_o              (rx_fpga_arburst),
-      .rx_aruser_is_meta_o       (rx_fpga_aruser_is_meta),
       .rx_aruser_o               (rx_fpga_aruser)
   );
 

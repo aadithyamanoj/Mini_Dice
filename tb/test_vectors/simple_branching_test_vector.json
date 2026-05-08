@@ -12,7 +12,7 @@
         "z": 1
       },
       "start_pc": 4096,
-      "thread_count": 16
+      "thread_count": 32
     }
   },
   "pgraph_metadata": [
@@ -541,6 +541,326 @@
         {
           "addr": 319,
           "data": 12224,
+          "strb": 3
+        },
+        {
+          "addr": 320,
+          "data": 12480,
+          "strb": 3
+        },
+        {
+          "addr": 321,
+          "data": 12738,
+          "strb": 3
+        },
+        {
+          "addr": 322,
+          "data": 12998,
+          "strb": 3
+        },
+        {
+          "addr": 323,
+          "data": 13260,
+          "strb": 3
+        },
+        {
+          "addr": 324,
+          "data": 13524,
+          "strb": 3
+        },
+        {
+          "addr": 325,
+          "data": 13790,
+          "strb": 3
+        },
+        {
+          "addr": 326,
+          "data": 14058,
+          "strb": 3
+        },
+        {
+          "addr": 327,
+          "data": 14328,
+          "strb": 3
+        },
+        {
+          "addr": 328,
+          "data": 14600,
+          "strb": 3
+        },
+        {
+          "addr": 329,
+          "data": 14874,
+          "strb": 3
+        },
+        {
+          "addr": 330,
+          "data": 15150,
+          "strb": 3
+        },
+        {
+          "addr": 331,
+          "data": 15428,
+          "strb": 3
+        },
+        {
+          "addr": 332,
+          "data": 15708,
+          "strb": 3
+        },
+        {
+          "addr": 333,
+          "data": 15990,
+          "strb": 3
+        },
+        {
+          "addr": 334,
+          "data": 16274,
+          "strb": 3
+        },
+        {
+          "addr": 335,
+          "data": 16560,
+          "strb": 3
+        },
+        {
+          "addr": 336,
+          "data": 16848,
+          "strb": 3
+        },
+        {
+          "addr": 337,
+          "data": 17138,
+          "strb": 3
+        },
+        {
+          "addr": 338,
+          "data": 17430,
+          "strb": 3
+        },
+        {
+          "addr": 339,
+          "data": 17724,
+          "strb": 3
+        },
+        {
+          "addr": 340,
+          "data": 18020,
+          "strb": 3
+        },
+        {
+          "addr": 341,
+          "data": 18318,
+          "strb": 3
+        },
+        {
+          "addr": 342,
+          "data": 18618,
+          "strb": 3
+        },
+        {
+          "addr": 343,
+          "data": 18920,
+          "strb": 3
+        },
+        {
+          "addr": 344,
+          "data": 19224,
+          "strb": 3
+        },
+        {
+          "addr": 345,
+          "data": 19530,
+          "strb": 3
+        },
+        {
+          "addr": 346,
+          "data": 19838,
+          "strb": 3
+        },
+        {
+          "addr": 347,
+          "data": 20148,
+          "strb": 3
+        },
+        {
+          "addr": 348,
+          "data": 20460,
+          "strb": 3
+        },
+        {
+          "addr": 349,
+          "data": 20774,
+          "strb": 3
+        },
+        {
+          "addr": 350,
+          "data": 21090,
+          "strb": 3
+        },
+        {
+          "addr": 351,
+          "data": 21408,
+          "strb": 3
+        },
+        {
+          "addr": 352,
+          "data": 21728,
+          "strb": 3
+        },
+        {
+          "addr": 353,
+          "data": 22050,
+          "strb": 3
+        },
+        {
+          "addr": 354,
+          "data": 22374,
+          "strb": 3
+        },
+        {
+          "addr": 355,
+          "data": 22700,
+          "strb": 3
+        },
+        {
+          "addr": 356,
+          "data": 23028,
+          "strb": 3
+        },
+        {
+          "addr": 357,
+          "data": 23358,
+          "strb": 3
+        },
+        {
+          "addr": 358,
+          "data": 23690,
+          "strb": 3
+        },
+        {
+          "addr": 359,
+          "data": 24024,
+          "strb": 3
+        },
+        {
+          "addr": 360,
+          "data": 24360,
+          "strb": 3
+        },
+        {
+          "addr": 361,
+          "data": 24698,
+          "strb": 3
+        },
+        {
+          "addr": 362,
+          "data": 25038,
+          "strb": 3
+        },
+        {
+          "addr": 363,
+          "data": 25380,
+          "strb": 3
+        },
+        {
+          "addr": 364,
+          "data": 25724,
+          "strb": 3
+        },
+        {
+          "addr": 365,
+          "data": 26070,
+          "strb": 3
+        },
+        {
+          "addr": 366,
+          "data": 26418,
+          "strb": 3
+        },
+        {
+          "addr": 367,
+          "data": 26768,
+          "strb": 3
+        },
+        {
+          "addr": 368,
+          "data": 27120,
+          "strb": 3
+        },
+        {
+          "addr": 369,
+          "data": 27474,
+          "strb": 3
+        },
+        {
+          "addr": 370,
+          "data": 27830,
+          "strb": 3
+        },
+        {
+          "addr": 371,
+          "data": 28188,
+          "strb": 3
+        },
+        {
+          "addr": 372,
+          "data": 28548,
+          "strb": 3
+        },
+        {
+          "addr": 373,
+          "data": 28910,
+          "strb": 3
+        },
+        {
+          "addr": 374,
+          "data": 29274,
+          "strb": 3
+        },
+        {
+          "addr": 375,
+          "data": 29640,
+          "strb": 3
+        },
+        {
+          "addr": 376,
+          "data": 30008,
+          "strb": 3
+        },
+        {
+          "addr": 377,
+          "data": 30378,
+          "strb": 3
+        },
+        {
+          "addr": 378,
+          "data": 30750,
+          "strb": 3
+        },
+        {
+          "addr": 379,
+          "data": 31124,
+          "strb": 3
+        },
+        {
+          "addr": 380,
+          "data": 31500,
+          "strb": 3
+        },
+        {
+          "addr": 381,
+          "data": 31878,
+          "strb": 3
+        },
+        {
+          "addr": 382,
+          "data": 32258,
+          "strb": 3
+        },
+        {
+          "addr": 383,
+          "data": 32640,
           "strb": 3
         }
       ]
