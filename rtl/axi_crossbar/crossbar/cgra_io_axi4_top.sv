@@ -9,13 +9,13 @@
 //   bsfetch   : CGRA frontend bitstream fetch (slv_req_t from dice_core)
 //
 // One bsg_link pair carries *both* AXI buses by multiplexing on axi_link_tx/rx
-// opcodes (WRITE_REQ / READ_REQ / READ_RESP / WRITE_RESP):
+// opcodes (WRITE_REQ / READ_REQ / META_REQ / READ_RESP):
 //
 //   TX (chip → FPGA): fpga_mem AW/W/AR (chip as master) + fpga_mst R/B (chip as slave)
 //   RX (FPGA → chip): fpga_mem R/B (FPGA SRAM responds)  + fpga_mst AW/W/AR (FPGA host)
 //
-// Only DDR bsg_link pins are exposed at the module boundary; there are no
-// flat AXI4 master ports.
+// Only core-side bsg_link flit streams are exposed at the module boundary; the
+// source-synchronous DDR PHY lives outside this module at chip_top.
 // =============================================================================
 
 `ifndef AXI_TYPEDEF_SVH_
@@ -55,44 +55,39 @@ module cgra_io_axi4_top
     input  slv_req_t  bsfetch_req_i,
     output slv_resp_t bsfetch_resp_o,
 
-    // dfetch AXI4 master (flat pins from dice_core LDST FIFO) — dfetch crossbar port
-    input  logic [DATA_WIDTH-1:0] dfetch_awaddr_i,
-    input  logic                  dfetch_awvalid_i,
-    output logic                  dfetch_awready_o,
+    // dfetch AXI4 masters (flat pins from dice_core LDST per-port FIFOs)
+    input  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0] dfetch_awaddr_i,
+    input  logic [NUM_MEM_PORTS-1:0]                  dfetch_awvalid_i,
+    output logic [NUM_MEM_PORTS-1:0]                  dfetch_awready_o,
 
-    input  logic [DATA_WIDTH-1:0] dfetch_wdata_i,
-    input  logic [           1:0] dfetch_wstrb_i,
-    input  logic                  dfetch_wvalid_i,
-    output logic                  dfetch_wready_o,
+    input  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0] dfetch_wdata_i,
+    input  logic [NUM_MEM_PORTS-1:0][1:0]            dfetch_wstrb_i,
+    input  logic [NUM_MEM_PORTS-1:0]                 dfetch_wvalid_i,
+    output logic [NUM_MEM_PORTS-1:0]                 dfetch_wready_o,
 
-    output logic [1:0] dfetch_bresp_o,
-    output logic       dfetch_bvalid_o,
-    input  logic       dfetch_bready_i,
+    output logic [NUM_MEM_PORTS-1:0][1:0] dfetch_bresp_o,
+    output logic [NUM_MEM_PORTS-1:0]      dfetch_bvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]      dfetch_bready_i,
 
-    input  logic [DATA_WIDTH-1:0] dfetch_araddr_i,
-    input  logic                  dfetch_arvalid_i,
-    output logic                  dfetch_arready_o,
+    input  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0]    dfetch_araddr_i,
+    input  logic [NUM_MEM_PORTS-1:0][AxiUserWidth-1:0] dfetch_aruser_i,
+    input  logic [NUM_MEM_PORTS-1:0]                    dfetch_arvalid_i,
+    output logic [NUM_MEM_PORTS-1:0]                    dfetch_arready_o,
 
     output logic [DATA_WIDTH-1:0] dfetch_rdata_o,
-    output logic [           1:0] dfetch_rresp_o,
+    output logic [1:0]            dfetch_rresp_o,
     output logic                  dfetch_rvalid_o,
     input  logic                  dfetch_rready_i,
 
-    // bsg_link upstream (chip → FPGA SRAM): source-synchronous DDR
-    input logic io_master_clk_i,  // IO master clock for upstream link
-    input logic upstream_io_link_reset_i,  // IO-domain reset for upstream link
-    input logic async_token_reset_i,  // Async token counter reset
-    input logic token_clk_i,  // Token credit clock from FPGA downstream
-    output logic upstream_io_clk_r_o,  // Forwarded clock to FPGA
-    output logic [CHANNEL_WIDTH-1:0] upstream_io_data_r_o,  // DDR data to FPGA
-    output logic upstream_io_valid_r_o,  // DDR valid to FPGA
+    // Core-side stream from the external bsg_link wrapper.
+    input  logic [FLIT_WIDTH-1:0] link_rx_data_i,
+    input  logic                  link_rx_valid_i,
+    output logic                  link_rx_yumi_o,
 
-    // bsg_link downstream (FPGA SRAM → chip): source-synchronous DDR
-    input logic downstream_io_link_reset_i,  // IO-domain reset for downstream link
-    input logic downstream_io_clk_i,  // Forwarded clock from FPGA
-    input logic [CHANNEL_WIDTH-1:0] downstream_io_data_i,  // DDR data from FPGA
-    input logic downstream_io_valid_i,  // DDR valid from FPGA
-    output logic downstream_core_token_r_o,  // Token credit back to FPGA upstream
+    // Core-side stream to the external bsg_link wrapper.
+    output logic [FLIT_WIDTH-1:0] link_tx_data_o,
+    output logic                  link_tx_valid_o,
+    input  logic                  link_tx_ready_i,
 
     // CSR slave port (on-chip)
     output mst_req_t  cgra_csr_req_o,
@@ -102,8 +97,10 @@ module cgra_io_axi4_top
   // --------------------------------------------------------------------------
   // Crossbar request/response structs — dfetch driven directly from dfetch_* ports
   // --------------------------------------------------------------------------
-  slv_req_t fpga_mst_req, dfetch_req;
-  slv_resp_t fpga_mst_resp, dfetch_resp;
+  slv_req_t fpga_mst_req;
+  slv_resp_t fpga_mst_resp;
+  slv_req_t [NUM_MEM_PORTS-1:0] dfetch_req;
+  slv_resp_t [NUM_MEM_PORTS-1:0] dfetch_resp;
   slv_req_t mfetch_req, bsfetch_req;
   slv_resp_t mfetch_resp, bsfetch_resp;
 
@@ -139,6 +136,7 @@ module cgra_io_axi4_top
   logic      [           7:0] rx_fpga_arlen;
   logic      [           2:0] rx_fpga_arsize;
   logic      [           1:0] rx_fpga_arburst;
+  logic      [13:0]          rx_fpga_aruser;
 
   logic                       tx_fpga_bready;
   logic                       tx_fpga_rready;
@@ -162,39 +160,59 @@ module cgra_io_axi4_top
     fpga_mst_req.ar.size  = rx_fpga_arsize;
     fpga_mst_req.ar.burst = rx_fpga_arburst;
     fpga_mst_req.ar.id    = '0;
+    fpga_mst_req.ar.user  = axi_user_t'(rx_fpga_aruser);
     fpga_mst_req.r_ready  = tx_fpga_rready;
   end
 
   // --------------------------------------------------------------------------
   // dice_core AXI4 dfetch_* → dfetch_req (single-beat promotion)
   // --------------------------------------------------------------------------
-  always_comb begin
-    dfetch_req          = '0;
-    dfetch_req.aw_valid = dfetch_awvalid_i;
-    dfetch_req.aw.addr  = axi_addr_t'(dfetch_awaddr_i);
-    dfetch_req.aw.len   = '0;
-    dfetch_req.aw.size  = 3'b010;
-    dfetch_req.aw.burst = BURST_INCR;
-    dfetch_req.w_valid  = dfetch_wvalid_i;
-    dfetch_req.w.data   = axi_data_t'(dfetch_wdata_i);
-    dfetch_req.w.strb   = axi_strb_t'(dfetch_wstrb_i);
-    dfetch_req.w.last   = 1'b1;
-    dfetch_req.b_ready  = dfetch_bready_i;
-    dfetch_req.ar_valid = dfetch_arvalid_i;
-    dfetch_req.ar.addr  = axi_addr_t'(dfetch_araddr_i);
-    dfetch_req.ar.len   = '0;
-    dfetch_req.ar.size  = 3'b010;
-    dfetch_req.ar.burst = BURST_INCR;
-    dfetch_req.r_ready  = dfetch_rready_i;
+  logic [NUM_MEM_PORTS-1:0] dfetch_r_grant;
+
+  for (genvar dfetch_i = 0; dfetch_i < NUM_MEM_PORTS; dfetch_i++) begin : gen_dfetch_req
+    always_comb begin
+      dfetch_req[dfetch_i]          = '0;
+      dfetch_req[dfetch_i].aw_valid = dfetch_awvalid_i[dfetch_i];
+      dfetch_req[dfetch_i].aw.addr  = axi_addr_t'(dfetch_awaddr_i[dfetch_i]);
+      dfetch_req[dfetch_i].aw.len   = '0;
+      dfetch_req[dfetch_i].aw.size  = 3'b010;
+      dfetch_req[dfetch_i].aw.burst = BURST_INCR;
+      dfetch_req[dfetch_i].w_valid  = dfetch_wvalid_i[dfetch_i];
+      dfetch_req[dfetch_i].w.data   = axi_data_t'(dfetch_wdata_i[dfetch_i]);
+      dfetch_req[dfetch_i].w.strb   = axi_strb_t'(dfetch_wstrb_i[dfetch_i]);
+      dfetch_req[dfetch_i].w.last   = 1'b1;
+      dfetch_req[dfetch_i].b_ready  = dfetch_bready_i[dfetch_i];
+      dfetch_req[dfetch_i].ar_valid = dfetch_arvalid_i[dfetch_i];
+      dfetch_req[dfetch_i].ar.addr  = axi_addr_t'(dfetch_araddr_i[dfetch_i]);
+      dfetch_req[dfetch_i].ar.user  = axi_user_t'(dfetch_aruser_i[dfetch_i]);
+      dfetch_req[dfetch_i].ar.len   = '0;
+      dfetch_req[dfetch_i].ar.size  = 3'b010;
+      dfetch_req[dfetch_i].ar.burst = BURST_INCR;
+      dfetch_req[dfetch_i].r_ready  = dfetch_rready_i && dfetch_r_grant[dfetch_i];
+    end
+
+    assign dfetch_awready_o[dfetch_i] = dfetch_resp[dfetch_i].aw_ready;
+    assign dfetch_wready_o[dfetch_i]  = dfetch_resp[dfetch_i].w_ready;
+    assign dfetch_bresp_o[dfetch_i]   = dfetch_resp[dfetch_i].b.resp;
+    assign dfetch_bvalid_o[dfetch_i]  = dfetch_resp[dfetch_i].b_valid;
+    assign dfetch_arready_o[dfetch_i] = dfetch_resp[dfetch_i].ar_ready;
   end
-  assign dfetch_awready_o = dfetch_resp.aw_ready;
-  assign dfetch_wready_o  = dfetch_resp.w_ready;
-  assign dfetch_bresp_o   = dfetch_resp.b.resp;
-  assign dfetch_bvalid_o  = dfetch_resp.b_valid;
-  assign dfetch_arready_o = dfetch_resp.ar_ready;
-  assign dfetch_rdata_o   = DATA_WIDTH'(dfetch_resp.r.data);
-  assign dfetch_rresp_o   = dfetch_resp.r.resp;
-  assign dfetch_rvalid_o  = dfetch_resp.r_valid;
+
+  always_comb begin
+    dfetch_r_grant = '0;
+    dfetch_rdata_o = '0;
+    dfetch_rresp_o = '0;
+    dfetch_rvalid_o = 1'b0;
+
+    for (int i = 0; i < NUM_MEM_PORTS; i++) begin
+      if ((dfetch_r_grant == '0) && dfetch_resp[i].r_valid) begin
+        dfetch_r_grant[i] = 1'b1;
+        dfetch_rdata_o = DATA_WIDTH'(dfetch_resp[i].r.data);
+        dfetch_rresp_o = dfetch_resp[i].r.resp;
+        dfetch_rvalid_o = 1'b1;
+      end
+    end
+  end
 
   assign mfetch_req    = mfetch_req_i;
   assign mfetch_resp_o = mfetch_resp;
@@ -207,6 +225,8 @@ module cgra_io_axi4_top
   // can route responses back to the correct master port.
   // --------------------------------------------------------------------------
   logic tx_awready, tx_wready, tx_arready;
+  logic tx_awready_link, tx_arready_link;
+  logic aw_id_q_ready, ar_id_q_ready;
   logic rx_rvalid, rx_rlast;
   logic [DATA_WIDTH-1:0] rx_rdata;
   logic [           1:0] rx_rresp;
@@ -227,7 +247,7 @@ module cgra_io_axi4_top
       .reset_i(rst_i),
       .v_i    (xbar_mem_req.ar_valid && tx_arready),
       .data_i (xbar_mem_req.ar.id),
-      .ready_o(),
+      .ready_o(ar_id_q_ready),
       .v_o    (ar_id_q_v),
       .data_o (ar_id_q_data),
       .yumi_i (ar_id_q_yumi)
@@ -243,15 +263,17 @@ module cgra_io_axi4_top
       .reset_i(rst_i),
       .v_i    (xbar_mem_req.aw_valid && tx_awready),
       .data_i (xbar_mem_req.aw.id),
-      .ready_o(),
+      .ready_o(aw_id_q_ready),
       .v_o    (aw_id_q_v),
       .data_o (aw_id_q_data),
       .yumi_i (aw_id_q_yumi)
   );
 
-  assign ar_id_q_yumi = rx_rvalid && xbar_mem_req.r_ready && rx_rlast;
-  assign aw_id_q_yumi = rx_bvalid && xbar_mem_req.b_ready;
+  assign tx_arready = tx_arready_link && ar_id_q_ready;
+  assign tx_awready = tx_awready_link && aw_id_q_ready;
 
+  assign ar_id_q_yumi = rx_rvalid && ar_id_q_v && xbar_mem_req.r_ready && rx_rlast;
+  assign aw_id_q_yumi = rx_bvalid && aw_id_q_v && xbar_mem_req.b_ready;
   always_comb begin
     xbar_mem_resp          = '0;
     // Ready signals come from axi_link_tx
@@ -259,21 +281,21 @@ module cgra_io_axi4_top
     xbar_mem_resp.w_ready  = tx_wready;
     xbar_mem_resp.ar_ready = tx_arready;
     // R response from axi_link_rx, ID stamped from shim
-    xbar_mem_resp.r_valid  = rx_rvalid;
+    xbar_mem_resp.r_valid  = rx_rvalid && ar_id_q_v;
     xbar_mem_resp.r.data   = axi_data_t'(rx_rdata);
     xbar_mem_resp.r.resp   = rx_rresp;
     xbar_mem_resp.r.last   = rx_rlast;
     xbar_mem_resp.r.id     = ar_id_q_data;
     // B response from axi_link_rx, ID stamped from shim
-    xbar_mem_resp.b_valid  = rx_bvalid;
+    xbar_mem_resp.b_valid  = rx_bvalid && aw_id_q_v;
     xbar_mem_resp.b.resp   = rx_bresp;
     xbar_mem_resp.b.id     = aw_id_q_data;
   end
 
   // --------------------------------------------------------------------------
-  // top_level_io — bsg_link DDR physical layer + axi_link_tx/rx
-  //   TX path: crossbar AW/W/AR → axi_link_tx → bsg_link_ddr_upstream → DDR pins
-  //   RX path: DDR pins → bsg_link_ddr_downstream → axi_link_rx → R/B to crossbar
+  // top_level_io — AXI packetizer/depacketizer around core-side link streams.
+  //   TX path: crossbar AW/W/AR -> axi_link_tx -> link_tx_*
+  //   RX path: link_rx_* -> axi_link_rx -> R/B to crossbar
   // --------------------------------------------------------------------------
   top_level_io #(
       .flit_width_p                   (FLIT_WIDTH),
@@ -294,7 +316,6 @@ module cgra_io_axi4_top
       .rx_w_data_fifo_els_p           (8),
       .rx_r_len_fifo_els_p            (4),
       .rx_r_data_fifo_els_p           (8),
-      .rx_b_resp_fifo_els_p           (4),
       // TX FIFO sizes
       .tx_link_fifo_els_p             (8),
       .tx_aw_desc_fifo_els_p          (2),
@@ -303,29 +324,20 @@ module cgra_io_axi4_top
       .tx_w_data_fifo_els_p           (8),
       .tx_r_len_fifo_els_p            (4),
       .tx_r_data_fifo_els_p           (8),
-      .tx_b_resp_fifo_els_p           (4),
       .tx_pkt_order_fifo_els_p        (8)
   ) u_top_level_io (
       .core_clk_i                (clk_i),
       .reset_i                   (rst_i),
-      // bsg_link upstream control
-      .io_master_clk_i           (io_master_clk_i),
-      .upstream_io_link_reset_i  (upstream_io_link_reset_i),
-      .async_token_reset_i       (async_token_reset_i),
-      .token_clk_i               (token_clk_i),
-      // bsg_link downstream control
-      .downstream_io_link_reset_i(downstream_io_link_reset_i),
-      .downstream_io_clk_i       (downstream_io_clk_i),
-      .downstream_io_data_i      (downstream_io_data_i),
-      .downstream_io_valid_i     (downstream_io_valid_i),
-      // DDR physical outputs
-      .upstream_io_clk_r_o       (upstream_io_clk_r_o),
-      .upstream_io_data_r_o      (upstream_io_data_r_o),
-      .upstream_io_valid_r_o     (upstream_io_valid_r_o),
-      .downstream_core_token_r_o (downstream_core_token_r_o),
+      // Core-side bsg_link streams.
+      .link_rx_data_i            (link_rx_data_i),
+      .link_rx_valid_i           (link_rx_valid_i),
+      .link_rx_yumi_o            (link_rx_yumi_o),
+      .link_tx_data_o            (link_tx_data_o),
+      .link_tx_valid_o           (link_tx_valid_o),
+      .link_tx_ready_i           (link_tx_ready_i),
       // TX: chip → FPGA SRAM (AW/W/AR requests)
-      .tx_awvalid_i              (xbar_mem_req.aw_valid),
-      .tx_awready_o              (tx_awready),
+      .tx_awvalid_i              (xbar_mem_req.aw_valid && aw_id_q_ready),
+      .tx_awready_o              (tx_awready_link),
       .tx_awaddr_i               (xbar_mem_req.aw.addr[ADDR_WIDTH-1:0]),
       .tx_awlen_i                (xbar_mem_req.aw.len),
       .tx_awsize_i               (xbar_mem_req.aw.size),
@@ -334,12 +346,13 @@ module cgra_io_axi4_top
       .tx_wready_o               (tx_wready),
       .tx_wdata_i                (xbar_mem_req.w.data[DATA_WIDTH-1:0]),
       .tx_wlast_i                (xbar_mem_req.w.last),
-      .tx_arvalid_i              (xbar_mem_req.ar_valid),
-      .tx_arready_o              (tx_arready),
+      .tx_arvalid_i              (xbar_mem_req.ar_valid && ar_id_q_ready),
+      .tx_arready_o              (tx_arready_link),
       .tx_araddr_i               (xbar_mem_req.ar.addr[ADDR_WIDTH-1:0]),
       .tx_arlen_i                (xbar_mem_req.ar.len),
       .tx_arsize_i               (xbar_mem_req.ar.size),
       .tx_arburst_i              (xbar_mem_req.ar.burst),
+      .tx_aruser_i               (xbar_mem_req.ar.user[13:0]),
       // TX: R/B from crossbar fpga_mst slave port → FPGA host
       .tx_rvalid_i               (fpga_mst_resp.r_valid),
       .tx_rready_o               (tx_fpga_rready),
@@ -351,12 +364,12 @@ module cgra_io_axi4_top
       .tx_bresp_i                (fpga_mst_resp.b.resp),
       // RX: R/B responses FPGA SRAM → crossbar fpga_mem port (ID stamped by shim)
       .rx_rvalid_o               (rx_rvalid),
-      .rx_rready_i               (xbar_mem_req.r_ready),
+      .rx_rready_i               (xbar_mem_req.r_ready && ar_id_q_v),
       .rx_rdata_o                (rx_rdata),
       .rx_rresp_o                (rx_rresp),
       .rx_rlast_o                (rx_rlast),
       .rx_bvalid_o               (rx_bvalid),
-      .rx_bready_i               (xbar_mem_req.b_ready),
+      .rx_bready_i               (xbar_mem_req.b_ready && aw_id_q_v),
       .rx_bresp_o                (rx_bresp),
       // RX: AW/W/AR from FPGA host → crossbar fpga_mst slave port
       .rx_awvalid_o              (rx_fpga_awvalid),
@@ -374,7 +387,8 @@ module cgra_io_axi4_top
       .rx_araddr_o               (rx_fpga_araddr),
       .rx_arlen_o                (rx_fpga_arlen),
       .rx_arsize_o               (rx_fpga_arsize),
-      .rx_arburst_o              (rx_fpga_arburst)
+      .rx_arburst_o              (rx_fpga_arburst),
+      .rx_aruser_o               (rx_fpga_aruser)
   );
 
   // --------------------------------------------------------------------------
@@ -386,8 +400,14 @@ module cgra_io_axi4_top
       .test_i         (1'b0),
       .fpga_mst_req_i (fpga_mst_req),
       .fpga_mst_resp_o(fpga_mst_resp),
-      .dfetch_req_i   (dfetch_req),
-      .dfetch_resp_o  (dfetch_resp),
+      .dfetch0_req_i  (dfetch_req[0]),
+      .dfetch0_resp_o (dfetch_resp[0]),
+      .dfetch1_req_i  (dfetch_req[1]),
+      .dfetch1_resp_o (dfetch_resp[1]),
+      .dfetch2_req_i  (dfetch_req[2]),
+      .dfetch2_resp_o (dfetch_resp[2]),
+      .dfetch3_req_i  (dfetch_req[3]),
+      .dfetch3_resp_o (dfetch_resp[3]),
       .mfetch_req_i   (mfetch_req),
       .mfetch_resp_o  (mfetch_resp),
       .bsfetch_req_i  (bsfetch_req),

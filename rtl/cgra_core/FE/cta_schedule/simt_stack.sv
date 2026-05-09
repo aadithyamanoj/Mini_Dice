@@ -172,8 +172,48 @@ module simt_stack
 
   // Assertions for debugging
 `ifndef SYNTHESIS
+  logic [DICE_ADDR_WIDTH-1:0] sim_debug_next_pc[SIMT_STACK_DEPTH];
+  logic [DICE_ADDR_WIDTH-1:0] sim_debug_reconvergence_pc[SIMT_STACK_DEPTH];
+  logic [DICE_NUM_MAX_THREADS_PER_CORE-1:0] sim_debug_active_mask[SIMT_STACK_DEPTH];
+  logic [StackIndexWidth:0] sim_debug_depth;
+
+  function automatic string sim_debug_op_name();
+    if (push_i && modify_top_i) return "MODIFY_TOP";
+    if (push_i) return "PUSH";
+    if (pop_i) return "POP";
+    return "NOOP";
+  endfunction
+
+  task automatic sim_debug_dump_stack(input string reason, input logic [StackIndexWidth:0] depth);
+    $display("[SIMT_STACK] t=%0t %s depth=%0d", $time, reason, depth);
+    if (depth == '0) begin
+      $display("[SIMT_STACK] t=%0t   <empty>", $time);
+    end else begin
+      for (int i = SIMT_STACK_DEPTH - 1; i >= 0; i--) begin
+        if (i < depth) begin
+          $display(
+              "[SIMT_STACK] t=%0t   entry[%0d]%s pc=%0d reconv=%0d mask=%h",
+              $time,
+              i,
+              (i == depth - 1) ? " TOP" : "",
+              sim_debug_next_pc[i],
+              sim_debug_reconvergence_pc[i],
+              sim_debug_active_mask[i]
+          );
+        end
+      end
+    end
+  endtask
+
   always @(posedge clk_i) begin
-    if (rst_i == 1'b0) begin
+    if (rst_i == 1'b1) begin
+      sim_debug_depth = '0;
+      for (int i = 0; i < SIMT_STACK_DEPTH; i++) begin
+        sim_debug_next_pc[i] = '0;
+        sim_debug_reconvergence_pc[i] = '0;
+        sim_debug_active_mask[i] = '0;
+      end
+    end else begin
       if ((push_i == 1'b1) && (stack_full_o == 1'b1)) begin
         $error("SIMT Stack overflow: trying to push when stack is full");
       end
@@ -182,6 +222,54 @@ module simt_stack
       end
       if ((modify_top_i == 1'b1) && (stack_empty_o == 1'b1)) begin
         $error("SIMT Stack: trying to modify top of empty stack");
+      end
+
+      if ((push_i == 1'b1) && (stack_full_o == 1'b0) && (modify_top_i == 1'b1) &&
+          (stack_ptr_q > '0)) begin
+        sim_debug_next_pc[stack_ptr_q-1] = push_next_pc_i;
+        sim_debug_reconvergence_pc[stack_ptr_q-1] = push_reconvergence_pc_i;
+        sim_debug_active_mask[stack_ptr_q-1] = push_active_mask_i;
+        sim_debug_depth = stack_ptr_q;
+        $display(
+            "[SIMT_STACK] t=%0t op=%s idx=%0d pc=%0d reconv=%0d mask=%h",
+            $time,
+            sim_debug_op_name(),
+            stack_ptr_q - 1,
+            push_next_pc_i,
+            push_reconvergence_pc_i,
+            push_active_mask_i
+        );
+        sim_debug_dump_stack("after MODIFY_TOP", stack_ptr_q);
+      end else if ((push_i == 1'b1) && (stack_full_o == 1'b0) && (modify_top_i == 1'b0)) begin
+        sim_debug_next_pc[stack_ptr_q] = push_next_pc_i;
+        sim_debug_reconvergence_pc[stack_ptr_q] = push_reconvergence_pc_i;
+        sim_debug_active_mask[stack_ptr_q] = push_active_mask_i;
+        sim_debug_depth = stack_ptr_q + 1;
+        $display(
+            "[SIMT_STACK] t=%0t op=%s idx=%0d pc=%0d reconv=%0d mask=%h",
+            $time,
+            sim_debug_op_name(),
+            stack_ptr_q,
+            push_next_pc_i,
+            push_reconvergence_pc_i,
+            push_active_mask_i
+        );
+        sim_debug_dump_stack("after PUSH", stack_ptr_q + 1);
+      end else if ((pop_i == 1'b1) && (stack_empty_o == 1'b0)) begin
+        $display(
+            "[SIMT_STACK] t=%0t op=%s idx=%0d popped_pc=%0d popped_reconv=%0d popped_mask=%h",
+            $time,
+            sim_debug_op_name(),
+            stack_ptr_q - 1,
+            sim_debug_next_pc[stack_ptr_q-1],
+            sim_debug_reconvergence_pc[stack_ptr_q-1],
+            sim_debug_active_mask[stack_ptr_q-1]
+        );
+        sim_debug_next_pc[stack_ptr_q-1] = '0;
+        sim_debug_reconvergence_pc[stack_ptr_q-1] = '0;
+        sim_debug_active_mask[stack_ptr_q-1] = '0;
+        sim_debug_depth = stack_ptr_q - 1;
+        sim_debug_dump_stack("after POP", stack_ptr_q - 1);
       end
     end
   end

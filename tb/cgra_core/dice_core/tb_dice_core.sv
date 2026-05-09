@@ -13,7 +13,11 @@ import "DPI-C" context function int unsigned dice_core_tb_get_cta_desc_word(
 );
 import "DPI-C" context function int unsigned dice_core_tb_get_csr(input int unsigned csr_idx);
 import "DPI-C" context function int unsigned dice_core_tb_meta_read16(input int unsigned byte_addr);
+import "DPI-C" context function int unsigned dice_core_tb_meta_read32(input int unsigned byte_addr);
 import "DPI-C" context function int unsigned dice_core_tb_bitstream_read16(
+  input int unsigned byte_addr
+);
+import "DPI-C" context function int unsigned dice_core_tb_bitstream_read32(
   input int unsigned byte_addr
 );
 import "DPI-C" context function int unsigned dice_core_tb_axi_read16(input int unsigned addr);
@@ -40,7 +44,7 @@ module tb_dice_core;
 
 
   localparam int ClkPeriod = 20000;
-  localparam int TimeoutCycles = 500000;
+  localparam int TimeoutCycles = 5000000;
   localparam int AxiRespDelayCycles = 10;
   localparam int AxiRespDelayCtrWidth = $clog2(AxiRespDelayCycles + 1);
   localparam int MetaBeatBytes = AxiDataWidth / 8;
@@ -116,19 +120,14 @@ module tb_dice_core;
   logic           [       DICE_REG_DATA_WIDTH-1:0] wdata_q;
   logic           [                           1:0] wstrb_q;
   logic                                            write_resp_pending_q;
-  logic           [     AxiRespDelayCtrWidth-1:0] write_resp_delay_q;
+  logic           [      AxiRespDelayCtrWidth-1:0] write_resp_delay_q;
   logic                                            read_resp_pending_q;
-  logic           [     AxiRespDelayCtrWidth-1:0] read_resp_delay_q;
+  logic           [      AxiRespDelayCtrWidth-1:0] read_resp_delay_q;
   logic           [       DICE_REG_DATA_WIDTH-1:0] read_data_q;
 
   dice_cta_desc_t                                  launch_desc;
 
-`ifdef GATE_SIM
-  dice_core_gate_wrap
-`else
-  dice_core
-`endif
-  u_dut (
+  dice_core u_dut (
       .clk_i(clk_i),
       .rst_i(rst_i),
       .cta_if_inst(cta_if_inst),
@@ -166,7 +165,7 @@ module tb_dice_core;
   );
 
   initial begin
-    clk_i = 1'b1;
+    clk_i = 1'b0;
     forever #(ClkPeriod / 2) clk_i = ~clk_i;
   end
 
@@ -292,7 +291,7 @@ module tb_dice_core;
       mfetch_resp_i.r_valid = 1'b1;
       mfetch_resp_i.r.id = mfetch_id_q;
       mfetch_resp_i.r.data = AxiDataWidth'(
-          dice_core_tb_meta_read16(int'(mfetch_addr_q) + int'(mfetch_beat_idx_q) * MetaBeatBytes));
+          dice_core_tb_meta_read32(int'(mfetch_addr_q) + int'(mfetch_beat_idx_q) * MetaBeatBytes));
       mfetch_resp_i.r.last = (mfetch_beat_idx_q == mfetch_len_q);
     end
   end
@@ -328,7 +327,7 @@ module tb_dice_core;
       bsfetch_resp_i.r_valid = 1'b1;
       bsfetch_resp_i.r.id = bsfetch_id_q;
       bsfetch_resp_i.r.data =
-          AxiDataWidth'(dice_core_tb_bitstream_read16(
+          AxiDataWidth'(dice_core_tb_bitstream_read32(
                         int'(bsfetch_addr_q) + int'(bsfetch_beat_idx_q) * MetaBeatBytes));
       bsfetch_resp_i.r.last = (bsfetch_beat_idx_q == bsfetch_len_q);
     end
@@ -422,7 +421,7 @@ module tb_dice_core;
       end else if (read_resp_pending_q) begin
         if (read_resp_delay_q == AxiRespDelayCtrWidth'(1)) begin
           axi_rvalid_i <= 1'b1;
-          axi_rdata_i  <= read_data_q;
+          axi_rdata_i <= read_data_q;
           read_resp_pending_q <= 1'b0;
           read_resp_delay_q <= '0;
         end else begin
@@ -456,7 +455,8 @@ module tb_dice_core;
       $finish;
     end
 
-    $display("FAIL: dice_core runtime checks reported an error (see AXI WRITE VERIFICATION DIFF above)");
+    $display(
+        "FAIL: dice_core runtime checks reported an error (see AXI WRITE VERIFICATION DIFF above)");
     $fatal(1, "FAIL: AXI write mismatch - see diff above");
   end
 

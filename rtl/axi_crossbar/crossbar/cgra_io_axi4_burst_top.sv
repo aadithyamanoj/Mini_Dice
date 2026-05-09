@@ -131,10 +131,13 @@ module cgra_io_axi4_burst_top
   logic        fifo_rvalid,  fifo_rready;
 
   // Crossbar request/response structs
-  slv_req_t  fpga_mst_req,  dfetch_req;
+  slv_req_t  fpga_mst_req,  dfetch_req, unused_dfetch_req;
   slv_resp_t fpga_mst_resp, dfetch_resp;
+  slv_resp_t unused_dfetch_resp_1, unused_dfetch_resp_2, unused_dfetch_resp_3;
   slv_req_t  mfetch_req,    bsfetch_req;
   slv_resp_t mfetch_resp,   bsfetch_resp;
+
+  assign unused_dfetch_req = '0;
 
   // FPGA flat AXI-Lite → slv_req_t
   always_comb begin
@@ -344,8 +347,14 @@ module cgra_io_axi4_burst_top
     .test_i          ( 1'b0           ),
     .fpga_mst_req_i  ( fpga_mst_req   ),
     .fpga_mst_resp_o ( fpga_mst_resp  ),
-    .dfetch_req_i    ( dfetch_req     ),
-    .dfetch_resp_o   ( dfetch_resp    ),
+    .dfetch0_req_i   ( dfetch_req     ),
+    .dfetch0_resp_o  ( dfetch_resp    ),
+    .dfetch1_req_i   ( unused_dfetch_req ),
+    .dfetch1_resp_o  ( unused_dfetch_resp_1 ),
+    .dfetch2_req_i   ( unused_dfetch_req ),
+    .dfetch2_resp_o  ( unused_dfetch_resp_2 ),
+    .dfetch3_req_i   ( unused_dfetch_req ),
+    .dfetch3_resp_o  ( unused_dfetch_resp_3 ),
     .mfetch_req_i    ( mfetch_req     ),
     .mfetch_resp_o   ( mfetch_resp    ),
     .bsfetch_req_i   ( bsfetch_req    ),

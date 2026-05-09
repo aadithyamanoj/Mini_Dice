@@ -9,16 +9,16 @@
   ],
   "pgraph_meta_t": {
     "barrier": 0,
-    "bitstream_addr": 1024,
+    "bitstream_addr": 1536,
     "bitstream_length": 135,
     "branch_meta": {
-      "branch_ena": 0,
-      "branch_jump_target_offset": 0,
+      "branch_ena": 1,
+      "branch_jump_target_offset": 2,
       "branch_neg_pred": 0,
       "branch_pred_reg": 0,
       "branch_reconv_offset": 0,
-      "branch_uni": 0,
-      "is_return": 1
+      "branch_uni": 1,
+      "is_return": 0
     },
     "in_regs_bitmap": 255,
     "lat": 5,

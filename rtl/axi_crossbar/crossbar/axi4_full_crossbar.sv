@@ -11,9 +11,9 @@
 //   Slave ports (masters driving the bus):
 //     [0] fpga_mst  – FPGA host: writes CGRA CSRs; may also stage data in
 //                     FPGA SRAM for DMA kick-off.
-//     [1] dfetch    – CGRA data-fetch unit: reads payload from FPGA SRAM.
-//     [2] mfetch    – CGRA metadata-fetch unit: reads metadata from FPGA SRAM.
-//     [3] bsfetch   – CGRA bitstream-fetch unit: reads bitstream from FPGA SRAM.
+//     [1:4] dfetch  – CGRA data-fetch ports: read/write payload in FPGA SRAM.
+//     [5] mfetch    – CGRA metadata-fetch unit: reads metadata from FPGA SRAM.
+//     [6] bsfetch   – CGRA bitstream-fetch unit: reads bitstream from FPGA SRAM.
 //
 //   Master ports (slaves driven by the bus):
 //     [0] fpga_mem  – FPGA-side SRAM   0x0800 – 0x0FFF (2 KB, 1024×16-bit)
@@ -26,7 +26,7 @@
 //   Strobe width  :  2 b
 //   ID width      :  4 b per master; 6 b at every slave port
 //                    (crossbar appends log2(4)=2 b for global uniqueness)
-//   User width    :  1 b
+//   User width    : 14 b
 //   Reset polarity: active-high (rst_i)  — inverted internally for AXI IP
 // =============================================================================
 
@@ -47,12 +47,12 @@ package axi4_xbar_pkg;
   localparam int unsigned AxiAddrWidth = 16;
   localparam int unsigned AxiDataWidth = 32;
   localparam int unsigned AxiStrbWidth = AxiDataWidth / 8;  // 4
-  localparam int unsigned AxiUserWidth = 1;
+  localparam int unsigned AxiUserWidth = 14;
 
   // ---------------------------------------------------------------------------
   // Crossbar topology
   // ---------------------------------------------------------------------------
-  localparam int unsigned NoMasters   = 4;  // slave ports on the xbar
+  localparam int unsigned NoMasters   = 7;  // slave ports on the xbar
   localparam int unsigned NoSlaves    = 2;  // master ports on the xbar
   localparam int unsigned NoAddrRules = 2;
 
@@ -62,7 +62,7 @@ package axi4_xbar_pkg;
   // $clog2(NoMasters) bits so every slave sees globally unique IDs.
   // ---------------------------------------------------------------------------
   localparam int unsigned SlvIdWidth = 4;
-  localparam int unsigned MstIdWidth = SlvIdWidth + $clog2(NoMasters); // = 6
+  localparam int unsigned MstIdWidth = SlvIdWidth + $clog2(NoMasters); // = 7
 
   // ---------------------------------------------------------------------------
   // Slave-port index constants
@@ -165,15 +165,21 @@ module axi4_full_crossbar
   input  slv_req_t  fpga_mst_req_i,
   output slv_resp_t fpga_mst_resp_o,
 
-  // [1] CGRA data-fetch
-  input  slv_req_t  dfetch_req_i,
-  output slv_resp_t dfetch_resp_o,
+  // [1:4] CGRA data-fetch
+  input  slv_req_t  dfetch0_req_i,
+  output slv_resp_t dfetch0_resp_o,
+  input  slv_req_t  dfetch1_req_i,
+  output slv_resp_t dfetch1_resp_o,
+  input  slv_req_t  dfetch2_req_i,
+  output slv_resp_t dfetch2_resp_o,
+  input  slv_req_t  dfetch3_req_i,
+  output slv_resp_t dfetch3_resp_o,
 
-  // [2] CGRA metadata-fetch
+  // [5] CGRA metadata-fetch
   input  slv_req_t  mfetch_req_i,
   output slv_resp_t mfetch_resp_o,
 
-  // [3] CGRA bitstream-fetch
+  // [6] CGRA bitstream-fetch
   input  slv_req_t  bsfetch_req_i,
   output slv_resp_t bsfetch_resp_o,
 
@@ -201,14 +207,20 @@ module axi4_full_crossbar
   slv_resp_t [NoMasters-1:0] slv_ports_resp;
 
   assign slv_ports_req[0] = fpga_mst_req_i;
-  assign slv_ports_req[1] = dfetch_req_i;
-  assign slv_ports_req[2] = mfetch_req_i;
-  assign slv_ports_req[3] = bsfetch_req_i;
+  assign slv_ports_req[1] = dfetch0_req_i;
+  assign slv_ports_req[2] = dfetch1_req_i;
+  assign slv_ports_req[3] = dfetch2_req_i;
+  assign slv_ports_req[4] = dfetch3_req_i;
+  assign slv_ports_req[5] = mfetch_req_i;
+  assign slv_ports_req[6] = bsfetch_req_i;
 
   assign fpga_mst_resp_o = slv_ports_resp[0];
-  assign dfetch_resp_o   = slv_ports_resp[1];
-  assign mfetch_resp_o   = slv_ports_resp[2];
-  assign bsfetch_resp_o  = slv_ports_resp[3];
+  assign dfetch0_resp_o  = slv_ports_resp[1];
+  assign dfetch1_resp_o  = slv_ports_resp[2];
+  assign dfetch2_resp_o  = slv_ports_resp[3];
+  assign dfetch3_resp_o  = slv_ports_resp[4];
+  assign mfetch_resp_o   = slv_ports_resp[5];
+  assign bsfetch_resp_o  = slv_ports_resp[6];
 
   // --------------------------------------------------------------------------
   // Pack slave requests/responses into arrays for axi_xbar

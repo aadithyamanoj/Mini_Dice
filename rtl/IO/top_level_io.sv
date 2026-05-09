@@ -18,7 +18,6 @@ module top_level_io
    ,parameter int rx_w_data_fifo_els_p = 8
    ,parameter int rx_r_len_fifo_els_p  = 4
    ,parameter int rx_r_data_fifo_els_p = 8
-   ,parameter int rx_b_resp_fifo_els_p = 4
    ,parameter int tx_link_fifo_els_p   = 8
    ,parameter int tx_aw_desc_fifo_els_p = 2
    ,parameter int tx_ar_desc_fifo_els_p = 2
@@ -26,31 +25,24 @@ module top_level_io
    ,parameter int tx_w_data_fifo_els_p = 8
    ,parameter int tx_r_len_fifo_els_p  = 4
    ,parameter int tx_r_data_fifo_els_p = 8
-   ,parameter int tx_b_resp_fifo_els_p = 4
    ,parameter int tx_pkt_order_fifo_els_p = 8
+   // Depth of the locally-synthesized fake-B counter. Sized for the max
+   // number of in-flight write bursts the upstream master can have
+   // outstanding before pulsing bready.
+   ,parameter int fake_b_max_outstanding_p = 16
    )
   (input  logic                                          core_clk_i
    ,input logic                                          reset_i
 
-   // bsg_link upstream reset/control.
-   ,input  logic                                         io_master_clk_i
-   ,input  logic                                         upstream_io_link_reset_i
-   ,input  logic                                         async_token_reset_i
-   ,input  logic [num_channels_p-1:0]                    token_clk_i
+   // Core-side stream from the external bsg_link wrapper.
+   ,input  logic [flit_width_p-1:0]                      link_rx_data_i
+   ,input  logic                                         link_rx_valid_i
+   ,output logic                                         link_rx_yumi_o
 
-   // bsg_link downstream reset/control.
-   ,input  logic [num_channels_p-1:0]                    downstream_io_link_reset_i
-   ,input  logic [num_channels_p-1:0]                    downstream_io_clk_i
-   ,input  logic [num_channels_p*channel_width_p-1:0]    downstream_io_data_i
-   ,input  logic [num_channels_p-1:0]                    downstream_io_valid_i
-
-   // Physical outputs driven by upstream link.
-   ,output logic [num_channels_p-1:0]                    upstream_io_clk_r_o
-   ,output logic [num_channels_p*channel_width_p-1:0]    upstream_io_data_r_o
-   ,output logic [num_channels_p-1:0]                    upstream_io_valid_r_o
-
-   // Tokens driven by downstream link.
-   ,output logic [num_channels_p-1:0]                    downstream_core_token_r_o
+   // Core-side stream to the external bsg_link wrapper.
+   ,output logic [flit_width_p-1:0]                      link_tx_data_o
+   ,output logic                                         link_tx_valid_o
+   ,input  logic                                         link_tx_ready_i
 
    // RX side toward local AXI crossbar/sinks.
    ,output logic                                         rx_awvalid_o
@@ -71,6 +63,7 @@ module top_level_io
    ,output logic [7:0]                                   rx_arlen_o
    ,output logic [2:0]                                   rx_arsize_o
    ,output logic [1:0]                                   rx_arburst_o
+   ,output logic [13:0]                                  rx_aruser_o
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
@@ -101,6 +94,7 @@ module top_level_io
    ,input  logic [7:0]                                   tx_arlen_i
    ,input  logic [2:0]                                   tx_arsize_i
    ,input  logic [1:0]                                   tx_arburst_i
+   ,input  logic [13:0]                                  tx_aruser_i
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
@@ -117,12 +111,14 @@ module top_level_io
   // top_level_io
   // --------------------------------------------------------------------------
   // Full top-level IO subsystem:
-  //   AXI source/sink side <-> axi_link_tx/rx <-> 32-bit core-side link flits
-  //   <-> bsg_link_ddr_upstream/downstream <-> physical DDR/tokens
+  //   AXI source/sink side <-> axi_link_tx/rx <-> 32-bit core-side link flits.
   //
-  // The bsg_link blocks provide the actual source-synchronous DDR physical
-  // transport. axi_link_tx and axi_link_rx sit directly on the 32-bit core-side
-  // ready/valid boundary exported by those bsg_link blocks.
+  // The source-synchronous DDR bsg_link PHY lives outside this module, usually
+  // at chip_top next to the pad ring. This block only packetizes/depacketizes
+  // AXI traffic over the ready/valid flit stream.
+  //
+  // The link protocol does not carry WRITE_RESP packets. B responses are
+  // synthesized locally for outgoing writes and discarded for incoming writes.
   //
   // Ordering model:
   //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
@@ -137,52 +133,11 @@ module top_level_io
       $error("top_level_io requires data_width_p=32, got %0d", data_width_p);
   end
 
-  logic [flit_width_p-1:0] link_rx_core_data_lo;
-  logic                    link_rx_core_valid_lo;
-  logic                    link_rx_core_yumi_li;
-
-  logic [flit_width_p-1:0] link_tx_core_data_li;
-  logic                    link_tx_core_valid_li;
-  logic                    link_tx_core_ready_lo;
   logic                    rx_arready_li;
   logic                    tx_r_len_v_lo;
   logic [7:0]              tx_r_len_lo;
   logic                    tx_r_len_yumi_li;
   logic                    tx_r_len_ready_lo;
-
-  logic [num_channels_p-1:0][channel_width_p-1:0] downstream_io_data_li;
-  logic [num_channels_p-1:0][channel_width_p-1:0] upstream_io_data_lo;
-
-  for (genvar ch = 0; ch < num_channels_p; ch++) begin : phys_bus
-    assign downstream_io_data_li[ch] =
-      downstream_io_data_i[ch*channel_width_p +: channel_width_p];
-    assign upstream_io_data_r_o[ch*channel_width_p +: channel_width_p] =
-      upstream_io_data_lo[ch];
-  end
-
-  bsg_link_ddr_downstream #(
-    .width_p                        (flit_width_p),
-    .channel_width_p                (channel_width_p),
-    .num_channels_p                 (num_channels_p),
-    .lg_fifo_depth_p                (lg_fifo_depth_p),
-    .lg_credit_to_token_decimation_p(lg_credit_to_token_decimation_p),
-    .use_extra_data_bit_p           (use_extra_data_bit_p),
-    .use_encode_p                   (use_encode_p),
-    .bypass_twofer_fifo_p           (bypass_twofer_fifo_p),
-    .bypass_gearbox_p               (bypass_gearbox_p),
-    .use_hardened_fifo_p            (use_hardened_fifo_p)
-  ) link_downstream_i (
-    .core_clk_i        (core_clk_i),
-    .core_link_reset_i (reset_i),
-    .io_link_reset_i   (downstream_io_link_reset_i),
-    .core_data_o       (link_rx_core_data_lo),
-    .core_valid_o      (link_rx_core_valid_lo),
-    .core_yumi_i       (link_rx_core_yumi_li),
-    .io_clk_i          (downstream_io_clk_i),
-    .io_data_i         (downstream_io_data_li),
-    .io_valid_i        (downstream_io_valid_i),
-    .core_token_r_o    (downstream_core_token_r_o)
-  );
 
   // Incoming READ_REQ lengths are mirrored into a small FIFO so the local
   // AXI R channel can start streaming a READ_RESP packet back over the link
@@ -214,14 +169,13 @@ module top_level_io
     .w_len_fifo_els_p   (rx_w_len_fifo_els_p),
     .w_data_fifo_els_p  (rx_w_data_fifo_els_p),
     .r_len_fifo_els_p   (rx_r_len_fifo_els_p),
-    .r_data_fifo_els_p  (rx_r_data_fifo_els_p),
-    .b_resp_fifo_els_p  (rx_b_resp_fifo_els_p)
+    .r_data_fifo_els_p  (rx_r_data_fifo_els_p)
   ) axi_link_rx_i (
     .clk_i          (core_clk_i),
     .reset_i        (reset_i),
-    .link_rx_v_i    (link_rx_core_valid_lo),
-    .link_rx_data_i (link_rx_core_data_lo),
-    .link_rx_yumi_o (link_rx_core_yumi_li),
+    .link_rx_v_i    (link_rx_valid_i),
+    .link_rx_data_i (link_rx_data_i),
+    .link_rx_yumi_o (link_rx_yumi_o),
     .awvalid_o      (rx_awvalid_o),
     .awready_i      (rx_awready_i),
     .awaddr_o       (rx_awaddr_o),
@@ -238,14 +192,12 @@ module top_level_io
     .arlen_o        (rx_arlen_o),
     .arsize_o       (rx_arsize_o),
     .arburst_o      (rx_arburst_o),
+    .aruser_o       (rx_aruser_o),
     .rvalid_o       (rx_rvalid_o),
     .rready_i       (rx_rready_i),
     .rdata_o        (rx_rdata_o),
     .rresp_o        (rx_rresp_o),
-    .rlast_o        (rx_rlast_o),
-    .bvalid_o       (rx_bvalid_o),
-    .bready_i       (rx_bready_i),
-    .bresp_o        (rx_bresp_o)
+    .rlast_o        (rx_rlast_o)
   );
 
   axi_link_tx #(
@@ -258,7 +210,6 @@ module top_level_io
     .w_data_fifo_els_p    (tx_w_data_fifo_els_p),
     .r_len_fifo_els_p     (tx_r_len_fifo_els_p),
     .r_data_fifo_els_p    (tx_r_data_fifo_els_p),
-    .b_resp_fifo_els_p    (tx_b_resp_fifo_els_p),
     .pkt_order_fifo_els_p (tx_pkt_order_fifo_els_p)
   ) axi_link_tx_i (
     .clk_i          (core_clk_i),
@@ -279,6 +230,7 @@ module top_level_io
     .arlen_i        (tx_arlen_i),
     .arsize_i       (tx_arsize_i),
     .arburst_i      (tx_arburst_i),
+    .aruser_i       (tx_aruser_i),
     .rvalid_i       (tx_rvalid_i),
     .rready_o       (tx_rready_o),
     .rdata_i        (tx_rdata_i),
@@ -287,37 +239,44 @@ module top_level_io
     .tx_r_len_v_i   (tx_r_len_v_lo),
     .tx_r_len_i     (tx_r_len_lo),
     .tx_r_len_yumi_o(tx_r_len_yumi_li),
-    .bvalid_i       (tx_bvalid_i),
-    .bready_o       (tx_bready_o),
-    .bresp_i        (tx_bresp_i),
-    .link_tx_v_o    (link_tx_core_valid_li),
-    .link_tx_data_o (link_tx_core_data_li),
-    .link_tx_ready_i(link_tx_core_ready_lo)
+    .link_tx_v_o    (link_tx_valid_o),
+    .link_tx_data_o (link_tx_data_o),
+    .link_tx_ready_i(link_tx_ready_i)
   );
 
-  bsg_link_ddr_upstream #(
-    .width_p                        (flit_width_p),
-    .channel_width_p                (channel_width_p),
-    .num_channels_p                 (num_channels_p),
-    .lg_fifo_depth_p                (lg_fifo_depth_p),
-    .lg_credit_to_token_decimation_p(lg_credit_to_token_decimation_p),
-    .use_extra_data_bit_p           (use_extra_data_bit_p),
-    .use_encode_p                   (use_encode_p),
-    .bypass_twofer_fifo_p           (bypass_twofer_fifo_p),
-    .bypass_gearbox_p               (bypass_gearbox_p)
-  ) link_upstream_i (
-    .core_clk_i         (core_clk_i),
-    .core_link_reset_i  (reset_i),
-    .core_data_i        (link_tx_core_data_li),
-    .core_valid_i       (link_tx_core_valid_li),
-    .core_ready_o       (link_tx_core_ready_lo),
-    .io_clk_i           (io_master_clk_i),
-    .io_link_reset_i    (upstream_io_link_reset_i),
-    .async_token_reset_i(async_token_reset_i),
-    .io_clk_r_o         (upstream_io_clk_r_o),
-    .io_data_r_o        (upstream_io_data_lo),
-    .io_valid_r_o       (upstream_io_valid_r_o),
-    .token_clk_i        (token_clk_i)
-  );
+  // --------------------------------------------------------------------------
+  // B-channel handling without WRITE_RESP packets
+  // --------------------------------------------------------------------------
+  // The link no longer carries WRITE_RESP, so each accepted outgoing write gets
+  // a local OKAY B beat. Real B responses from the local slave are accepted and
+  // dropped because there is no response packet to serialize.
+
+  localparam int fake_b_count_width_lp =
+      (fake_b_max_outstanding_p <= 1) ? 1 : $clog2(fake_b_max_outstanding_p + 1);
+
+  logic                             fake_b_push, fake_b_pop;
+  logic [fake_b_count_width_lp-1:0] fake_b_count_r, fake_b_count_n;
+
+  assign fake_b_push = tx_wvalid_i && tx_wready_o && tx_wlast_i;
+  assign fake_b_pop  = rx_bvalid_o && rx_bready_i;
+
+  always_comb begin
+    fake_b_count_n = fake_b_count_r;
+    unique case ({fake_b_push, fake_b_pop})
+      2'b10:   fake_b_count_n = fake_b_count_r + fake_b_count_width_lp'(1);
+      2'b01:   fake_b_count_n = fake_b_count_r - fake_b_count_width_lp'(1);
+      default: fake_b_count_n = fake_b_count_r;
+    endcase
+  end
+
+  always_ff @(posedge core_clk_i) begin
+    if (reset_i) fake_b_count_r <= '0;
+    else         fake_b_count_r <= fake_b_count_n;
+  end
+
+  assign rx_bvalid_o = (fake_b_count_r != '0);
+  assign rx_bresp_o  = 2'b00;
+
+  assign tx_bready_o = 1'b1;
 
 endmodule

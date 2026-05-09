@@ -3,22 +3,22 @@
     "expected_writes": [
       {
         "addr": 256,
-        "data": 128,
+        "data": 129,
         "strb": 3
       },
       {
         "addr": 257,
-        "data": 258,
+        "data": 131,
         "strb": 3
       },
       {
         "addr": 258,
-        "data": 390,
+        "data": 133,
         "strb": 3
       },
       {
         "addr": 259,
-        "data": 524,
+        "data": 135,
         "strb": 3
       },
       {

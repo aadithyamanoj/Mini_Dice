@@ -170,7 +170,7 @@ module dice_rf_ctrl
 
   // LDST special regs command from cache response
   assign ldst_special_in = assemble_special_wr(ldst_convert);
-  assign cgra_special_valid = |cgra_special.const_mask || |cgra_special.pred_mask;
+  assign cgra_special_valid = cgra_valid_i && (|cgra_special.const_mask || |cgra_special.pred_mask);
 
   // Extract TID for per-TID pred writes (single coalesced command only)
   logic [TID_WIDTH-1:0] ldst_special_tid_in;
