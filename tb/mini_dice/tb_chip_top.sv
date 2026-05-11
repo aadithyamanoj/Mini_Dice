@@ -13,6 +13,8 @@
 //   5. DPI verifier reports PASS/FAIL.
 // =============================================================================
 
+// `define TB_RTL_HIER_DEBUG
+
 `timescale 1ns / 1ps
 
 import "DPI-C" context function void dice_core_tb_init(

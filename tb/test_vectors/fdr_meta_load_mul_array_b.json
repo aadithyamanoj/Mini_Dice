@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
-  "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
-  "fasm_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
+  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
+  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
   "kernel": "load_mul_array_b",
   "notes": [
     "B-side load stage for the staged mul-array flow.",

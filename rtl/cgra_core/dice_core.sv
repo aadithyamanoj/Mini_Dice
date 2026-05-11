@@ -34,18 +34,18 @@ module dice_core
     output logic [NUM_MEM_PORTS-1:0]                          axi_awvalid_o,
     input  logic [NUM_MEM_PORTS-1:0]                          axi_awready_i,
     output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
-    output logic [NUM_MEM_PORTS-1:0][1:0]                     axi_wstrb_o,
+    output logic [NUM_MEM_PORTS-1:0][                    1:0] axi_wstrb_o,
     output logic [NUM_MEM_PORTS-1:0]                          axi_wvalid_o,
     input  logic [NUM_MEM_PORTS-1:0]                          axi_wready_i,
-    input  logic [NUM_MEM_PORTS-1:0][1:0]                     axi_bresp_i,
+    input  logic [NUM_MEM_PORTS-1:0][                    1:0] axi_bresp_i,
     input  logic [NUM_MEM_PORTS-1:0]                          axi_bvalid_i,
     output logic [NUM_MEM_PORTS-1:0]                          axi_bready_o,
     output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
-    output logic [NUM_MEM_PORTS-1:0][AxiUserWidth-1:0]        axi_aruser_o,
+    output logic [NUM_MEM_PORTS-1:0][       AxiUserWidth-1:0] axi_aruser_o,
     output logic [NUM_MEM_PORTS-1:0]                          axi_arvalid_o,
     input  logic [NUM_MEM_PORTS-1:0]                          axi_arready_i,
-    input  logic [AxiDataWidth-1:0]                           axi_rdata_i,
-    input  logic [1:0]                                        axi_rresp_i,
+    input  logic [ AxiDataWidth-1:0]                          axi_rdata_i,
+    input  logic [              1:0]                          axi_rresp_i,
     input  logic                                              axi_rvalid_i,
     output logic                                              axi_rready_o
 );
@@ -84,19 +84,19 @@ module dice_core
       .bsfetch_req_o (bsfetch_req_o),
       .bsfetch_resp_i(bsfetch_resp_i),
 
-      .fdr_if_o      (fdr_out_if),
-      .cm_wr_buffer_o(cm_wr_buffer_lo),
-      .cm_wr_addr_o  (cm_wr_addr_lo),
-      .cm_wr_data_o  (cm_wr_data_lo),
-      .cm_wr_valid_o (cm_wr_valid_lo),
-      .pred_regs_i   (frontend_pred_regs),
-      .prog_active_i (prog_active_lo),
+      .fdr_if_o            (fdr_out_if),
+      .cm_wr_buffer_o      (cm_wr_buffer_lo),
+      .cm_wr_addr_o        (cm_wr_addr_lo),
+      .cm_wr_data_o        (cm_wr_data_lo),
+      .cm_wr_valid_o       (cm_wr_valid_lo),
+      .pred_regs_i         (frontend_pred_regs),
+      .prog_active_i       (prog_active_lo),
       .prog_active_buffer_i(prog_active_buffer_lo),
 
-      .eblock_commit_valid_i  (bct_pop_valid),
-      .eblock_commit_id_i     (bct_pop_e_block_id),
-      .brt_info_i             (frontend_brt_info),
-      .brt_info_write_enable_i('1),
+      .eblock_commit_valid_i   (bct_pop_valid),
+      .eblock_commit_id_i      (bct_pop_e_block_id),
+      .brt_info_i              (frontend_brt_info),
+      .brt_info_write_enable_i ('1),
       .simt_stack_entry_count_o()
   );
 
@@ -120,10 +120,10 @@ module dice_core
 
       // Frontend configuration-memory write stream
       .cm_wr_buffer_i(cm_wr_buffer_lo),
-      .cm_wr_addr_i  (cm_wr_addr_lo),
-      .cm_wr_data_i  (cm_wr_data_lo),
-      .cm_wr_valid_i (cm_wr_valid_lo),
-      .prog_active_o (prog_active_lo),
+      .cm_wr_addr_i(cm_wr_addr_lo),
+      .cm_wr_data_i(cm_wr_data_lo),
+      .cm_wr_valid_i(cm_wr_valid_lo),
+      .prog_active_o(prog_active_lo),
       .prog_active_buffer_o(prog_active_buffer_lo),
 
       // CGRA scan chain / bitstream outputs

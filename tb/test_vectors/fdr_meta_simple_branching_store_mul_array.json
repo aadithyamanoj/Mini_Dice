@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
-  "compile_report_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
-  "fasm_path": "/home/enorman/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
+  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
+  "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
+  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
   "kernel": "store_mul_array",
   "notes": [
     "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
