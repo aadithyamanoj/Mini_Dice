@@ -33,6 +33,9 @@ module simt_stack_controller
     // ============== STACK STATUS ==============
     output logic stack_empty_o,
     output logic stack_full_o,
+    output logic stack_overflow_o,
+    output logic [15:0] stack_depth_o,
+    output logic [15:0] stack_error_pc_o,
     output logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count_o
 );
 
@@ -125,6 +128,9 @@ module simt_stack_controller
 
   logic stack_empty_internal;
   logic stack_full_internal;
+  logic stack_overflow_internal;
+  logic [15:0] stack_depth_internal;
+  logic [15:0] stack_error_pc_internal;
   logic init_fire;
   logic update_fire;
   logic [SIMT_STACK_ENTRY_COUNT_WIDTH-1:0] stack_entry_count_internal;
@@ -132,6 +138,9 @@ module simt_stack_controller
   // Output status signals - direct pass-through from single stack
   assign stack_empty_o = stack_empty_internal;
   assign stack_full_o = stack_full_internal;
+  assign stack_overflow_o = stack_overflow_internal;
+  assign stack_depth_o = stack_depth_internal;
+  assign stack_error_pc_o = stack_error_pc_internal;
   assign stack_entry_count_o = stack_entry_count_internal;
 
   // Output data signals - direct pass-through from single stack
@@ -170,6 +179,9 @@ module simt_stack_controller
       .out_valid_o            (stack_out_valid),
       .stack_empty_o          (stack_empty_internal),
       .stack_full_o           (stack_full_internal),
+      .stack_overflow_o       (stack_overflow_internal),
+      .stack_depth_o          (stack_depth_internal),
+      .error_pc_o             (stack_error_pc_internal),
       .stack_entry_count_o    (stack_entry_count_internal)
   );
 

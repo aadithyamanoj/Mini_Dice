@@ -29,6 +29,14 @@ module dice_core
     output logic cgra_prog_dout_o,
     output logic cgra_prog_we_o,
 
+    // Hardware status outputs to cgra_io_csr
+    output logic        hw_busy_o,
+    output logic        dispatch_busy_o,
+    output logic        stack_overflow_o,
+    output logic [15:0] stack_depth_o,
+    output logic [15:0] stack_error_pc_o,
+    output logic [15:0] bsload_cnt_o,
+
     // AXI-Lite master interface from LDST FIFO
     output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
     output logic [NUM_MEM_PORTS-1:0]                          axi_awvalid_o,
@@ -70,6 +78,7 @@ module dice_core
 
 
   assign frontend_brt_info.has_pending_eblock = hw_cta_pending_lo;
+  assign hw_busy_o = hw_cta_pending_lo;
 
   // =========================================================================
   // Frontend — CTA scheduler + FDR
@@ -97,6 +106,9 @@ module dice_core
       .eblock_commit_id_i      (bct_pop_e_block_id),
       .brt_info_i              (frontend_brt_info),
       .brt_info_write_enable_i ('1),
+      .stack_overflow_o        (stack_overflow_o),
+      .stack_depth_o           (stack_depth_o),
+      .stack_error_pc_o        (stack_error_pc_o),
       .simt_stack_entry_count_o()
   );
 
@@ -129,6 +141,8 @@ module dice_core
       // CGRA scan chain / bitstream outputs
       .cgra_prog_dout_o(cgra_prog_dout_o),
       .cgra_prog_we_o  (cgra_prog_we_o),
+      .dispatch_busy_o (dispatch_busy_o),
+      .bsload_cnt_o    (bsload_cnt_o),
 
       // Input-only CSR sources exposed to the CGRA input crossbar
       .csrX0_i(csrX0_i),
