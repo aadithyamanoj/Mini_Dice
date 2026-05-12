@@ -14,7 +14,7 @@ access => 18570(times) 148M(bytes)
 
 time: write(0) read(0)  unit: second
 
-swap file directory: (/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/verdiLog)
+swap file directory: (/data/jami3jun/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/verdiLog)
 used swap file number: (1)
 
 
@@ -25,13 +25,13 @@ idxCnt: (4)
 closeHead: (1)
 closeTail: (2)
 openCnt: (2)
-fid(3): fd(0) fileName(/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv.daidir/kdb.elab++/work.lib++/reg_wr_buffer_tb.sv.tdc)
+fid(3): fd(0) fileName(/data/jami3jun/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv.daidir/kdb.elab++/work.lib++/reg_wr_buffer_tb.sv.tdc)
 	size(12712) lastModTime(1770196011) curModTime(1770196011)
 	mode(rb)	hot(0) cool(0) pos(0)
-fid(2): fd(31) fileName(/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/verdiLog/_swap_0001#-300781726#594353)
+fid(2): fd(31) fileName(/data/jami3jun/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/verdiLog/_swap_0001#-300781726#594353)
 	size(0) lastModTime(0) curModTime(1770196096)
 	mode(w+b)	hot(0) cool(1) pos(0)
-fid(1): fd(1073741824) fileName(/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv.daidir/kdb.elab++/work.lib++/dice_rf_ctrl_tb.sv.tdc)
+fid(1): fd(1073741824) fileName(/data/jami3jun/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv.daidir/kdb.elab++/work.lib++/dice_rf_ctrl_tb.sv.tdc)
 	size(13699) lastModTime(1770196011) curModTime(1770196011)
 	mode(rb)	hot(2) cool(0) pos(0)
 fid(0): fd(0) fileName(NULL)

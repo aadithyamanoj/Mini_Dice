@@ -78,7 +78,6 @@ module dice_cgra_subs
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_2,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_data_o_3,
     output logic [DICE_REG_DATA_WIDTH-1:0] mem_addr_o_3,
-
     output logic [15:0] bsload_cnt_o
 );
 

@@ -1,6 +1,6 @@
 psSimBaseName                      	simv
 psLogFileName                      	NULL
-psDaiDir                           	/data/amanoj3/Mini_Dice/tb/cgra_core/dispatcher/regfile/simv.daidir
+psDaiDir                           	/data/jami3jun/Mini_Dice/tb/cgra_core/dispatcher/regfile/simv.daidir
 destPath                           	csrc/
 fSharedMasterElab                  	0
 fHsimPCSharedLibSpecified          	0

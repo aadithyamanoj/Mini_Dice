@@ -1,7 +1,7 @@
 rc file Version 1.0
 
 [Design]
-COMPILE_PATH=/data/amanoj3/Mini_Dice/tb/cgra_core/dispatcher/regfile
+COMPILE_PATH=/data/jami3jun/Mini_Dice/tb/cgra_core/dispatcher/regfile
 VCS_HOME=/data/eda_tools/synopsys/tools/vcs/X-2025.06
 VERDI_HOME=/data/eda_tools/synopsys/tools/verdi/X-2025.06
 SystemC=FALSE

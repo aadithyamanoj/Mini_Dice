@@ -13,6 +13,8 @@
 //   5. DPI verifier reports PASS/FAIL.
 // =============================================================================
 
+// `define TB_RTL_HIER_DEBUG
+
 `timescale 1ns / 1ps
 
 import "DPI-C" context function void dice_core_tb_init(
@@ -112,8 +114,6 @@ module tb_chip_top;
     // zeroscatter-compatible chip_top pad map.
     pad_drv[44] = kz(clk_i);  // core_clk
     pad_drv[45] = kz(hard_reset);
-    pad_drv[11] = 1'b0;  // scan_en = 0: functional mode (not scan shift)
-    pad_drv[46] = 1'b0;  // scan_in = 0: idle
 
     // EP upstream outputs -> chip downstream inputs.
     pad_drv[8] = kz(ep_up_clk_r);
@@ -124,6 +124,11 @@ module tb_chip_top;
 
     // Chip TX-side credit return into EP upstream.
     pad_drv[12] = kz(ep_dn_token_r);
+
+    // DFT scan pads: hold low for normal (non-scan) operation so the
+    // synthesized scan FFs see SE=0 and pass functional data, not scan data.
+    pad_drv[11] = 1'b0;  // scan_en  (PAD[11])
+    pad_drv[46] = 1'b0;  // scan_in  (PAD[46])
   end
 
   function automatic int dn_data_pad(input int bit_idx);

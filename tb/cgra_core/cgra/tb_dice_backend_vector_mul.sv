@@ -43,7 +43,7 @@ module tb_dice_backend_vector_mul;
   localparam bit ENABLE_WB_TRACE = 1'b0;
 
   localparam string DEFAULT_BITSTREAM_FILE =
-      "/homes/amanoj3/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
+      "/homes/jami3jun/ee477/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/mini_dice_mul_array.bin";
 
   logic clk_i;
   logic reset_i;

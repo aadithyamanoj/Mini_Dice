@@ -69,7 +69,7 @@ def _rtl_define_int(name: str, fallback: int) -> int:
     return fallback
 
 
-DEFAULT_THREAD_COUNT = _rtl_define_int("DICE_NUM_MAX_THREADS_PER_CORE", 32)
+DEFAULT_THREAD_COUNT = _rtl_define_int("DICE_NUM_MAX_THREADS_PER_CORE", 16)
 DEFAULT_AFFINE_CSR_VALUES = {
     "csrX0": 1,       # A-side base
     "csrX1": 128,     # B-side base

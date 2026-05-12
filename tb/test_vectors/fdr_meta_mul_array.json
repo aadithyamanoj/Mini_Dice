@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/homes/jami3jun/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
-  "compile_report_path": "/homes/jami3jun/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
-  "fasm_path": "/homes/jami3jun/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
+  "binary_output_path": "/home/jami3jun/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
+  "compile_report_path": "/home/jami3jun/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
+  "fasm_path": "/home/jami3jun/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
   "kernel": "mul_array",
   "notes": [
     "Consumes GPRs 0..7 as mul operands.",

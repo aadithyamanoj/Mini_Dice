@@ -30,7 +30,6 @@ module cgra_bitstream_buf_serial
     , output logic prog_done_o
     , output logic prog_we_o
     , output logic prog_din_o
-
     , output logic [15:0] bsload_cnt_o
 );
 
@@ -104,10 +103,10 @@ module cgra_bitstream_buf_serial
   assign bank_valid_o = bank_valid_r;
 
   assign prog_rst_o = reset_i | (state_r == e_prog_reset);
-  assign prog_done_o  = programmed_r & (state_r == e_idle);
-  assign prog_we_o    = (state_r == e_prog_shift);
-  assign prog_din_o   = (state_r == e_prog_shift) ? shift_word_r[0] : 1'b0;
-  assign bsload_cnt_o = 16'(chunk_ctr_r);
+  assign prog_done_o = programmed_r & (state_r == e_idle);
+  assign prog_we_o = (state_r == e_prog_shift);
+  assign prog_din_o = (state_r == e_prog_shift) ? shift_word_r[0] : 1'b0;
+  assign bsload_cnt_o = (state_r == e_prog_shift) ? 16'(bit_ctr_r + 1'b1) : 16'(bit_ctr_r);
 
   always_comb begin
     state_n = state_r;

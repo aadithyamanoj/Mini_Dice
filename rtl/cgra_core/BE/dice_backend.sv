@@ -29,8 +29,6 @@ module dice_backend
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
     output logic cgra_prog_we_o,
-
-    // Hardware status outputs → cgra_io_csr
     output logic        dispatch_busy_o,
     output logic [15:0] bsload_cnt_o,
 
