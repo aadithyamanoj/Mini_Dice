@@ -17,6 +17,7 @@ module decode
     output logic                              branch_req_valid_o,
 
     //To valid checker
+    output logic                              is_barrier_o,
     output fdr_meta_t                         meta_o
 );
 
@@ -28,6 +29,9 @@ module decode
   assign branch_metadata_o      = metadata_i.branch_meta;
   assign branch_req_valid_o     = meta_in_valid_i;
 
+
+  // valid checker
+  assign is_barrier_o           = metadata_i.barrier;
 
 
   always_comb begin

@@ -92,6 +92,7 @@ module fdr_top
   branch_meta_t branch_meta_internal;
   logic         branch_mask_valid;
   logic         branch_req_valid_internal;
+  logic         is_barrier_internal;
   logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] branch_handler_pred_regs;
 
   logic         bh_update_valid;
@@ -156,6 +157,7 @@ module fdr_top
       .bitstream_addr_valid_o   (bitstream_addr_valid_internal),
       .branch_metadata_o        (branch_meta_internal),
       .branch_req_valid_o       (branch_req_valid_internal),
+      .is_barrier_o             (is_barrier_internal),
       .meta_o                   (fdr_if.data.metadata)
   );
 
@@ -182,9 +184,11 @@ module fdr_top
 
   // ---- Valid Checker ----
   valid_check u_valid_check (
+      .barrier_indicator_i(is_barrier_internal),
       .decode_done_i      (branch_mask_valid),
       .bh_done_i          (bh_done_internal),
       .bitstream_loaded_i (done_streaming_internal),
+      .barrier_complete_i (1'b1),
       .fdr_valid_o        (fdr_if.valid),
       .ex_ready_i         (fdr_if.ready),
       .fire_eblock_o      (fire_eblock_internal)
