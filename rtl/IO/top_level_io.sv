@@ -18,7 +18,6 @@ module top_level_io
    ,parameter int rx_w_data_fifo_els_p = 8
    ,parameter int rx_r_len_fifo_els_p  = 4
    ,parameter int rx_r_data_fifo_els_p = 8
-   ,parameter int rx_b_resp_fifo_els_p = 4
    ,parameter int tx_link_fifo_els_p   = 8
    ,parameter int tx_aw_desc_fifo_els_p = 2
    ,parameter int tx_ar_desc_fifo_els_p = 2
@@ -26,8 +25,11 @@ module top_level_io
    ,parameter int tx_w_data_fifo_els_p = 8
    ,parameter int tx_r_len_fifo_els_p  = 4
    ,parameter int tx_r_data_fifo_els_p = 8
-   ,parameter int tx_b_resp_fifo_els_p = 4
    ,parameter int tx_pkt_order_fifo_els_p = 8
+   // Depth of the locally-synthesized fake-B counter. Sized for the max
+   // number of in-flight write bursts the upstream master can have
+   // outstanding before pulsing bready.
+   ,parameter int fake_b_max_outstanding_p = 16
    )
   (input  logic                                          core_clk_i
    ,input logic                                          reset_i
@@ -61,6 +63,7 @@ module top_level_io
    ,output logic [7:0]                                   rx_arlen_o
    ,output logic [2:0]                                   rx_arsize_o
    ,output logic [1:0]                                   rx_arburst_o
+   ,output logic [13:0]                                  rx_aruser_o
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
@@ -91,6 +94,7 @@ module top_level_io
    ,input  logic [7:0]                                   tx_arlen_i
    ,input  logic [2:0]                                   tx_arsize_i
    ,input  logic [1:0]                                   tx_arburst_i
+   ,input  logic [13:0]                                  tx_aruser_i
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
@@ -112,6 +116,9 @@ module top_level_io
   // The source-synchronous DDR bsg_link PHY lives outside this module, usually
   // at chip_top next to the pad ring. This block only packetizes/depacketizes
   // AXI traffic over the ready/valid flit stream.
+  //
+  // The link protocol does not carry WRITE_RESP packets. B responses are
+  // synthesized locally for outgoing writes and discarded for incoming writes.
   //
   // Ordering model:
   //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
@@ -162,8 +169,7 @@ module top_level_io
     .w_len_fifo_els_p   (rx_w_len_fifo_els_p),
     .w_data_fifo_els_p  (rx_w_data_fifo_els_p),
     .r_len_fifo_els_p   (rx_r_len_fifo_els_p),
-    .r_data_fifo_els_p  (rx_r_data_fifo_els_p),
-    .b_resp_fifo_els_p  (rx_b_resp_fifo_els_p)
+    .r_data_fifo_els_p  (rx_r_data_fifo_els_p)
   ) axi_link_rx_i (
     .clk_i          (core_clk_i),
     .reset_i        (reset_i),
@@ -186,14 +192,12 @@ module top_level_io
     .arlen_o        (rx_arlen_o),
     .arsize_o       (rx_arsize_o),
     .arburst_o      (rx_arburst_o),
+    .aruser_o       (rx_aruser_o),
     .rvalid_o       (rx_rvalid_o),
     .rready_i       (rx_rready_i),
     .rdata_o        (rx_rdata_o),
     .rresp_o        (rx_rresp_o),
-    .rlast_o        (rx_rlast_o),
-    .bvalid_o       (rx_bvalid_o),
-    .bready_i       (rx_bready_i),
-    .bresp_o        (rx_bresp_o)
+    .rlast_o        (rx_rlast_o)
   );
 
   axi_link_tx #(
@@ -206,7 +210,6 @@ module top_level_io
     .w_data_fifo_els_p    (tx_w_data_fifo_els_p),
     .r_len_fifo_els_p     (tx_r_len_fifo_els_p),
     .r_data_fifo_els_p    (tx_r_data_fifo_els_p),
-    .b_resp_fifo_els_p    (tx_b_resp_fifo_els_p),
     .pkt_order_fifo_els_p (tx_pkt_order_fifo_els_p)
   ) axi_link_tx_i (
     .clk_i          (core_clk_i),
@@ -227,6 +230,7 @@ module top_level_io
     .arlen_i        (tx_arlen_i),
     .arsize_i       (tx_arsize_i),
     .arburst_i      (tx_arburst_i),
+    .aruser_i       (tx_aruser_i),
     .rvalid_i       (tx_rvalid_i),
     .rready_o       (tx_rready_o),
     .rdata_i        (tx_rdata_i),
@@ -235,12 +239,44 @@ module top_level_io
     .tx_r_len_v_i   (tx_r_len_v_lo),
     .tx_r_len_i     (tx_r_len_lo),
     .tx_r_len_yumi_o(tx_r_len_yumi_li),
-    .bvalid_i       (tx_bvalid_i),
-    .bready_o       (tx_bready_o),
-    .bresp_i        (tx_bresp_i),
     .link_tx_v_o    (link_tx_valid_o),
     .link_tx_data_o (link_tx_data_o),
     .link_tx_ready_i(link_tx_ready_i)
   );
+
+  // --------------------------------------------------------------------------
+  // B-channel handling without WRITE_RESP packets
+  // --------------------------------------------------------------------------
+  // The link no longer carries WRITE_RESP, so each accepted outgoing write gets
+  // a local OKAY B beat. Real B responses from the local slave are accepted and
+  // dropped because there is no response packet to serialize.
+
+  localparam int fake_b_count_width_lp =
+      (fake_b_max_outstanding_p <= 1) ? 1 : $clog2(fake_b_max_outstanding_p + 1);
+
+  logic                             fake_b_push, fake_b_pop;
+  logic [fake_b_count_width_lp-1:0] fake_b_count_r, fake_b_count_n;
+
+  assign fake_b_push = tx_wvalid_i && tx_wready_o && tx_wlast_i;
+  assign fake_b_pop  = rx_bvalid_o && rx_bready_i;
+
+  always_comb begin
+    fake_b_count_n = fake_b_count_r;
+    unique case ({fake_b_push, fake_b_pop})
+      2'b10:   fake_b_count_n = fake_b_count_r + fake_b_count_width_lp'(1);
+      2'b01:   fake_b_count_n = fake_b_count_r - fake_b_count_width_lp'(1);
+      default: fake_b_count_n = fake_b_count_r;
+    endcase
+  end
+
+  always_ff @(posedge core_clk_i) begin
+    if (reset_i) fake_b_count_r <= '0;
+    else         fake_b_count_r <= fake_b_count_n;
+  end
+
+  assign rx_bvalid_o = (fake_b_count_r != '0);
+  assign rx_bresp_o  = 2'b00;
+
+  assign tx_bready_o = 1'b1;
 
 endmodule

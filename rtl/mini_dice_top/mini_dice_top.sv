@@ -11,7 +11,8 @@
 //   dice_core mfetch/bsfetch (slv_req_t) → crossbar
 //   dice_core axi_* (dfetch) → crossbar
 //
-// grid_size and thread_count are tied to single-CTA defaults for now.
+// grid_size is tied to a single-CTA default for now. Thread count is
+// host-programmable through the CSR bank so smaller CTAs can be launched.
 // =============================================================================
 
 `ifndef AXI_TYPEDEF_SVH_
@@ -64,14 +65,14 @@ module mini_dice_top
     // input  logic                      fpga_axi_i_r_ready,
 
     // Core-side stream from the external bsg_link wrapper.
-    input  logic [FLIT_WIDTH-1:0]    link_rx_data_i,
-    input  logic                     link_rx_valid_i,
-    output logic                     link_rx_yumi_o,
+    input  logic [FLIT_WIDTH-1:0] link_rx_data_i,
+    input  logic                  link_rx_valid_i,
+    output logic                  link_rx_yumi_o,
 
     // Core-side stream to the external bsg_link wrapper.
-    output logic [FLIT_WIDTH-1:0]    link_tx_data_o,
-    output logic                     link_tx_valid_o,
-    input  logic                     link_tx_ready_i,
+    output logic [FLIT_WIDTH-1:0] link_tx_data_o,
+    output logic                  link_tx_valid_o,
+    input  logic                  link_tx_ready_i,
 
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
@@ -92,29 +93,44 @@ module mini_dice_top
   mst_resp_t csr_resp;
 
   // dfetch flat AXI4 (dice_core LDST FIFO → cgra_io_axi4_top)
-  logic [DICE_REG_DATA_WIDTH-1:0] dfetch_awaddr, dfetch_araddr;
-  logic [DICE_REG_DATA_WIDTH-1:0] dfetch_wdata, dfetch_rdata;
-  logic [1:0] dfetch_wstrb, dfetch_bresp, dfetch_rresp;
-  logic dfetch_awvalid, dfetch_awready;
-  logic dfetch_wvalid, dfetch_wready;
-  logic dfetch_bvalid, dfetch_bready;
-  logic dfetch_arvalid, dfetch_arready;
+  logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] dfetch_awaddr, dfetch_araddr;
+  logic [NUM_MEM_PORTS-1:0][AxiUserWidth-1:0] dfetch_aruser;
+  logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] dfetch_wdata;
+  logic [DATA_WIDTH-1:0] dfetch_rdata;
+  logic [NUM_MEM_PORTS-1:0][1:0] dfetch_wstrb, dfetch_bresp;
+  logic [1:0] dfetch_rresp;
+  logic [NUM_MEM_PORTS-1:0] dfetch_awvalid, dfetch_awready;
+  logic [NUM_MEM_PORTS-1:0] dfetch_wvalid, dfetch_wready;
+  logic [NUM_MEM_PORTS-1:0] dfetch_bvalid, dfetch_bready;
+  logic [NUM_MEM_PORTS-1:0] dfetch_arvalid, dfetch_arready;
   logic dfetch_rvalid, dfetch_rready;
 
-  logic [DATA_WIDTH-1:0]  dfetch_awaddr_axi, dfetch_araddr_axi;
-  logic [DATA_WIDTH-1:0]  dfetch_wdata_axi, dfetch_rdata_axi;
+  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0] dfetch_awaddr_axi, dfetch_araddr_axi;
+  logic [NUM_MEM_PORTS-1:0][DATA_WIDTH-1:0] dfetch_wdata_axi;
+  logic [DATA_WIDTH-1:0] dfetch_rdata_axi;
 
-  assign dfetch_awaddr_axi = DATA_WIDTH'(dfetch_awaddr);
-  assign dfetch_araddr_axi = DATA_WIDTH'(dfetch_araddr);
-  assign dfetch_wdata_axi  = DATA_WIDTH'(dfetch_wdata);
-  assign dfetch_rdata      = DICE_REG_DATA_WIDTH'(dfetch_rdata_axi);
+  for (genvar dfetch_i = 0; dfetch_i < NUM_MEM_PORTS; dfetch_i++) begin : gen_dfetch_widen
+    assign dfetch_awaddr_axi[dfetch_i] = DATA_WIDTH'(dfetch_awaddr[dfetch_i]);
+    assign dfetch_araddr_axi[dfetch_i] = DATA_WIDTH'(dfetch_araddr[dfetch_i]);
+    assign dfetch_wdata_axi[dfetch_i]  = DATA_WIDTH'(dfetch_wdata[dfetch_i]);
+  end
+  assign dfetch_rdata = dfetch_rdata_axi;
 
   // CSR outputs
   logic                           csr_start;
   logic [                   15:0] csr_start_pc;
+  logic [                   15:0] csr_thread_count;
+
+  // Hardware status wires from dice_core to cgra_io_csr
+  logic        core_hw_busy;
+  logic        core_dispatch_busy;
+  logic        core_stack_overflow;
+  logic [15:0] core_stack_depth;
+  logic [15:0] core_stack_error_pc;
+  logic [15:0] core_bsload_cnt;
 
   // csrX kernel arguments: cgra_io_csr regs 8-15 → dice_core
-  logic [DICE_REG_DATA_WIDTH-1:0] csrX         [8];
+  logic [DICE_REG_DATA_WIDTH-1:0] csrX              [8];
   logic                           cta_complete_fire;
 
   // Legacy flat FPGA AXI4 host interface is no longer consumed by
@@ -129,8 +145,8 @@ module mini_dice_top
   // assign fpga_axi_i_r_valid  = 1'b0;
 
   // --------------------------------------------------------------------------
-  // cta_if — internal; driven from cgra_io_csr start/start_pc outputs
-  // grid_size and thread_count defaulted to single-CTA (1×1×1, 1 thread)
+  // cta_if — internal; driven from cgra_io_csr launch outputs.
+  // grid_size and cta_id remain single-CTA defaults for now.
   // --------------------------------------------------------------------------
   cta_if u_cta_if ();
 
@@ -138,7 +154,10 @@ module mini_dice_top
     u_cta_if.dispatch_valid                         = csr_start;
     u_cta_if.dispatch_data                          = '0;
     u_cta_if.dispatch_data.kernel_desc.start_pc     = DICE_ADDR_WIDTH'(csr_start_pc);
-    u_cta_if.dispatch_data.kernel_desc.thread_count = 16;
+    u_cta_if.dispatch_data.kernel_desc.grid_size.x  = 1;
+    u_cta_if.dispatch_data.kernel_desc.grid_size.y  = 1;
+    u_cta_if.dispatch_data.kernel_desc.grid_size.z  = 1;
+    u_cta_if.dispatch_data.kernel_desc.thread_count = csr_thread_count[DICE_TID_WIDTH:0];
     u_cta_if.complete_ready                         = 1'b1;
   end
 
@@ -169,6 +188,12 @@ module mini_dice_top
 
       .cgra_prog_dout_o(cgra_prog_dout_o),
       .cgra_prog_we_o  (cgra_prog_we_o),
+      .hw_busy_o       (core_hw_busy),
+      .dispatch_busy_o (core_dispatch_busy),
+      .stack_overflow_o(core_stack_overflow),
+      .stack_depth_o   (core_stack_depth),
+      .stack_error_pc_o(core_stack_error_pc),
+      .bsload_cnt_o    (core_bsload_cnt),
 
       .axi_awaddr_o (dfetch_awaddr),
       .axi_awvalid_o(dfetch_awvalid),
@@ -181,6 +206,7 @@ module mini_dice_top
       .axi_bvalid_i (dfetch_bvalid),
       .axi_bready_o (dfetch_bready),
       .axi_araddr_o (dfetch_araddr),
+      .axi_aruser_o (dfetch_aruser),
       .axi_arvalid_o(dfetch_arvalid),
       .axi_arready_i(dfetch_arready),
       .axi_rdata_i  (dfetch_rdata),
@@ -246,6 +272,7 @@ module mini_dice_top
       .dfetch_bvalid_o (dfetch_bvalid),
       .dfetch_bready_i (dfetch_bready),
       .dfetch_araddr_i (dfetch_araddr_axi),
+      .dfetch_aruser_i (dfetch_aruser),
       .dfetch_arvalid_i(dfetch_arvalid),
       .dfetch_arready_o(dfetch_arready),
       .dfetch_rdata_o  (dfetch_rdata_axi),
@@ -277,19 +304,20 @@ module mini_dice_top
       .axi_resp_o(csr_resp),
 
       // Regs 0-7: control outputs
-      .start_o     (csr_start),
-      .start_pc_o  (csr_start_pc),
-      .cgra_reset_o(csr_cgra_reset_o),
-      .bsload_en_o (csr_bsload_en_o),
+      .start_o       (csr_start),
+      .start_pc_o    (csr_start_pc),
+      .thread_count_o(csr_thread_count),
+      .cgra_reset_o  (csr_cgra_reset_o),
+      .bsload_en_o   (csr_bsload_en_o),
 
       // hw_* status exposed through CSR STATUS.
-      .hw_busy_i          (1'b0),
+      .hw_busy_i          (core_hw_busy),
       .hw_complete_i      (cta_complete_fire),
-      .hw_dispatching_i   (1'b0),
-      .hw_stack_overflow_i(1'b0),
-      .hw_stack_depth_i   ('0),
-      .hw_error_info_i    ('0),
-      .hw_bsload_cnt_i    ('0),
+      .hw_dispatching_i   (core_dispatch_busy),
+      .hw_stack_overflow_i(core_stack_overflow),
+      .hw_stack_depth_i   (core_stack_depth),
+      .hw_error_info_i    (core_stack_error_pc),
+      .hw_bsload_cnt_i    (core_bsload_cnt),
 
       // Regs 8-15: kernel argument outputs → dice_core csrX inputs
       .csrX0_o(csrX[0]),

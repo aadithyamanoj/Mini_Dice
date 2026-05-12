@@ -1,12 +1,12 @@
 verdiSetActWin -dock widgetDock_<Message>
 verdiSetActWin -dock widgetDock_MTB_SOURCE_TAB_1
 simSetSimulator "-vcssv" -exec \
-           "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv" \
+           "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv" \
            -args
 debImport "-dbdir" \
-          "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv.daidir"
+          "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/simv.daidir"
 debLoadSimResult \
-           /data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb
+           /data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/dice_rf_ctrl_tb.fsdb
 wvCreateWindow
 verdiFindBar -show -win nWave_2
 verdiSetActWin -win $_nWave2
@@ -99,5 +99,5 @@ wvCloseFilterColorizeDlg -win $_nWave2
 wvGetSignalClose -win $_nWave2
 wvReloadFile -win $_nWave2
 wvSaveSignal -win $_nWave2 \
-           "/data/amanoj3/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/reg_file_2_4.rc"
+           "/data/enorman/vortex4dice/dice_new/tb/cgra_core/dispatcher/regfile/reg_file_2_4.rc"
 debExit
