@@ -2,21 +2,10 @@
 
 # Set top levels
 synthesis.inputs.top_module: "chip_top"
-sim.inputs.tb_name: "chip_top_tb"
+sim.inputs.tb_name: "tb_chip_top"
 
-# Don't synthesize these gate-level netlist modules.
+# Don't synthesize these gate-level netlist modules
 synthesis.inputs.preserve_modules: ["pad_ring_64"]
-
-# Experiment: preserve CGRA hierarchy by elaborated instance path and disable
-# the merge/constant optimizations Genus reported while we debug observability.
-# synthesis.inputs.preserve_hinsts: [
-#   "u_mini_dice_top/u_dice_core/u_dice_backend/u_dice_cgra_rf",
-#   "u_mini_dice_top/u_dice_core/u_dice_backend/u_dice_cgra_rf/cgra_subs_inst",
-#   "u_mini_dice_top/u_dice_core/u_dice_backend/u_dice_cgra_rf/cgra_subs_inst/bitstream_buf_serial_inst",
-#   "u_mini_dice_top/u_dice_core/u_dice_backend/u_dice_cgra_rf/cgra_subs_inst/cgra_inst",
-#   "u_mini_dice_top/u_dice_core/u_dice_backend/u_dice_cgra_rf/cgra_subs_inst/cgra_inst/dice_array"
-# ]
-# synthesis.inputs.preserve_cgra_experiment: true
 synthesis.genus.write_sdf_args: ["-timescale ns"]
 
 # Custom SDC constraints
@@ -51,6 +40,9 @@ vlsi.inputs.placement_constraints:
 
 par.innovus.floorplan_mode: "manual"
 par.innovus.floorplan_script_contents: "source ../../cfg/pad.tcl"
+
+# custom hook to set hold slack target
+par.innovus.opt_hold_target_slack: "0.05"
 
 vlsi.inputs.pin_mode: "generated"
 vlsi.inputs.pin.generate_mode: "semi_auto" # Prepend path of this config file!

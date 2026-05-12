@@ -1,0 +1,106 @@
+# Search directories for `include directives in simulations
+sim.inputs.tb_incdir: [
+  "../Mini_Dice/rtl",
+  "../Mini_Dice/rtl/includes",
+  "../Mini_Dice/rtl/interfaces",
+  "../Mini_Dice/rtl/cgra_core",
+  "../Mini_Dice/rtl/cgra_core/FE",
+  "../Mini_Dice/rtl/cgra_core/FE/cta_schedule",
+  "../Mini_Dice/rtl/cgra_core/FE/fetch_stage",
+  "../Mini_Dice/rtl/cgra_core/BE",
+  "../Mini_Dice/rtl/cgra_core/BE/dispatcher",
+  "../Mini_Dice/rtl/cgra_core/BE/regfile",
+  "../Mini_Dice/rtl/cgra_core/BE/misc",
+  "../Mini_Dice/rtl/cgra_core/BE/ldst_unit",
+  "../Mini_Dice/rtl/axi_crossbar/axi/include",
+  "../Mini_Dice/rtl/axi_crossbar/common_cells/common_cells/include",
+  "../Mini_Dice/rtl/axi_crossbar/crossbar",
+  "../Mini_Dice/rtl/IO",
+  "../Mini_Dice/rtl/cgra_core/internal_memory",
+  "../Mini_Dice/rtl/mini_dice_top",
+  # nopred CGRA variant:
+  "../Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/rtl",
+  "../Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/rtl/alu",
+  # traditional CGRA variant:
+  # "../Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/rtl",
+  # "../Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build/rtl/alu",
+  "../Mini_Dice/dora/dora.py/external/basejump_stl/bsg_misc",
+  "../basejump_stl/bsg_misc",
+  "../basejump_stl/bsg_async",
+  "../basejump_stl/bsg_dataflow",
+  "../basejump_stl/bsg_link",
+  "../basejump_stl/bsg_mem",
+  "/homes/amanoj3/ee478/Mini_Dice/tb/cgra_core/",
+  "/homes/amanoj3/ee478/Mini_Dice/tb/cgra_core/dice_core/",
+  "/homes/amanoj3/ee478/Mini_Dice/tb/mini_dice/"
+]
+sim.inputs.tb_incdir_meta: [subst]
+
+# List of Verilog testbenches (or other sources) needed for simulation only.
+# We include a behavioral pad cell model (tb_tsmc_io_behav.v) instead of the
+# foundry transistor-level pad model so RTL sim stays focused on chip_top
+# logic. For gate-level / post-PAR sim where the foundry pad model is
+# linked in by Hammer, comment that line out.
+#
+# bsg_link FPGA-side peer modules (bsg_link_ddr_upstream/downstream,
+# bsg_sync_sync, and their dependencies) live under tb_input_files
+# because they are *testbench-only* — they model the FPGA bsg_link peer
+# that the chip talks to over the pad ring, not part of the chip itself.
+# Including them here means they are compiled for ALL sim flavors
+# (sim-rtl + sim-syn + sim-par) without being passed to syn/par.
+# Order matters: dependencies first, then upstream/downstream, then tb.
+sim.inputs.tb_input_files: [
+  "${bsg_root}/bsg_misc/bsg_dff.v",
+  "${bsg_root}/bsg_misc/bsg_dff_en.v",
+  "${bsg_root}/bsg_misc/bsg_counter_clear_up.v",
+  "${bsg_root}/bsg_misc/bsg_circular_ptr.v",
+  "${bsg_root}/bsg_misc/bsg_scan.v",
+  "${bsg_root}/bsg_misc/bsg_gray_to_binary.v",
+  "${bsg_root}/bsg_async/bsg_async_ptr_gray.v",
+  "${bsg_root}/bsg_async/bsg_async_credit_counter.v",
+  "${bsg_root}/bsg_async/bsg_async_fifo.v",
+  "${bsg_root}/bsg_async/bsg_launch_sync_sync.v",
+  "${bsg_root}/bsg_async/bsg_sync_sync.v",
+  "${bsg_root}/bsg_dataflow/bsg_fifo_tracker.v",
+  "${bsg_root}/bsg_dataflow/bsg_one_fifo.v",
+  "${bsg_root}/bsg_dataflow/bsg_two_fifo.v",
+  "${bsg_root}/bsg_dataflow/bsg_fifo_1r1w_small_unhardened.v",
+  "${bsg_root}/bsg_dataflow/bsg_fifo_1r1w_small.v",
+  "${bsg_root}/bsg_dataflow/bsg_parallel_in_serial_out.v",
+  "${bsg_root}/bsg_dataflow/bsg_serial_in_parallel_out.v",
+  "${bsg_root}/bsg_dataflow/bsg_serial_in_parallel_out_full.v",
+  "${bsg_root}/bsg_dataflow/bsg_round_robin_1_to_n.v",
+  "${bsg_root}/bsg_mem/bsg_mem_1r1w_synth.v",
+  "${bsg_root}/bsg_mem/bsg_mem_1r1w.v",
+  "${bsg_root}/bsg_link/bsg_link_iddr_phy.v",
+  "${bsg_root}/bsg_link/bsg_link_oddr_phy.v",
+  "${bsg_root}/bsg_link/bsg_link_source_sync_downstream.v",
+  "${bsg_root}/bsg_link/bsg_link_source_sync_upstream.v",
+  "${bsg_root}/bsg_link/bsg_link_source_sync_upstream_sync.v",
+  "${bsg_root}/bsg_link/bsg_link_ddr_downstream.v",
+  "${bsg_root}/bsg_link/bsg_link_ddr_upstream.v",
+  "zeroscatter/chip_top_tb.sv",
+  "zeroscatter/tb_tsmc_io_behav.v",
+
+  # TB-side package dependencies. Gate-level sims replace RTL inputs with the
+  # mapped netlist, so the testbench still needs these package definitions.
+  "../Mini_Dice/rtl/includes/dice_pkg.sv",
+  "../Mini_Dice/rtl/includes/DE_pkg.sv",
+
+  # FPGA endpoint models instantiated by tb_chip_top. These are TB-side in
+  # gate-level sim even though the same RTL is part of the chip in RTL sim.
+  "../Mini_Dice/rtl/IO/axi_link_rx.sv",
+  "../Mini_Dice/rtl/IO/axi_link_tx.sv",
+  "../Mini_Dice/rtl/IO/top_level_io.sv",
+  "../Mini_Dice/rtl/IO/bsg_link_wrapper.sv",
+  "../Mini_Dice/tb/mini_dice/tb_chip_top.sv",
+  "/homes/amanoj3/ee478/Mini_Dice/tb/cgra_core/dice_core/dpi_dice_core_runtime.cpp",
+
+  "/homes/lab.apps/vlsiapps/kits/tsmc/N180RF/Standard_IO/tpd018nv_280a/TSMCHOME/digital/Front_End/verilog/tpd018nv_260a/tpd018nv.v",
+]
+sim.inputs.tb_input_files_meta: [append, subst]
+
+# List of trace files for the simulation
+sim.inputs.trace_files: [
+  #'v/trace.tr',
+]
