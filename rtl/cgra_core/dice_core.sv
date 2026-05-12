@@ -30,23 +30,24 @@ module dice_core
     output logic cgra_prog_we_o,
 
     // AXI-Lite master interface from LDST FIFO
-    output logic [DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
-    output logic                           axi_awvalid_o,
-    input  logic                           axi_awready_i,
-    output logic [DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
-    output logic [                    1:0] axi_wstrb_o,
-    output logic                           axi_wvalid_o,
-    input  logic                           axi_wready_i,
-    input  logic [                    1:0] axi_bresp_i,
-    input  logic                           axi_bvalid_i,
-    output logic                           axi_bready_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
-    output logic                           axi_arvalid_o,
-    input  logic                           axi_arready_i,
-    input  logic [DICE_REG_DATA_WIDTH-1:0] axi_rdata_i,
-    input  logic [                    1:0] axi_rresp_i,
-    input  logic                           axi_rvalid_i,
-    output logic                           axi_rready_o
+    output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_awvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_awready_i,
+    output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
+    output logic [NUM_MEM_PORTS-1:0][1:0]                     axi_wstrb_o,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_wvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_wready_i,
+    input  logic [NUM_MEM_PORTS-1:0][1:0]                     axi_bresp_i,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_bvalid_i,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_bready_o,
+    output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
+    output logic [NUM_MEM_PORTS-1:0][AxiUserWidth-1:0]        axi_aruser_o,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_arvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_arready_i,
+    input  logic [AxiDataWidth-1:0]                           axi_rdata_i,
+    input  logic [1:0]                                        axi_rresp_i,
+    input  logic                                              axi_rvalid_i,
+    output logic                                              axi_rready_o
 );
 
   // =========================================================================
@@ -64,6 +65,8 @@ module dice_core
   logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_lo;
   logic [AxiDataWidth-1:0] cm_wr_data_lo;
   logic cm_wr_valid_lo;
+  logic prog_active_lo;
+  logic prog_active_buffer_lo;
 
 
   assign frontend_brt_info.has_pending_eblock = hw_cta_pending_lo;
@@ -87,6 +90,8 @@ module dice_core
       .cm_wr_data_o  (cm_wr_data_lo),
       .cm_wr_valid_o (cm_wr_valid_lo),
       .pred_regs_i   (frontend_pred_regs),
+      .prog_active_i (prog_active_lo),
+      .prog_active_buffer_i(prog_active_buffer_lo),
 
       .eblock_commit_valid_i  (bct_pop_valid),
       .eblock_commit_id_i     (bct_pop_e_block_id),
@@ -117,6 +122,8 @@ module dice_core
       .cm_wr_addr_i  (cm_wr_addr_lo),
       .cm_wr_data_i  (cm_wr_data_lo),
       .cm_wr_valid_i (cm_wr_valid_lo),
+      .prog_active_o (prog_active_lo),
+      .prog_active_buffer_o(prog_active_buffer_lo),
 
       // CGRA scan chain / bitstream outputs
       .cgra_prog_dout_o(cgra_prog_dout_o),
@@ -147,6 +154,7 @@ module dice_core
       .axi_bvalid_i (axi_bvalid_i),
       .axi_bready_o (axi_bready_o),
       .axi_araddr_o (axi_araddr_o),
+      .axi_aruser_o (axi_aruser_o),
       .axi_arvalid_o(axi_arvalid_o),
       .axi_arready_i(axi_arready_i),
       .axi_rdata_i  (axi_rdata_i),

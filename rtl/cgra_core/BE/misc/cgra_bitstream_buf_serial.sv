@@ -21,6 +21,8 @@ module cgra_bitstream_buf_serial
     , input  logic bank_i
     , output logic ready_o
     , output logic busy_o
+    , output logic prog_active_o
+    , output logic prog_active_bank_o
 
     , output logic [1:0] bank_valid_o
 
@@ -95,6 +97,8 @@ module cgra_bitstream_buf_serial
   assign request_fire = v_i & ready_o;
   assign ready_o = (state_r == e_idle) & bank_valid_r[bank_i];
   assign busy_o = (state_r != e_idle);
+  assign prog_active_o = busy_o | request_fire;
+  assign prog_active_bank_o = request_fire ? bank_i : active_bank_r;
   assign bank_valid_o = bank_valid_r;
 
   assign prog_rst_o = reset_i | (state_r == e_prog_reset);

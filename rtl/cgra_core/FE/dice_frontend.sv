@@ -25,6 +25,8 @@ module dice_frontend
     output logic [AxiDataWidth-1:0]           cm_wr_data_o,
     output logic                              cm_wr_valid_o,
     input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
+    input logic prog_active_i,
+    input logic prog_active_buffer_i,
 
     // Block commit table feedback (from backend)
     input logic                       eblock_commit_valid_i,
@@ -90,6 +92,8 @@ module dice_frontend
       .fdr_if(fdr_if_o),
       .simt_status_i(simt_status),
       .pred_regs_i(pred_regs_i),
+      .prog_active_i(prog_active_i),
+      .prog_active_buffer_i(prog_active_buffer_i),
       .bh_branch_predict_info_o(bh_branch_predict_info),
       .bh_branch_predict_info_we_o(bh_branch_predict_info_we),
       .cta_status_data_i(cta_status_data),

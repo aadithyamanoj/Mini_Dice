@@ -2,6 +2,7 @@ module dice_backend
   import dice_pkg::*;
   import dice_frontend_pkg::*;
   import DE_pkg::*;
+  import axi4_xbar_pkg::*;
 (
     input logic clk_i,
     input logic rst_i,
@@ -18,10 +19,12 @@ module dice_backend
     output logic                            hw_cta_pending_o,
 
     // Frontend configuration-memory write stream
-    input logic                                   cm_wr_buffer_i,
-    input logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_i,
-    input logic [        DICE_MEM_DATA_WIDTH-1:0] cm_wr_data_i,
-    input logic                                   cm_wr_valid_i,
+    input  logic                                   cm_wr_buffer_i,
+    input  logic [$clog2(DICE_BITSTREAM_SIZE)-1:0] cm_wr_addr_i,
+    input  logic [        DICE_MEM_DATA_WIDTH-1:0] cm_wr_data_i,
+    input  logic                                   cm_wr_valid_i,
+    output logic                                   prog_active_o,
+    output logic                                   prog_active_buffer_o,
 
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
@@ -41,23 +44,24 @@ module dice_backend
     output logic [DICE_NUM_MAX_THREADS_PER_CORE*DICE_NUM_PRED-1:0] cgra_pred_all_o,
 
     // AXI-Lite master interface from LDST FIFO
-    output logic [DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
-    output logic                           axi_awvalid_o,
-    input  logic                           axi_awready_i,
-    output logic [DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
-    output logic [                    1:0] axi_wstrb_o,
-    output logic                           axi_wvalid_o,
-    input  logic                           axi_wready_i,
-    input  logic [                    1:0] axi_bresp_i,
-    input  logic                           axi_bvalid_i,
-    output logic                           axi_bready_o,
-    output logic [DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
-    output logic                           axi_arvalid_o,
-    input  logic                           axi_arready_i,
-    input  logic [DICE_REG_DATA_WIDTH-1:0] axi_rdata_i,
-    input  logic [                    1:0] axi_rresp_i,
-    input  logic                           axi_rvalid_i,
-    output logic                           axi_rready_o
+    output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_awaddr_o,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_awvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_awready_i,
+    output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_wdata_o,
+    output logic [NUM_MEM_PORTS-1:0][                    1:0] axi_wstrb_o,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_wvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_wready_i,
+    input  logic [NUM_MEM_PORTS-1:0][                    1:0] axi_bresp_i,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_bvalid_i,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_bready_o,
+    output logic [NUM_MEM_PORTS-1:0][DICE_REG_DATA_WIDTH-1:0] axi_araddr_o,
+    output logic [NUM_MEM_PORTS-1:0][       AxiUserWidth-1:0] axi_aruser_o,
+    output logic [NUM_MEM_PORTS-1:0]                          axi_arvalid_o,
+    input  logic [NUM_MEM_PORTS-1:0]                          axi_arready_i,
+    input  logic [ AxiDataWidth-1:0]                          axi_rdata_i,
+    input  logic [              1:0]                          axi_rresp_i,
+    input  logic                                              axi_rvalid_i,
+    output logic                                              axi_rready_o
 );
 
   localparam int CmChunkCount = (DICE_BITSTREAM_SIZE + DICE_MEM_DATA_WIDTH - 1)
@@ -126,58 +130,57 @@ module dice_backend
 
   //credit signals
 
-  logic                                cgra_credit_ready_lo;
-  logic                                mem_bundle_credit_ready_lo;
-  logic                                load_credit_fire_lo;
-  logic                                mem_bundle_credit_fire_lo;
-  logic [ $clog2(NUM_MEM_PORTS+1)-1:0] peek_num_load_lo;
-  logic [ $clog2(NUM_MEM_PORTS+1)-1:0] fdr_payload_num_load_lo;
-  logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_up_li;
-  logic [$clog2(DICE_NUM_BANKS+1)-1:0] load_credit_need_li;
-  logic                                mem_bundle_credit_up_li;
-  logic                                mem_bundle_credit_need_li;
+  logic                                     mem_bundle_credit_ready_lo;
+  logic [           NUM_MEM_PORTS-1:0]      mem_port_credit_ready_lo;
+  logic [           NUM_MEM_PORTS-1:0][1:0] mem_port_credit_return_lo;
+  logic [ $clog2(NUM_MEM_PORTS+1)-1:0]      peek_num_load_lo;
+  logic [ $clog2(NUM_MEM_PORTS+1)-1:0]      fdr_payload_num_load_lo;
 
-  logic                                mem_req_fifo_ready_lo;
-  logic                                mem_req_bundle_pop_lo;
-  logic                                mem_stage_lo;
-  logic                                dispatch_issue_req_lo;
-  logic                                disp_pop;
+  logic                                     mem_stage_lo;
+  logic                                     dispatch_issue_req_lo;
+  logic                                     disp_pop;
 
   localparam int CgraPipeCountWidth = $clog2(DICE_NUM_MAX_THREADS_PER_CORE + 1) + 1;
-  logic [  CgraPipeCountWidth-1:0] cgra_pipeline_count_q;
-  logic [  CgraPipeCountWidth-1:0] cgra_pipeline_inc_li;
-  logic [  CgraPipeCountWidth-1:0] cgra_pipeline_dec_li;
-  logic                            cgra_pipeline_empty_lo;
+  logic [     CgraPipeCountWidth-1:0] cgra_pipeline_count_q;
+  logic [     CgraPipeCountWidth-1:0] cgra_pipeline_inc_li;
+  logic [     CgraPipeCountWidth-1:0] cgra_pipeline_dec_li;
+  logic                               cgra_pipeline_empty_lo;
 
   // CGRA programming glue
-  logic [ DICE_MEM_DATA_WIDTH-1:0] cgra_cm0_data_li;
-  logic [        CmChunkCount-1:0] cgra_cm0_chunk_en_li;
-  logic [ DICE_MEM_DATA_WIDTH-1:0] cgra_cm1_data_li;
-  logic [        CmChunkCount-1:0] cgra_cm1_chunk_en_li;
-  logic                            prog_ready_lo;
-  logic                            prog_busy_lo;
-  logic [                     1:0] cm_bank_valid_lo;
-  logic                            prog_v_li;
-  logic                            prog_handshake_li;
-  logic                            prog_pending_q;
-  logic                            prog_pending_buffer_q;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] prog_pending_eblock_q;
-  logic                            prog_active_buffer_q;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] prog_active_eblock_q;
+  logic [    DICE_MEM_DATA_WIDTH-1:0] cgra_cm0_data_li;
+  logic [           CmChunkCount-1:0] cgra_cm0_chunk_en_li;
+  logic [    DICE_MEM_DATA_WIDTH-1:0] cgra_cm1_data_li;
+  logic [           CmChunkCount-1:0] cgra_cm1_chunk_en_li;
+  logic                               prog_ready_lo;
+  logic                               prog_busy_lo;
+  logic                               prog_active_lo;
+  logic                               prog_active_bank_lo;
+  logic [                        1:0] cm_bank_valid_lo;
+  logic                               prog_v_li;
+  logic                               prog_handshake_li;
+  logic                               prog_pending_q;
+  logic                               prog_pending_buffer_q;
+  logic [   DICE_EBLOCK_ID_WIDTH-1:0] prog_pending_eblock_q;
+  logic                               prog_active_buffer_q;
+  logic [   DICE_EBLOCK_ID_WIDTH-1:0] prog_active_eblock_q;
 
   // Latched dispatch e_block_id (driven by dice_brt, also consumed by dice_cgra_rf)
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
+  logic [   DICE_EBLOCK_ID_WIDTH-1:0] dispatch_e_block_id;
 
   // Precomputed pending reads/stores passed into dice_brt
   logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_reads_li;
   logic [PENDING_MEM_COUNT_WIDTH-1:0] fdr_pending_stores_li;
-  logic                            fdr_accept_li;
-  logic                            fdr_active_valid_q;
-  logic                            scoreboard_clear_li;
+  logic                               fdr_accept_li;
+  logic                               fdr_active_valid_q;
+  logic                               scoreboard_clear_li;
+  logic                               exec_pop_lo;
+  logic                               exec_pop_sent_q;
+  logic                               exec_dispatch_done_q;
+  logic [   DICE_EBLOCK_ID_WIDTH-1:0] exec_pop_e_block_id_lo;
 
   // Store completion from mem_req_fifo
-  logic                            store_pop_lo;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_lo;
+  logic                               store_pop_lo;
+  logic [   DICE_EBLOCK_ID_WIDTH-1:0] store_pop_e_block_id_lo;
 
   assign fdr_data_li = fdr_data_i;
   assign fdr_active_li = fdr_accept_li ? fdr_data_li : fdr_active_q;
@@ -207,12 +210,20 @@ module dice_backend
   );
   assign mem_stage_lo = (peek_num_load_lo != '0) || (fdr_active_li.metadata.num_stores != '0);
   assign dispatch_issue_req_lo = (|disp_tid_valid) && !prog_busy_lo;
-  assign fdr_pending_reads_li = PENDING_MEM_COUNT_WIDTH'(
-      $countones(fdr_data_li.real_active_mask) * fdr_payload_num_load_lo
-  );
-  assign fdr_pending_stores_li = PENDING_MEM_COUNT_WIDTH'(
-      $countones(fdr_data_li.real_active_mask) * fdr_data_li.metadata.num_stores
-  );
+  assign fdr_pending_reads_li = PENDING_MEM_COUNT_WIDTH'($countones(
+      fdr_data_li.real_active_mask
+  ) * fdr_payload_num_load_lo);
+  assign fdr_pending_stores_li = PENDING_MEM_COUNT_WIDTH'(($countones(
+      fdr_data_li.real_active_mask
+  ) * fdr_data_li.metadata.num_stores) + 1);
+  assign exec_pop_lo = fdr_active_valid_q
+                    && !exec_pop_sent_q
+                    && exec_dispatch_done_q
+                    && !prog_busy_lo
+                    && !prog_pending_q
+                    && !cgra_v_lo
+                    && cgra_pipeline_empty_lo;
+  assign exec_pop_e_block_id_lo = fdr_active_q.schedule_eblock_id;
   assign scoreboard_clear_li = fdr_accept_li
                              && fdr_active_valid_q
                              && (fdr_data_li.schedule_cta_id != fdr_active_q.schedule_cta_id);
@@ -244,6 +255,8 @@ module dice_backend
     if (rst_i) begin
       fdr_active_q          <= '0;
       fdr_active_valid_q    <= 1'b0;
+      exec_pop_sent_q       <= 1'b0;
+      exec_dispatch_done_q  <= 1'b0;
       prog_pending_q        <= 1'b0;
       prog_pending_buffer_q <= 1'b0;
       prog_pending_eblock_q <= '0;
@@ -253,9 +266,16 @@ module dice_backend
       if (fdr_accept_li) begin
         fdr_active_q          <= fdr_data_li;
         fdr_active_valid_q    <= 1'b1;
+        exec_pop_sent_q       <= 1'b0;
+        exec_dispatch_done_q  <= 1'b0;
         prog_pending_q        <= 1'b1;
         prog_pending_buffer_q <= fdr_data_li.loaded_buffer;
         prog_pending_eblock_q <= fdr_data_li.schedule_eblock_id;
+      end else if (exec_pop_lo) begin
+        exec_pop_sent_q      <= 1'b1;
+        exec_dispatch_done_q <= 1'b0;
+      end else if (dispatcher_done) begin
+        exec_dispatch_done_q <= 1'b1;
       end
 
       if (prog_v_li) begin
@@ -299,8 +319,10 @@ module dice_backend
       .ldst_special_pop_e_block_id_i(ldst_special_pop_e_block_id_lo),
 
       // Store retire signals from mem_req_fifo
-      .store_retire_valid_i      (store_pop_lo),
-      .store_retire_e_block_id_i (store_pop_e_block_id_lo),
+      .store_retire_valid_i     (store_pop_lo),
+      .store_retire_e_block_id_i(store_pop_e_block_id_lo),
+      .exec_retire_valid_i      (exec_pop_lo),
+      .exec_retire_e_block_id_i (exec_pop_e_block_id_lo),
 
       // Commit interface
       .eblock_commit_valid_o(eblock_commit_valid_o),
@@ -338,44 +360,30 @@ module dice_backend
 
   // =========================================================================
   // Dispatch credit counters
-  // load_credit_* caps outstanding load work.
-  // mem_bundle_credit_* reserves slots in the pre-PISO wide bundle FIFO.
+  // mem_bundle_credit_* reserves one slot in every per-port skid FIFO for any
+  // memory-stage dispatch. This is intentionally conservative: sparse memory
+  // ops are not assumed to map to a particular port.
   // =========================================================================
 
-  assign load_credit_up_li = {{($bits(load_credit_up_li) - 1) {1'b0}}, mem_rsp_valid_lo};
-  assign load_credit_need_li = {
-    {($bits(load_credit_need_li) - $bits(peek_num_load_lo)) {1'b0}}, peek_num_load_lo
-  };
-  assign mem_bundle_credit_up_li = mem_req_bundle_pop_lo;
-  assign mem_bundle_credit_need_li = mem_stage_lo;
+  for (
+      genvar mem_port_credit_i = 0; mem_port_credit_i < NUM_MEM_PORTS; mem_port_credit_i++
+  ) begin : gen_mem_port_credit
+    dice_ready_to_credit_flow_converter #(
+        .credit_initial_p(MEM_REQ_BUNDLE_FIFO_DEPTH),
+        .credit_max_val_p(MEM_REQ_BUNDLE_FIFO_DEPTH),
+        .max_step_p(2)
+    ) mem_port_credit_ctrl (
+        .clk_i(clk_i),
+        .reset_i(rst_i),
+        .v_i(disp_pop && mem_stage_lo),
+        .ready_o(mem_port_credit_ready_lo[mem_port_credit_i]),
+        .v_o(),
+        .credit_i(mem_port_credit_return_lo[mem_port_credit_i]),
+        .credit_need_i(2'd1)
+    );
+  end
 
-  dice_ready_to_credit_flow_converter #(
-      .credit_initial_p(NUM_CREDITS),
-      .credit_max_val_p(NUM_CREDITS),
-      .max_step_p(DICE_NUM_BANKS)
-  ) credit_ctrl (
-      .clk_i(clk_i),
-      .reset_i(rst_i),
-      .v_i(dispatch_issue_req_lo & (!mem_stage_lo || mem_bundle_credit_ready_lo)),
-      .ready_o(cgra_credit_ready_lo),
-      .v_o(load_credit_fire_lo),
-      .credit_i(load_credit_up_li),
-      .credit_need_i(load_credit_need_li)
-  );
-
-  dice_ready_to_credit_flow_converter #(
-      .credit_initial_p(MEM_REQ_BUNDLE_FIFO_DEPTH),
-      .credit_max_val_p(MEM_REQ_BUNDLE_FIFO_DEPTH),
-      .max_step_p(1)
-  ) mem_bundle_credit_ctrl (
-      .clk_i(clk_i),
-      .reset_i(rst_i),
-      .v_i(dispatch_issue_req_lo & (!mem_stage_lo || cgra_credit_ready_lo)),
-      .ready_o(mem_bundle_credit_ready_lo),
-      .v_o(mem_bundle_credit_fire_lo),
-      .credit_i(mem_bundle_credit_up_li),
-      .credit_need_i(mem_bundle_credit_need_li)
-  );
+  assign mem_bundle_credit_ready_lo = !mem_stage_lo || (&mem_port_credit_ready_lo);
 
 
 
@@ -395,13 +403,15 @@ module dice_backend
       .cm1_chunk_en_i(cgra_cm1_chunk_en_li),
 
       // Scan chain / bitstream
-      .v_i         (prog_v_li),
-      .bank_i      (prog_pending_buffer_q),
-      .ready_o     (prog_ready_lo),
-      .busy_o      (prog_busy_lo),
-      .bank_valid_o(cm_bank_valid_lo),
-      .prog_dout_o (cgra_prog_dout_o),
-      .prog_we_o   (cgra_prog_we_o),
+      .v_i               (prog_v_li),
+      .bank_i            (prog_pending_buffer_q),
+      .ready_o           (prog_ready_lo),
+      .busy_o            (prog_busy_lo),
+      .prog_active_o     (prog_active_lo),
+      .prog_active_bank_o(prog_active_bank_lo),
+      .bank_valid_o      (cm_bank_valid_lo),
+      .prog_dout_o       (cgra_prog_dout_o),
+      .prog_we_o         (cgra_prog_we_o),
 
       .csrX0_i(csrX0_i),
       .csrX1_i(csrX1_i),
@@ -459,11 +469,17 @@ module dice_backend
       .ldst_ready_o(ldst_ready_lo)
   );
 
+  assign prog_active_o        = prog_active_lo;
+  assign prog_active_buffer_o = prog_active_bank_lo;
+
   // =========================================================================
   // LDST FIFO
   // =========================================================================
 
-  mem_req_fifo u_mem_req_fifo (
+  mem_req_fifo #(
+      .AXI_UW(AxiUserWidth),
+      .AXI_RD_DW(AxiDataWidth)
+  ) u_mem_req_fifo (
       .clk_i(clk_i),
       .rst_i(rst_i),
 
@@ -471,7 +487,7 @@ module dice_backend
       .enq_valid_i_1(cgra_mem_port_valid_lo[1]),
       .enq_valid_i_2(cgra_mem_port_valid_lo[2]),
       .enq_valid_i_3(cgra_mem_port_valid_lo[3]),
-      .enq_ready_o  (mem_req_fifo_ready_lo),
+      .enq_ready_o  (),
 
       .enq_tid_i(cgra_tid_lo),
       .enq_e_block_id_i(cgra_e_block_id_lo),
@@ -503,6 +519,7 @@ module dice_backend
       .axi_bvalid_i (axi_bvalid_i),
       .axi_bready_o (axi_bready_o),
       .axi_araddr_o (axi_araddr_o),
+      .axi_aruser_o (axi_aruser_o),
       .axi_arvalid_o(axi_arvalid_o),
       .axi_arready_i(axi_arready_i),
       .axi_rdata_i  (axi_rdata_i),
@@ -512,7 +529,7 @@ module dice_backend
 
       .rsp_data_ready_i(ldst_ready_lo),
       .rsp_special_ready_i(ldst_special_ready_lo),
-      .bundle_pop_o(mem_req_bundle_pop_lo),
+      .port_credit_return_o(mem_port_credit_return_lo),
       .pop_o(),
       .rsp_valid_o(mem_rsp_valid_lo),
       .rsp_tid_o(mem_rsp_tid_lo),
@@ -524,7 +541,8 @@ module dice_backend
       .store_pop_e_block_id_o(store_pop_e_block_id_lo)
   );
 
-  assign disp_pop = load_credit_fire_lo & mem_bundle_credit_fire_lo;
+  assign disp_pop = dispatch_issue_req_lo & mem_bundle_credit_ready_lo;
+
 
 `ifndef SYNTHESIS
   logic dispatch_busy_prev_q;
@@ -543,17 +561,17 @@ module dice_backend
         $display(
             "[BE:dice_backend] t=%0t FDR payload visible: eblock=%0d cta_id=%0d active_mask=%h loads=%0d stores=%0d lat=%0d ready=%0b dispatch_busy=%0b prog_busy=%0b prog_pending=%0b cgra_v=%0b pipe_empty=%0b",
             $time, fdr_data_li.schedule_eblock_id, fdr_data_li.schedule_cta_id,
-            fdr_data_li.real_active_mask, fdr_payload_num_load_lo,
-            fdr_data_li.metadata.num_stores, fdr_data_li.metadata.lat, fdr_ready_o,
-            dispatch_busy, prog_busy_lo, prog_pending_q, cgra_v_lo, cgra_pipeline_empty_lo);
+            fdr_data_li.real_active_mask, fdr_payload_num_load_lo, fdr_data_li.metadata.num_stores,
+            fdr_data_li.metadata.lat, fdr_ready_o, dispatch_busy, prog_busy_lo, prog_pending_q,
+            cgra_v_lo, cgra_pipeline_empty_lo);
       end
 
       if (fdr_valid_i && fdr_ready_o) begin
         $display(
             "[BE:dice_backend] t=%0t backend accepted FDR packet: eblock=%0d loads=%0d stores=%0d lat=%0d pending_reads=%0d pending_stores=%0d",
             $time, fdr_data_li.schedule_eblock_id, fdr_payload_num_load_lo,
-            fdr_data_li.metadata.num_stores, fdr_data_li.metadata.lat,
-            fdr_pending_reads_li, fdr_pending_stores_li);
+            fdr_data_li.metadata.num_stores, fdr_data_li.metadata.lat, fdr_pending_reads_li,
+            fdr_pending_stores_li);
       end
 
       if (!dispatch_busy_prev_q && dispatch_busy) begin
@@ -566,15 +584,14 @@ module dice_backend
 
       if (disp_pop) begin
         $display(
-            "[BE:dice_backend] t=%0t dispatching threads: tids_valid=%b loads_needed=%0d load_credit_refund=%0d mem_stage=%0b bundle_refund=%0b load_ready=%0b bundle_ready=%0b",
-            $time, disp_tid_valid, load_credit_need_li, load_credit_up_li, mem_stage_lo,
-            mem_bundle_credit_up_li, cgra_credit_ready_lo, mem_bundle_credit_ready_lo);
+            "[BE:dice_backend] t=%0t dispatching threads: tids_valid=%b mem_stage=%0b port_refund=%b port_ready=%b bundle_ready=%0b",
+            $time, disp_tid_valid, mem_stage_lo, mem_port_credit_return_lo,
+            mem_port_credit_ready_lo, mem_bundle_credit_ready_lo);
         for (int lane = 0; lane < NUM_LANES; lane++) begin
           if (disp_tid_valid[lane]) begin
-            $display(
-                "[BE:dice_backend] t=%0t thread dispatched: tid=%0d eblock=%0d lane=%0d",
-                $time, rd_tid[lane*DICE_TID_WIDTH+:DICE_TID_WIDTH],
-                fdr_active_li.schedule_eblock_id, lane);
+            $display("[BE:dice_backend] t=%0t thread dispatched: tid=%0d eblock=%0d lane=%0d",
+                     $time, rd_tid[lane*DICE_TID_WIDTH+:DICE_TID_WIDTH],
+                     fdr_active_li.schedule_eblock_id, lane);
           end
         end
       end

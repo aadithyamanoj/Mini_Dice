@@ -24,6 +24,8 @@ module dice_brt
   // Store retire signals from mem_req_fifo
   input  logic                               store_retire_valid_i,
   input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    store_retire_e_block_id_i,
+  input  logic                               exec_retire_valid_i,
+  input  logic [DICE_EBLOCK_ID_WIDTH-1:0]    exec_retire_e_block_id_i,
 
   // Commit interface
   output logic                               eblock_commit_valid_o,
@@ -65,76 +67,28 @@ module dice_brt
   assign dispatch_e_block_id_o = dispatch_e_block_id;
 
   // =========================================================================
-  // Retire Bundle Assembly + FIFO
+  // Retire Bundle Reduction
   // =========================================================================
 
-  localparam int RETIRE_EVT_W    = 1 + DICE_EBLOCK_ID_WIDTH;
-  localparam int RETIRE_EVT_CNT  = DICE_NUM_BANKS + 1;
-  localparam int RETIRE_BUNDLE_W = RETIRE_EVT_CNT * RETIRE_EVT_W;
-  localparam int RETIRE_REDUCE_COUNT_W = 2**DICE_HW_CTA_ID_WIDTH;
+  localparam int BCT_ENTRIES = 2**DICE_EBLOCK_ID_WIDTH;
 
-  logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_li;
-  logic [RETIRE_EVT_CNT-1:0][RETIRE_EVT_W-1:0] retire_bundle_words_lo;
-  logic [RETIRE_BUNDLE_W-1:0] retire_bundle_bits_li, retire_bundle_bits_lo;
-  logic retire_bundle_valid_li, retire_bundle_v_lo, retire_bundle_yumi_li;
+  logic [BCT_ENTRIES-1:0][PENDING_MEM_COUNT_WIDTH-1:0] read_reduce_count_li;
 
   always_comb begin
-    retire_bundle_li = '0;
+    read_reduce_count_li = '0;
+
     for (int i = 0; i < DICE_NUM_BANKS; i++) begin
-      retire_bundle_li[i] = {ldst_pop_i[i], ldst_pop_e_block_id_i[i]};
+      if (ldst_pop_i[i]) begin
+        read_reduce_count_li[ldst_pop_e_block_id_i[i]] =
+            read_reduce_count_li[ldst_pop_e_block_id_i[i]] + PENDING_MEM_COUNT_WIDTH'(1);
+      end
     end
-    retire_bundle_li[DICE_NUM_BANKS] = {ldst_special_pop_i, ldst_special_pop_e_block_id_i};
+
+    if (ldst_special_pop_i) begin
+      read_reduce_count_li[ldst_special_pop_e_block_id_i] =
+          read_reduce_count_li[ldst_special_pop_e_block_id_i] + PENDING_MEM_COUNT_WIDTH'(1);
+    end
   end
-
-  assign retire_bundle_bits_li  = retire_bundle_li;
-  assign retire_bundle_words_lo = retire_bundle_bits_lo;
-  assign retire_bundle_valid_li = |ldst_pop_i | ldst_special_pop_i;
-
-  localparam int RETIRE_BUDLE_DEPTH = NUM_MEM_PORTS * DICE_NUM_MAX_THREADS_PER_CORE;
-
-  bsg_fifo_1r1w_small #(
-    .width_p(RETIRE_BUNDLE_W),
-    .els_p  (RETIRE_BUDLE_DEPTH)
-  ) retire_bundle_fifo (
-    .clk_i  (clk_i),
-    .reset_i(rst_i),
-    .v_i    (retire_bundle_valid_li),
-    .ready_o(),
-    .data_i (retire_bundle_bits_li),
-    .v_o    (retire_bundle_v_lo),
-    .data_o (retire_bundle_bits_lo),
-    .yumi_i (retire_bundle_yumi_li)
-  );
-
-  // =========================================================================
-  // Retire Event Serializer
-  // =========================================================================
-
-  logic retire_ser_ready_lo, retire_ser_v_lo, retire_ser_yumi_li;
-  logic [RETIRE_EVT_W-1:0] retire_ser_data_lo;
-  logic retire_evt_valid_lo;
-  logic [DICE_EBLOCK_ID_WIDTH-1:0] retire_evt_e_block_id_lo;
-  logic [RETIRE_REDUCE_COUNT_W-1:0] retire_evt_reduce_count_li;
-
-  bsg_parallel_in_serial_out #(
-    .width_p(RETIRE_EVT_W),
-    .els_p  (RETIRE_EVT_CNT)
-  ) retire_evt_serializer (
-    .clk_i      (clk_i),
-    .reset_i    (rst_i),
-    .valid_i    (retire_bundle_v_lo),
-    .data_i     (retire_bundle_words_lo),
-    .ready_and_o(retire_ser_ready_lo),
-    .valid_o    (retire_ser_v_lo),
-    .data_o     (retire_ser_data_lo),
-    .yumi_i     (retire_ser_yumi_li)
-  );
-
-  assign retire_bundle_yumi_li    = retire_bundle_v_lo & retire_ser_ready_lo;
-  assign retire_ser_yumi_li       = retire_ser_v_lo;
-  assign retire_evt_valid_lo      = retire_ser_v_lo & retire_ser_data_lo[RETIRE_EVT_W-1];
-  assign retire_evt_e_block_id_lo = retire_ser_data_lo[DICE_EBLOCK_ID_WIDTH-1:0];
-  assign retire_evt_reduce_count_li = RETIRE_REDUCE_COUNT_W'(1);
 
   // =========================================================================
   // Block Commit Table
@@ -153,14 +107,14 @@ module dice_brt
     .insert_pending_reads_i (dispatch_pending_reads),
     .insert_pending_stores_i(dispatch_pending_stores),
 
-    // Read update interface — one retire event per serializer output
-    .update_valid_i       (retire_evt_valid_lo),
-    .update_e_block_id_i  (retire_evt_e_block_id_lo),
-    .update_reduce_count_i(retire_evt_reduce_count_li),
+    // Read update interface — same-cycle per-eblock RF retire counts.
+    .read_reduce_count_i(read_reduce_count_li),
 
-    // Store update interface — direct from mem_req_fifo (one at a time)
+    // Store update interface — direct from mem_req_fifo.
     .store_update_valid_i      (store_retire_valid_i),
     .store_update_e_block_id_i (store_retire_e_block_id_i),
+    .exec_update_valid_i       (exec_retire_valid_i),
+    .exec_update_e_block_id_i  (exec_retire_e_block_id_i),
 
     // Commit interface
     .pop_valid_o     (eblock_commit_valid_o),

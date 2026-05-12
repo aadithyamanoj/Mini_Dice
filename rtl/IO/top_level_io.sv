@@ -28,32 +28,21 @@ module top_level_io
    ,parameter int tx_pkt_order_fifo_els_p = 8
    // Depth of the locally-synthesized fake-B counter. Sized for the max
    // number of in-flight write bursts the upstream master can have
-   // outstanding before pulsing bready; 16 is generous for any AXI master
-   // we expect to see here.
+   // outstanding before pulsing bready.
    ,parameter int fake_b_max_outstanding_p = 16
    )
   (input  logic                                          core_clk_i
    ,input logic                                          reset_i
 
-   // bsg_link upstream reset/control.
-   ,input  logic                                         io_master_clk_i
-   ,input  logic                                         upstream_io_link_reset_i
-   ,input  logic                                         async_token_reset_i
-   ,input  logic [num_channels_p-1:0]                    token_clk_i
+   // Core-side stream from the external bsg_link wrapper.
+   ,input  logic [flit_width_p-1:0]                      link_rx_data_i
+   ,input  logic                                         link_rx_valid_i
+   ,output logic                                         link_rx_yumi_o
 
-   // bsg_link downstream reset/control.
-   ,input  logic [num_channels_p-1:0]                    downstream_io_link_reset_i
-   ,input  logic [num_channels_p-1:0]                    downstream_io_clk_i
-   ,input  logic [num_channels_p*channel_width_p-1:0]    downstream_io_data_i
-   ,input  logic [num_channels_p-1:0]                    downstream_io_valid_i
-
-   // Physical outputs driven by upstream link.
-   ,output logic [num_channels_p-1:0]                    upstream_io_clk_r_o
-   ,output logic [num_channels_p*channel_width_p-1:0]    upstream_io_data_r_o
-   ,output logic [num_channels_p-1:0]                    upstream_io_valid_r_o
-
-   // Tokens driven by downstream link.
-   ,output logic [num_channels_p-1:0]                    downstream_core_token_r_o
+   // Core-side stream to the external bsg_link wrapper.
+   ,output logic [flit_width_p-1:0]                      link_tx_data_o
+   ,output logic                                         link_tx_valid_o
+   ,input  logic                                         link_tx_ready_i
 
    // RX side toward local AXI crossbar/sinks.
    ,output logic                                         rx_awvalid_o
@@ -122,12 +111,19 @@ module top_level_io
   // top_level_io
   // --------------------------------------------------------------------------
   // Full top-level IO subsystem:
-  //   AXI source/sink side <-> axi_link_tx/rx <-> 32-bit core-side link flits
-  //   <-> bsg_link_ddr_upstream/downstream <-> physical DDR/tokens
+  //   AXI source/sink side <-> axi_link_tx/rx <-> 32-bit core-side link flits.
   //
-  // The bsg_link blocks provide the actual source-synchronous DDR physical
-  // transport. axi_link_tx and axi_link_rx sit directly on the 32-bit core-side
-  // ready/valid boundary exported by those bsg_link blocks.
+  // The source-synchronous DDR bsg_link PHY lives outside this module, usually
+  // at chip_top next to the pad ring. This block only packetizes/depacketizes
+  // AXI traffic over the ready/valid flit stream.
+  //
+  // The link protocol does not carry WRITE_RESP packets. B responses are
+  // synthesized locally for outgoing writes and discarded for incoming writes.
+  //
+  // The link also does not transport RRESP. tx_rresp_i is accepted from the
+  // local AXI source and ignored (mirroring the dropped B channel), and
+  // rx_rresp_o is driven to OKAY (2'b00) for every R beat by axi_link_rx.
+  // Per-read error reporting is therefore lost end-to-end.
   //
   // Ordering model:
   //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
@@ -142,56 +138,17 @@ module top_level_io
       $error("top_level_io requires data_width_p=32, got %0d", data_width_p);
   end
 
-  logic [flit_width_p-1:0] link_rx_core_data_lo;
-  logic                    link_rx_core_valid_lo;
-  logic                    link_rx_core_yumi_li;
-
-  logic [flit_width_p-1:0] link_tx_core_data_li;
-  logic                    link_tx_core_valid_li;
-  logic                    link_tx_core_ready_lo;
   logic                    rx_arready_li;
   logic                    tx_r_len_v_lo;
   logic [7:0]              tx_r_len_lo;
   logic                    tx_r_len_yumi_li;
   logic                    tx_r_len_ready_lo;
 
-  logic [num_channels_p-1:0][channel_width_p-1:0] downstream_io_data_li;
-  logic [num_channels_p-1:0][channel_width_p-1:0] upstream_io_data_lo;
-
-  for (genvar ch = 0; ch < num_channels_p; ch++) begin : phys_bus
-    assign downstream_io_data_li[ch] =
-      downstream_io_data_i[ch*channel_width_p +: channel_width_p];
-    assign upstream_io_data_r_o[ch*channel_width_p +: channel_width_p] =
-      upstream_io_data_lo[ch];
-  end
-
-  bsg_link_ddr_downstream #(
-    .width_p                        (flit_width_p),
-    .channel_width_p                (channel_width_p),
-    .num_channels_p                 (num_channels_p),
-    .lg_fifo_depth_p                (lg_fifo_depth_p),
-    .lg_credit_to_token_decimation_p(lg_credit_to_token_decimation_p),
-    .use_extra_data_bit_p           (use_extra_data_bit_p),
-    .use_encode_p                   (use_encode_p),
-    .bypass_twofer_fifo_p           (bypass_twofer_fifo_p),
-    .bypass_gearbox_p               (bypass_gearbox_p),
-    .use_hardened_fifo_p            (use_hardened_fifo_p)
-  ) link_downstream_i (
-    .core_clk_i        (core_clk_i),
-    .core_link_reset_i (reset_i),
-    .io_link_reset_i   (downstream_io_link_reset_i),
-    .core_data_o       (link_rx_core_data_lo),
-    .core_valid_o      (link_rx_core_valid_lo),
-    .core_yumi_i       (link_rx_core_yumi_li),
-    .io_clk_i          (downstream_io_clk_i),
-    .io_data_i         (downstream_io_data_li),
-    .io_valid_i        (downstream_io_valid_i),
-    .core_token_r_o    (downstream_core_token_r_o)
-  );
-
-  // Incoming READ_REQ lengths are mirrored into a small FIFO so the local
-  // AXI R channel can start streaming a READ_RESP packet back over the link
-  // on the very first response beat.
+  // Incoming read lengths (from both FETCH_REQ and LOAD_REQ packets) are
+  // mirrored into a small FIFO so the local AXI R channel can start streaming
+  // a READ_RESP packet back over the link on the very first response beat.
+  // LOAD_REQ always produces arlen=0 (single-beat); FETCH_REQ can carry up
+  // to 256 beats.
   assign rx_arready_li = rx_arready_i && tx_r_len_ready_lo;
 
   bsg_fifo_1r1w_small #(
@@ -223,9 +180,9 @@ module top_level_io
   ) axi_link_rx_i (
     .clk_i          (core_clk_i),
     .reset_i        (reset_i),
-    .link_rx_v_i    (link_rx_core_valid_lo),
-    .link_rx_data_i (link_rx_core_data_lo),
-    .link_rx_yumi_o (link_rx_core_yumi_li),
+    .link_rx_v_i    (link_rx_valid_i),
+    .link_rx_data_i (link_rx_data_i),
+    .link_rx_yumi_o (link_rx_yumi_o),
     .awvalid_o      (rx_awvalid_o),
     .awready_i      (rx_awready_i),
     .awaddr_o       (rx_awaddr_o),
@@ -289,47 +246,30 @@ module top_level_io
     .tx_r_len_v_i   (tx_r_len_v_lo),
     .tx_r_len_i     (tx_r_len_lo),
     .tx_r_len_yumi_o(tx_r_len_yumi_li),
-    .link_tx_v_o    (link_tx_core_valid_li),
-    .link_tx_data_o (link_tx_core_data_li),
-    .link_tx_ready_i(link_tx_core_ready_lo)
+    .link_tx_v_o    (link_tx_valid_o),
+    .link_tx_data_o (link_tx_data_o),
+    .link_tx_ready_i(link_tx_ready_i)
   );
 
   // --------------------------------------------------------------------------
   // B-channel handling without WRITE_RESP packets
   // --------------------------------------------------------------------------
-  // The link no longer carries WRITE_RESP, so each accepted write must get
-  // its B beat synthesized locally:
-  //
-  //   * Master-facing rx_b* (chip-as-master writes going out via axi_link_tx):
-  //     A counter tracks every WLAST accepted on tx_w*. While the counter is
-  //     non-zero we present a B beat on rx_bvalid_o; the counter decrements
-  //     on each rx_b handshake. BRESP is hard-coded to OKAY because the
-  //     real slave's response is not visible here — write errors cannot be
-  //     reported back to the master. Strict-FIFO ordering on the link still
-  //     guarantees that any read-after-write the master issues after seeing
-  //     fake B reaches the slave after the corresponding WRITE_REQ.
-  //
-  //   * Slave-facing tx_b* (chip-as-slave write responses from local AXI):
-  //     The local slave still emits a real B per accepted AW. We hold
-  //     tx_bready_o high so the slave never stalls, and the response is
-  //     silently discarded — it has no path across the link.
-  //
-  // The far end of the link must perform the symmetric trick on its own
-  // master/slave sides. Both ends must agree to drop WRITE_RESP, otherwise
-  // a stale link from the previous protocol would deadlock.
+  // The link no longer carries WRITE_RESP, so each accepted outgoing write gets
+  // a local OKAY B beat. Real B responses from the local slave are accepted and
+  // dropped because there is no response packet to serialize.
 
   localparam int fake_b_count_width_lp =
       (fake_b_max_outstanding_p <= 1) ? 1 : $clog2(fake_b_max_outstanding_p + 1);
 
-  logic                              fake_b_push, fake_b_pop;
-  logic [fake_b_count_width_lp-1:0]  fake_b_count_r, fake_b_count_n;
+  logic                             fake_b_push, fake_b_pop;
+  logic [fake_b_count_width_lp-1:0] fake_b_count_r, fake_b_count_n;
 
   assign fake_b_push = tx_wvalid_i && tx_wready_o && tx_wlast_i;
   assign fake_b_pop  = rx_bvalid_o && rx_bready_i;
 
   always_comb begin
     fake_b_count_n = fake_b_count_r;
-    case ({fake_b_push, fake_b_pop})
+    unique case ({fake_b_push, fake_b_pop})
       2'b10:   fake_b_count_n = fake_b_count_r + fake_b_count_width_lp'(1);
       2'b01:   fake_b_count_n = fake_b_count_r - fake_b_count_width_lp'(1);
       default: fake_b_count_n = fake_b_count_r;
@@ -342,34 +282,8 @@ module top_level_io
   end
 
   assign rx_bvalid_o = (fake_b_count_r != '0);
-  assign rx_bresp_o  = 2'b00;  // OKAY — slave error codes are not observable
+  assign rx_bresp_o  = 2'b00;
 
-  // Permanently accept the local slave's B response and drop it.
   assign tx_bready_o = 1'b1;
-
-  bsg_link_ddr_upstream #(
-    .width_p                        (flit_width_p),
-    .channel_width_p                (channel_width_p),
-    .num_channels_p                 (num_channels_p),
-    .lg_fifo_depth_p                (lg_fifo_depth_p),
-    .lg_credit_to_token_decimation_p(lg_credit_to_token_decimation_p),
-    .use_extra_data_bit_p           (use_extra_data_bit_p),
-    .use_encode_p                   (use_encode_p),
-    .bypass_twofer_fifo_p           (bypass_twofer_fifo_p),
-    .bypass_gearbox_p               (bypass_gearbox_p)
-  ) link_upstream_i (
-    .core_clk_i         (core_clk_i),
-    .core_link_reset_i  (reset_i),
-    .core_data_i        (link_tx_core_data_li),
-    .core_valid_i       (link_tx_core_valid_li),
-    .core_ready_o       (link_tx_core_ready_lo),
-    .io_clk_i           (io_master_clk_i),
-    .io_link_reset_i    (upstream_io_link_reset_i),
-    .async_token_reset_i(async_token_reset_i),
-    .io_clk_r_o         (upstream_io_clk_r_o),
-    .io_data_r_o        (upstream_io_data_lo),
-    .io_valid_r_o       (upstream_io_valid_r_o),
-    .token_clk_i        (token_clk_i)
-  );
 
 endmodule

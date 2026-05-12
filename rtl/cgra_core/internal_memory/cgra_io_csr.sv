@@ -17,16 +17,16 @@
 //   0x06    BSLOAD_CNT        RO    Bitstream load word counter (from hardware)
 //   0x08    SIMT_STACK_DEPTH  RO    Current SIMT stack depth (from hardware)
 //   0x0A    ERROR_INFO        RO    Error address / code (sticky, clears on reset or start)
-//   0x0C    RSVD_6            R/W   Reserved
+//   0x0C    THREAD_COUNT      R/W   CTA thread count for next launch
 //   0x0E    RSVD_7            R/W   Reserved
-//   0x10    CSRX0             RO    Input-only CSR source 0 (from hardware)
-//   0x12    CSRX1             RO    Input-only CSR source 1 (from hardware)
-//   0x14    CSRX2             RO    Input-only CSR source 2 (from hardware)
-//   0x16    CSRX3             RO    Input-only CSR source 3 (from hardware)
-//   0x18    CSRX4             RO    Input-only CSR source 4 (from hardware)
-//   0x1A    CSRX5             RO    Input-only CSR source 5 (from hardware)
-//   0x1C    CSRX6             RO    Input-only CSR source 6 (from hardware)
-//   0x1E    CSRX7             RO    Input-only CSR source 7 (from hardware)
+//   0x10    CSRX0             R/W   Kernel argument CSR source 0
+//   0x12    CSRX1             R/W   Kernel argument CSR source 1
+//   0x14    CSRX2             R/W   Kernel argument CSR source 2
+//   0x16    CSRX3             R/W   Kernel argument CSR source 3
+//   0x18    CSRX4             R/W   Kernel argument CSR source 4
+//   0x1A    CSRX5             R/W   Kernel argument CSR source 5
+//   0x1C    CSRX6             R/W   Kernel argument CSR source 6
+//   0x1E    CSRX7             R/W   Kernel argument CSR source 7
 //
 // AXI4 notes:
 //   - Treats all accesses as single-beat (ignores AWLEN/ARLEN).
@@ -41,6 +41,7 @@ module cgra_io_csr
   import axi4_xbar_pkg::*;
   import axi_pkg::*;
   import DE_pkg::*;
+  import dice_pkg::*;
 (
   input  logic clk_i,
   input  logic rst_i,
@@ -56,6 +57,7 @@ module cgra_io_csr
   // --------------------------------------------------------------------------
   output logic        start_o,             // 1-cycle pulse: begin execution
   output logic [15:0] start_pc_o,          // warp entry PC
+  output logic [15:0] thread_count_o,      // CTA thread count for next launch
   output logic        cgra_reset_o,        // active-high reset to CGRA core
   output logic        bsload_en_o,         // initiate bitstream load
 
@@ -93,8 +95,8 @@ module cgra_io_csr
   localparam int REG_BSLOAD = 3;  // 0x06
   localparam int REG_STACK  = 4;  // 0x08
   localparam int REG_ERROR  = 5;  // 0x0A
-  localparam int REG_RSVD6  = 6;  // 0x0C
-  localparam int REG_RSVD7  = 7;  // 0x0E
+  localparam int REG_THREADS = 6;  // 0x0C
+  localparam int REG_RSVD7   = 7;  // 0x0E
   localparam int REG_CSRX0  = 8;  // 0x10
   localparam int REG_CSRX1  = 9;  // 0x12
   localparam int REG_CSRX2  = 10; // 0x14
@@ -105,11 +107,12 @@ module cgra_io_csr
   localparam int REG_CSRX7  = 15; // 0x1E
 
   // --------------------------------------------------------------------------
-  // R/W register storage (CTRL, START_PC, RSVD6, RSVD7, CSRX0-7)
+  // R/W register storage (CTRL, START_PC, THREAD_COUNT, RSVD7, CSRX0-7)
   // --------------------------------------------------------------------------
   logic [15:0] ctrl_r;
   logic [15:0] start_pc_r;
-  logic [15:0] rsvd6_r, rsvd7_r;
+  logic [15:0] thread_count_r;
+  logic [15:0] rsvd7_r;
   logic [DICE_REG_DATA_WIDTH-1:0] csrX_r [8];
 
   // --------------------------------------------------------------------------
@@ -200,7 +203,7 @@ module cgra_io_csr
       4'(REG_BSLOAD): rd_data = hw_bsload_cnt_i;
       4'(REG_STACK):  rd_data = hw_stack_depth_i;
       4'(REG_ERROR):  rd_data = error_info_sticky_r;
-      4'(REG_RSVD6):  rd_data = rsvd6_r;
+      4'(REG_THREADS): rd_data = thread_count_r;
       4'(REG_RSVD7):  rd_data = rsvd7_r;
       4'(REG_CSRX0):  rd_data = csrX_r[0];
       4'(REG_CSRX1):  rd_data = csrX_r[1];
@@ -239,7 +242,7 @@ module cgra_io_csr
     if (rst_i) begin
       ctrl_r                  <= '0;
       start_pc_r              <= '0;
-      rsvd6_r                 <= '0;
+      thread_count_r          <= 16'(DICE_NUM_MAX_THREADS_PER_CORE);
       rsvd7_r                 <= '0;
       complete_sticky_r       <= 1'b0;
       stack_overflow_sticky_r <= 1'b0;
@@ -255,7 +258,7 @@ module cgra_io_csr
         unique case (aw_idx_r)
           4'(REG_CTRL):  ctrl_r     <= wr_data;
           4'(REG_PC):    start_pc_r <= wr_data;
-          4'(REG_RSVD6): rsvd6_r   <= wr_data;
+          4'(REG_THREADS): thread_count_r <= wr_data;
           4'(REG_RSVD7): rsvd7_r   <= wr_data;
           4'(REG_CSRX0): csrX_r[0] <= wr_data;
           4'(REG_CSRX1): csrX_r[1] <= wr_data;
@@ -295,6 +298,7 @@ module cgra_io_csr
   assign cgra_reset_o  = ctrl_r[1];
   assign bsload_en_o   = ctrl_r[2];
   assign start_pc_o    = start_pc_r;
+  assign thread_count_o = thread_count_r;
 
   assign csrX0_o = csrX_r[0];
   assign csrX1_o = csrX_r[1];
