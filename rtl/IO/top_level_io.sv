@@ -14,14 +14,12 @@ module top_level_io
    ,parameter int rx_link_fifo_els_p   = 8
    ,parameter int rx_aw_desc_fifo_els_p = 2
    ,parameter int rx_ar_desc_fifo_els_p = 2
-   ,parameter int rx_w_len_fifo_els_p  = 4
    ,parameter int rx_w_data_fifo_els_p = 8
    ,parameter int rx_r_len_fifo_els_p  = 4
    ,parameter int rx_r_data_fifo_els_p = 8
    ,parameter int tx_link_fifo_els_p   = 8
    ,parameter int tx_aw_desc_fifo_els_p = 2
    ,parameter int tx_ar_desc_fifo_els_p = 2
-   ,parameter int tx_w_len_fifo_els_p  = 4
    ,parameter int tx_w_data_fifo_els_p = 8
    ,parameter int tx_r_len_fifo_els_p  = 4
    ,parameter int tx_r_data_fifo_els_p = 8
@@ -48,14 +46,12 @@ module top_level_io
    ,output logic                                         rx_awvalid_o
    ,input  logic                                         rx_awready_i
    ,output logic [addr_width_p-1:0]                      rx_awaddr_o
-   ,output logic [7:0]                                   rx_awlen_o
    ,output logic [2:0]                                   rx_awsize_o
    ,output logic [1:0]                                   rx_awburst_o
 
    ,output logic                                         rx_wvalid_o
    ,input  logic                                         rx_wready_i
    ,output logic [data_width_p-1:0]                      rx_wdata_o
-   ,output logic                                         rx_wlast_o
 
    ,output logic                                         rx_arvalid_o
    ,input  logic                                         rx_arready_i
@@ -79,14 +75,12 @@ module top_level_io
    ,input  logic                                         tx_awvalid_i
    ,output logic                                         tx_awready_o
    ,input  logic [addr_width_p-1:0]                      tx_awaddr_i
-   ,input  logic [7:0]                                   tx_awlen_i
    ,input  logic [2:0]                                   tx_awsize_i
    ,input  logic [1:0]                                   tx_awburst_i
 
    ,input  logic                                         tx_wvalid_i
    ,output logic                                         tx_wready_o
    ,input  logic [data_width_p-1:0]                      tx_wdata_i
-   ,input  logic                                         tx_wlast_i
 
    ,input  logic                                         tx_arvalid_i
    ,output logic                                         tx_arready_o
@@ -173,7 +167,6 @@ module top_level_io
     .link_fifo_els_p    (rx_link_fifo_els_p),
     .aw_desc_fifo_els_p (rx_aw_desc_fifo_els_p),
     .ar_desc_fifo_els_p (rx_ar_desc_fifo_els_p),
-    .w_len_fifo_els_p   (rx_w_len_fifo_els_p),
     .w_data_fifo_els_p  (rx_w_data_fifo_els_p),
     .r_len_fifo_els_p   (rx_r_len_fifo_els_p),
     .r_data_fifo_els_p  (rx_r_data_fifo_els_p)
@@ -186,13 +179,11 @@ module top_level_io
     .awvalid_o      (rx_awvalid_o),
     .awready_i      (rx_awready_i),
     .awaddr_o       (rx_awaddr_o),
-    .awlen_o        (rx_awlen_o),
     .awsize_o       (rx_awsize_o),
     .awburst_o      (rx_awburst_o),
     .wvalid_o       (rx_wvalid_o),
     .wready_i       (rx_wready_i),
     .wdata_o        (rx_wdata_o),
-    .wlast_o        (rx_wlast_o),
     .arvalid_o      (rx_arvalid_o),
     .arready_i      (rx_arready_li),
     .araddr_o       (rx_araddr_o),
@@ -213,7 +204,6 @@ module top_level_io
     .link_fifo_els_p      (tx_link_fifo_els_p),
     .aw_desc_fifo_els_p   (tx_aw_desc_fifo_els_p),
     .ar_desc_fifo_els_p   (tx_ar_desc_fifo_els_p),
-    .w_len_fifo_els_p     (tx_w_len_fifo_els_p),
     .w_data_fifo_els_p    (tx_w_data_fifo_els_p),
     .r_len_fifo_els_p     (tx_r_len_fifo_els_p),
     .r_data_fifo_els_p    (tx_r_data_fifo_els_p),
@@ -224,13 +214,11 @@ module top_level_io
     .awvalid_i      (tx_awvalid_i),
     .awready_o      (tx_awready_o),
     .awaddr_i       (tx_awaddr_i),
-    .awlen_i        (tx_awlen_i),
     .awsize_i       (tx_awsize_i),
     .awburst_i      (tx_awburst_i),
     .wvalid_i       (tx_wvalid_i),
     .wready_o       (tx_wready_o),
     .wdata_i        (tx_wdata_i),
-    .wlast_i        (tx_wlast_i),
     .arvalid_i      (tx_arvalid_i),
     .arready_o      (tx_arready_o),
     .araddr_i       (tx_araddr_i),
@@ -264,7 +252,7 @@ module top_level_io
   logic                             fake_b_push, fake_b_pop;
   logic [fake_b_count_width_lp-1:0] fake_b_count_r, fake_b_count_n;
 
-  assign fake_b_push = tx_wvalid_i && tx_wready_o && tx_wlast_i;
+  assign fake_b_push = tx_wvalid_i && tx_wready_o;
   assign fake_b_pop  = rx_bvalid_o && rx_bready_i;
 
   always_comb begin

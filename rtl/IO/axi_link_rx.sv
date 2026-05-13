@@ -4,7 +4,6 @@ module axi_link_rx
    ,parameter int link_fifo_els_p     = 8
    ,parameter int aw_desc_fifo_els_p  = 2
    ,parameter int ar_desc_fifo_els_p  = 2
-   ,parameter int w_len_fifo_els_p    = 4
    ,parameter int w_data_fifo_els_p   = 8
    ,parameter int r_len_fifo_els_p    = 4
    ,parameter int r_data_fifo_els_p   = 8
@@ -19,14 +18,12 @@ module axi_link_rx
    ,output logic                    awvalid_o
    ,input  logic                    awready_i
    ,output logic [addr_width_p-1:0] awaddr_o
-   ,output logic [7:0]              awlen_o
    ,output logic [2:0]              awsize_o
    ,output logic [1:0]              awburst_o
 
    ,output logic                    wvalid_o
    ,input  logic                    wready_i
    ,output logic [31:0]             wdata_o
-   ,output logic                    wlast_o
 
    ,output logic                    arvalid_o
    ,input  logic                    arready_i
@@ -53,35 +50,32 @@ module axi_link_rx
   //   2'b11 = LOAD_REQ
   //
   // Header flit layout (32 bits):
-  //   WRITE_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style awlen,  [15:0] address
-  //   FETCH_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style arlen,  [15:0] address
-  //   LOAD_REQ  : [31:30] opcode, [29]    reserved, [28:16] aruser[12:0],     [15:0] address
-  //               AR fires once (arlen=0) with aruser_o[12:0] =
-  //               header[28:16] and aruser_o[13] = 1 (the meta flag is
-  //               recovered from the opcode, not the wire bits).
-  //   READ_RESP : [31:30] opcode, [29:24] reserved, [23:16] AXI-style rlen,   [15:0] reserved
+  //   WRITE_REQ : [31:30] opcode, [29:16] reserved,                          [15:0] address
+  //   FETCH_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style arlen, [15:0] address
+  //   LOAD_REQ  : [31:30] opcode, [29]    reserved, [28:16] aruser[12:0],    [15:0] address
+  //   READ_RESP : [31:30] opcode, [29:24] reserved, [23:16] AXI-style rlen,  [15:0] reserved
   //
-  // Length encoding follows AXI semantics: the wire `len` field carries
-  // (beats - 1) in 8 bits, i.e. 0..255 representing 1..256 beats. AXI
-  // burst length max is 256, so 8 bits suffice.
+  // WRITE_REQ is single-beat only: header + exactly one 32-bit W payload flit.
+  // The reconstructed AXI W channel always asserts the equivalent of WLAST on
+  // every accepted beat (the link does not export a wlast wire).
+  //
+  // FETCH_REQ / READ_RESP length encoding still follows AXI semantics: the
+  // wire `len` field carries (beats - 1) in 8 bits, i.e. 0..255 representing
+  // 1..256 beats.
   //
   // RRESP is intentionally not carried by this link, mirroring the dropped
-  // B channel. rresp_o is driven to RESP_OKAY (2'b00) for every beat;
-  // per-read error reporting is therefore lost.
+  // B channel. rresp_o is driven to RESP_OKAY (2'b00) for every beat.
   //
   // RX reconstructs four AXI channels from the simplified transport:
-  //   WRITE_REQ  -> AW + W burst
+  //   WRITE_REQ  -> AW + 1 W beat
   //   FETCH_REQ  -> AR burst
   //   LOAD_REQ   -> AR single beat with aruser_o[13]=1
   //   READ_RESP  -> R burst
   //
   // The B (write-response) channel is intentionally not driven here; the
-  // upstream wrapper synthesizes a fake B beat per accepted write so the
-  // local AXI master sees write completion without the link round-trip.
+  // upstream wrapper synthesizes a fake B beat per accepted write.
   //
-  // Strict FIFO assumption:
-  //   No AXI IDs or reorder logic exist here. Associations rely purely on
-  //   strict FIFO order across combined packets.
+  // Strict FIFO assumption: no AXI IDs or reorder logic exist here.
   // --------------------------------------------------------------------------
 
   initial begin
@@ -105,19 +99,13 @@ module axi_link_rx
     RX_DROP      = 3'd3
   } rx_state_e;
 
-  localparam int beat_count_width_lp   = 9;   // beats counter range 1..256
+  localparam int beat_count_width_lp   = 9;   // reads only
   localparam int meta_aruser_width_lp  = 13;  // META aruser payload width
   localparam int drop_count_width_lp   = 9;
-  localparam int req_desc_width_lp     = addr_width_p + beat_count_width_lp;
   localparam int rd_req_desc_width_lp  = addr_width_p + 1 + meta_aruser_width_lp;
   localparam int r_desc_width_lp       = beat_count_width_lp;
   localparam logic [2:0] axi_size_lp   = 3'b010;
   localparam logic [1:0] axi_burst_lp  = 2'b01;
-
-  typedef struct packed {
-    logic [addr_width_p-1:0]        addr;
-    logic [beat_count_width_lp-1:0] beats;
-  } req_desc_s;
 
   // For FETCH_REQ, payload[8:0] is the AXI burst length as beats (1..256),
   // zero-extended to meta_aruser_width_lp. For LOAD_REQ, payload[12:0] is the
@@ -162,15 +150,11 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // Internal FIFOs
   // --------------------------------------------------------------------------
-  // Request and response classes are buffered separately after parsing so the
-  // link-facing parser can keep making progress even if one AXI channel is
-  // backpressured. The descriptor FIFOs carry burst metadata, while the data
-  // FIFOs carry only payload beats.
 
-  logic                        wr_desc_push_v_li, wr_desc_push_ready_lo;
-  logic [req_desc_width_lp-1:0] wr_desc_push_data_li;
-  logic                        wr_desc_v_lo, wr_desc_yumi_li;
-  logic [req_desc_width_lp-1:0] wr_desc_data_lo;
+  logic                            wr_desc_push_v_li, wr_desc_push_ready_lo;
+  logic [addr_width_p-1:0]         wr_desc_push_data_li;
+  logic                            wr_desc_v_lo, wr_desc_yumi_li;
+  logic [addr_width_p-1:0]         wr_desc_data_lo;
 
   logic                            rd_desc_push_v_li, rd_desc_push_ready_lo;
   logic [rd_req_desc_width_lp-1:0] rd_desc_push_data_li;
@@ -193,7 +177,7 @@ module axi_link_rx
   logic [31:0]                 r_data_lo;
 
   bsg_fifo_1r1w_small #(
-    .width_p            (req_desc_width_lp),
+    .width_p            (addr_width_p),
     .els_p              (aw_desc_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -275,18 +259,15 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // Parser FSM
   // --------------------------------------------------------------------------
-  // The parser consumes exactly one packet at a time from the ingress FIFO.
-  // Long payloads are streamed into small FIFOs as flits arrive; there is no
-  // need to store an entire WRITE_REQ or READ_RESP packet in registers.
 
   rx_state_e state_r, state_n;
   logic [beat_count_width_lp-1:0] cur_beats_r, cur_beats_n;
   logic [drop_count_width_lp-1:0] payload_rem_r, payload_rem_n;
 
   logic [1:0]                       hdr_opcode;
-  logic [7:0]                       hdr_len_axi;   // AXI-style len for non-META
-  logic [beat_count_width_lp-1:0]   hdr_beats;     // beats count (= hdr_len_axi + 1)
-  logic [meta_aruser_width_lp-1:0]  hdr_aruser;    // 13-bit META aruser payload
+  logic [7:0]                       hdr_len_axi;
+  logic [beat_count_width_lp-1:0]   hdr_beats;
+  logic [meta_aruser_width_lp-1:0]  hdr_aruser;
   logic [addr_width_p-1:0]          hdr_addr;
 
   assign hdr_opcode   = link_fifo_data_lo[31:30];
@@ -318,14 +299,12 @@ module axi_link_rx
         if (link_fifo_v_lo) begin
           unique case (hdr_opcode)
             OP_WRITE_REQ: begin
-              // Header carries {opcode,axi_len,addr}. Publish the AW descriptor
-              // immediately and stream `hdr_beats` W payload flits next.
+              // Single-beat: header carries only addr. One W payload flit
+              // follows; publish the AW descriptor immediately.
               if (wr_desc_push_ready_lo) begin
                 link_fifo_yumi_li    = 1'b1;
                 wr_desc_push_v_li    = 1'b1;
-                wr_desc_push_data_li = {hdr_addr, hdr_beats};
-                cur_beats_n          = hdr_beats;
-                payload_rem_n        = drop_count_width_lp'(hdr_beats);
+                wr_desc_push_data_li = hdr_addr;
                 state_n              = RX_WR_DATA;
               end
             end
@@ -377,17 +356,11 @@ module axi_link_rx
       end
 
       RX_WR_DATA: begin
+        // Single-beat: consume exactly one payload flit and return to IDLE.
         if (link_fifo_v_lo && w_data_push_ready_lo) begin
-          // WRITE_REQ payload flits stream directly into the W data FIFO.
           link_fifo_yumi_li = 1'b1;
           w_data_push_v_li  = 1'b1;
-          if (payload_rem_r == drop_count_width_lp'(1)) begin
-            payload_rem_n = '0;
-            state_n       = RX_IDLE;
-          end
-          else begin
-            payload_rem_n = payload_rem_r - drop_count_width_lp'(1);
-          end
+          state_n           = RX_IDLE;
         end
       end
 
@@ -444,64 +417,35 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // AXI AW/W reconstruction
   // --------------------------------------------------------------------------
-  // AW and W are replayed from one combined descriptor FIFO plus one W data
-  // FIFO. A write burst is not allowed to start sending W beats until its
-  // matching AW descriptor has been issued, which preserves FIFO pairing.
-
-  req_desc_s wr_desc_cast;
-  assign wr_desc_cast = req_desc_s'(wr_desc_data_lo);
+  // Single-beat: AW fires when a wr_desc is queued; once accepted, the
+  // matching W beat is offered as soon as the payload flit is in the W data
+  // FIFO. wr_desc and w_data are consumed together on the W handshake.
 
   logic write_active_r, write_active_n;
-  logic [beat_count_width_lp-1:0] write_beats_left_r, write_beats_left_n;
   logic aw_handshake, w_handshake;
 
   assign awvalid_o = wr_desc_v_lo && !write_active_r;
-  assign awaddr_o  = wr_desc_cast.addr;
-  assign awlen_o   = wr_desc_cast.beats[7:0] - 8'd1;
+  assign awaddr_o  = wr_desc_data_lo;
   assign awsize_o  = axi_size_lp;
   assign awburst_o = axi_burst_lp;
-
   assign aw_handshake = awvalid_o && awready_i;
 
   assign wvalid_o = write_active_r && w_data_v_lo;
   assign wdata_o  = w_data_lo;
-  assign wlast_o  = write_active_r && (write_beats_left_r == beat_count_width_lp'(1));
   assign w_handshake = wvalid_o && wready_i;
 
-  assign wr_desc_yumi_li = w_handshake && (write_beats_left_r == beat_count_width_lp'(1));
+  assign wr_desc_yumi_li = w_handshake;
   assign w_data_yumi_li  = w_handshake;
 
   always_comb begin
-    // `write_active_r` marks that AW for the current combined write packet has
-    // already been accepted and we are now draining its W payload beats.
-    write_active_n     = write_active_r;
-    write_beats_left_n = write_beats_left_r;
-
-    if (aw_handshake) begin
-      write_active_n     = 1'b1;
-      write_beats_left_n = wr_desc_cast.beats;
-    end
-
-    if (w_handshake) begin
-      if (write_beats_left_r == beat_count_width_lp'(1)) begin
-        write_active_n     = 1'b0;
-        write_beats_left_n = '0;
-      end
-      else begin
-        write_beats_left_n = write_beats_left_r - beat_count_width_lp'(1);
-      end
-    end
+    write_active_n = write_active_r;
+    if (aw_handshake) write_active_n = 1'b1;
+    if (w_handshake)  write_active_n = 1'b0;
   end
 
   always_ff @(posedge clk_i) begin
-    if (reset_i) begin
-      write_active_r     <= 1'b0;
-      write_beats_left_r <= '0;
-    end
-    else begin
-      write_active_r     <= write_active_n;
-      write_beats_left_r <= write_beats_left_n;
-    end
+    if (reset_i) write_active_r <= 1'b0;
+    else         write_active_r <= write_active_n;
   end
 
   // --------------------------------------------------------------------------
@@ -531,11 +475,6 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // AXI R reconstruction
   // --------------------------------------------------------------------------
-  // READ_RESP replay uses one descriptor FIFO carrying just `beats` and one
-  // R data FIFO carrying the actual data beats. The descriptor is held once at
-  // burst start, then the local counter generates RLAST on the final beat.
-  // rresp_o is locally driven to RESP_OKAY since the link does not transport
-  // per-read response status.
 
   r_desc_s r_desc_cast;
   assign r_desc_cast = r_desc_s'(r_desc_data_lo);
@@ -558,8 +497,6 @@ module axi_link_rx
   assign r_data_yumi_li = r_handshake;
 
   always_comb begin
-    // Once an R burst starts, the descriptor state is held locally until the
-    // final beat is accepted on the AXI R channel.
     r_active_n     = r_active_r;
     r_beats_left_n = r_beats_left_r;
 
@@ -593,17 +530,8 @@ module axi_link_rx
 `ifndef SYNTHESIS
   always_ff @(posedge clk_i) begin
     if (!reset_i) begin
-      if ((state_r == RX_WR_DATA) && (payload_rem_r == '0))
-        $error("axi_link_rx parser inconsistent in RX_WR_DATA");
-
-      if (awvalid_o && (wr_desc_cast.beats == '0))
-        $error("axi_link_rx attempted zero-length AW burst");
-
       if (arvalid_o && !rd_desc_cast.is_meta && (rd_desc_cast.payload == '0))
         $error("axi_link_rx attempted zero-length AR burst");
-
-      if (w_handshake && (wlast_o != (write_beats_left_r == beat_count_width_lp'(1))))
-        $error("axi_link_rx WLAST misaligned with stored write descriptor");
 
       if (r_handshake && (rlast_o != ((r_active_r ? r_beats_left_r : r_desc_cast.beats) == beat_count_width_lp'(1))))
         $error("axi_link_rx RLAST misaligned with stored READ_RESP length");

@@ -4,7 +4,6 @@ module axi_link_tx
    ,parameter int link_fifo_els_p       = 8
    ,parameter int aw_desc_fifo_els_p    = 2
    ,parameter int ar_desc_fifo_els_p    = 2
-   ,parameter int w_len_fifo_els_p      = 4
    ,parameter int w_data_fifo_els_p     = 8
    ,parameter int r_len_fifo_els_p      = 4
    ,parameter int r_data_fifo_els_p     = 8
@@ -16,14 +15,12 @@ module axi_link_tx
    ,input  logic                    awvalid_i
    ,output logic                    awready_o
    ,input  logic [addr_width_p-1:0] awaddr_i
-   ,input  logic [7:0]              awlen_i
    ,input  logic [2:0]              awsize_i
    ,input  logic [1:0]              awburst_i
 
    ,input  logic                    wvalid_i
    ,output logic                    wready_o
    ,input  logic [31:0]             wdata_i
-   ,input  logic                    wlast_i
 
    ,input  logic                    arvalid_i
    ,output logic                    arready_o
@@ -57,41 +54,30 @@ module axi_link_tx
   //   2'b11 = LOAD_REQ
   //
   // Header flit layout (32 bits):
-  //   WRITE_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style awlen,        [15:0] address
-  //   FETCH_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style arlen,        [15:0] address
-  //   LOAD_REQ  : [31:30] opcode, [29]    reserved, [28:16] aruser_i[12:0],         [15:0] address
-  //               aruser_i[13] selects LOAD_REQ over FETCH_REQ on AR
-  //               acceptance (TX-side only — never serialized). The lower
-  //               13 bits aruser_i[12:0] are carried verbatim in the
-  //               middle field as opaque metadata. LOAD is always single
-  //               beat; no length is carried.
-  //   READ_RESP : [31:30] opcode, [29:24] reserved, [23:16] AXI-style rlen,         [15:0] reserved
+  //   WRITE_REQ : [31:30] opcode, [29:16] reserved,                           [15:0] address
+  //   FETCH_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style arlen,  [15:0] address
+  //   LOAD_REQ  : [31:30] opcode, [29]    reserved, [28:16] aruser_i[12:0],   [15:0] address
+  //   READ_RESP : [31:30] opcode, [29:24] reserved, [23:16] AXI-style rlen,   [15:0] reserved
   //
-  // Length encoding follows AXI semantics: the wire `len` field carries
-  // (beats - 1) in 8 bits, i.e. 0..255 representing 1..256 beats. AXI
-  // burst length max is 256, so 8 bits suffice.
+  // WRITE_REQ is single-beat only: header + exactly one 32-bit W payload flit.
+  // No length field is carried on the wire; both ends assume awlen=0/wlast=1
+  // for every write. This matches the CGRA dfetch master and any AXI-Lite
+  // host on the FPGA side, both of which only ever issue single-beat writes.
+  //
+  // FETCH_REQ / READ_RESP length encoding still follows AXI semantics: the
+  // wire `len` field carries (beats - 1) in 8 bits, i.e. 0..255 representing
+  // 1..256 beats.
   //
   // RRESP is intentionally not carried by this link, mirroring the dropped
-  // B channel. The receiving side reconstructs rresp_o = OKAY for every
-  // beat; per-read error reporting is therefore lost.
-  //
-  // AXI semantics at the module boundary:
-  //   requests  : AW, W, AR
-  //   responses : R
-  //   The B (write-response) channel is intentionally not carried by this
-  //   link. The upstream wrapper is expected to synthesize a fake B beat
-  //   per accepted write burst (BRESP=OKAY) so the AXI master sees write
-  //   completion locally; per-write error reporting is therefore lost.
+  // B channel. The receiving side reconstructs rresp_o = OKAY for every beat.
   //
   // Transport:
-  //   WRITE_REQ  = header(opcode,axi_len,addr) + (axi_len+1) W beats
+  //   WRITE_REQ  = header(opcode,addr)         + 1 W beat
   //   FETCH_REQ  = header(opcode,axi_len,addr)
   //   LOAD_REQ   = header(opcode,aruser,addr)
   //   READ_RESP  = header(opcode,axi_len)      + (axi_len+1) R beats
   //
-  // Strict FIFO assumption:
-  //   No AXI IDs or reorder logic exist here. Associations rely purely on
-  //   strict FIFO order across accepted bursts and responses.
+  // Strict FIFO assumption: no AXI IDs or reorder logic exist here.
   // --------------------------------------------------------------------------
 
   initial begin
@@ -120,18 +106,13 @@ module axi_link_tx
     TX_DATA    = 2'd2
   } tx_state_e;
 
-  localparam int beat_count_width_lp   = 9;   // beats counter range 1..256
+  localparam int beat_count_width_lp   = 9;   // beats counter range 1..256 (reads only)
   localparam int meta_aruser_width_lp  = 13;  // META aruser payload width
-  localparam int wr_desc_width_lp      = addr_width_p + beat_count_width_lp;
   localparam int rd_desc_width_lp      = addr_width_p + 1 + meta_aruser_width_lp;
   localparam int r_desc_width_lp       = beat_count_width_lp;
+  localparam int w_credit_width_lp     = $clog2(aw_desc_fifo_els_p + 1);
   localparam logic [2:0] axi_size_lp   = 3'b010;
   localparam logic [1:0] axi_burst_lp  = 2'b01;
-
-  typedef struct packed {
-    logic [addr_width_p-1:0]        addr;
-    logic [beat_count_width_lp-1:0] beats;
-  } req_desc_s;
 
   // For non-meta reads, payload[8:0] carries the AXI burst length as beats
   // (1..256). For meta reads, payload[12:0] carries the captured
@@ -149,49 +130,43 @@ module axi_link_tx
   // --------------------------------------------------------------------------
   // Internal FIFOs
   // --------------------------------------------------------------------------
-  // `wr_desc_fifo_i` stores one combined write-request descriptor per AW burst.
-  // `w_len_fifo_i` is the matching beat-count queue that lets the W channel
-  // consume beats later in the same strict FIFO order without IDs.
-  // `pkt_order_fifo_i` records only packet start order across request/response
-  // classes; the serializer follows it exactly to preserve end-to-end order.
+  // `wr_desc_fifo_i` stores one AW address per accepted write. W beats are
+  // gated separately by a credit counter (single beat per AW). `pkt_order_fifo_i`
+  // records packet start order across request/response classes so the
+  // serializer preserves end-to-end order.
 
-  logic                     wr_desc_push_v_li, wr_desc_push_ready_lo;
-  logic [wr_desc_width_lp-1:0] wr_desc_push_data_li;
-  logic                     wr_desc_v_lo, wr_desc_yumi_li;
-  logic [wr_desc_width_lp-1:0] wr_desc_data_lo;
+  logic                          wr_desc_push_v_li, wr_desc_push_ready_lo;
+  logic [addr_width_p-1:0]       wr_desc_push_data_li;
+  logic                          wr_desc_v_lo, wr_desc_yumi_li;
+  logic [addr_width_p-1:0]       wr_desc_data_lo;
 
-  logic                     rd_desc_push_v_li, rd_desc_push_ready_lo;
-  logic [rd_desc_width_lp-1:0] rd_desc_push_data_li;
-  logic                     rd_desc_v_lo, rd_desc_yumi_li;
-  logic [rd_desc_width_lp-1:0] rd_desc_data_lo;
+  logic                            rd_desc_push_v_li, rd_desc_push_ready_lo;
+  logic [rd_desc_width_lp-1:0]     rd_desc_push_data_li;
+  logic                            rd_desc_v_lo, rd_desc_yumi_li;
+  logic [rd_desc_width_lp-1:0]     rd_desc_data_lo;
 
-  logic                        w_len_push_v_li, w_len_push_ready_lo;
-  logic [beat_count_width_lp-1:0] w_len_push_data_li;
-  logic                        w_len_v_lo, w_len_yumi_li;
-  logic [beat_count_width_lp-1:0] w_len_data_lo;
+  logic                          w_data_push_v_li, w_data_push_ready_lo;
+  logic [31:0]                   w_data_push_data_li;
+  logic                          w_data_v_lo, w_data_yumi_li;
+  logic [31:0]                   w_data_lo;
 
-  logic                     w_data_push_v_li, w_data_push_ready_lo;
-  logic [31:0]              w_data_push_data_li;
-  logic                     w_data_v_lo, w_data_yumi_li;
-  logic [31:0]              w_data_lo;
+  logic                          r_desc_push_v_li, r_desc_push_ready_lo;
+  logic [r_desc_width_lp-1:0]    r_desc_push_data_li;
+  logic                          r_desc_v_lo, r_desc_yumi_li;
+  logic [r_desc_width_lp-1:0]    r_desc_data_lo;
 
-  logic                     r_desc_push_v_li, r_desc_push_ready_lo;
-  logic [r_desc_width_lp-1:0] r_desc_push_data_li;
-  logic                     r_desc_v_lo, r_desc_yumi_li;
-  logic [r_desc_width_lp-1:0] r_desc_data_lo;
+  logic                          r_data_push_v_li, r_data_push_ready_lo;
+  logic [31:0]                   r_data_push_data_li;
+  logic                          r_data_v_lo, r_data_yumi_li;
+  logic [31:0]                   r_data_lo;
 
-  logic                     r_data_push_v_li, r_data_push_ready_lo;
-  logic [31:0]              r_data_push_data_li;
-  logic                     r_data_v_lo, r_data_yumi_li;
-  logic [31:0]              r_data_lo;
-
-  logic                     pkt_order_push_v_li, pkt_order_push_ready_lo;
-  logic [1:0]               pkt_order_push_data_li;
-  logic                     pkt_order_v_lo, pkt_order_yumi_li;
-  logic [1:0]               pkt_order_lo;
+  logic                          pkt_order_push_v_li, pkt_order_push_ready_lo;
+  logic [1:0]                    pkt_order_push_data_li;
+  logic                          pkt_order_v_lo, pkt_order_yumi_li;
+  logic [1:0]                    pkt_order_lo;
 
   bsg_fifo_1r1w_small #(
-    .width_p            (wr_desc_width_lp),
+    .width_p            (addr_width_p),
     .els_p              (aw_desc_fifo_els_p),
     .harden_p           (0),
     .ready_THEN_valid_p (0)
@@ -220,22 +195,6 @@ module axi_link_tx
     .v_o    (rd_desc_v_lo),
     .data_o (rd_desc_data_lo),
     .yumi_i (rd_desc_yumi_li)
-  );
-
-  bsg_fifo_1r1w_small #(
-    .width_p            (beat_count_width_lp),
-    .els_p              (w_len_fifo_els_p),
-    .harden_p           (0),
-    .ready_THEN_valid_p (0)
-  ) w_len_fifo_i (
-    .clk_i  (clk_i),
-    .reset_i(reset_i),
-    .v_i    (w_len_push_v_li),
-    .data_i (w_len_push_data_li),
-    .ready_o(w_len_push_ready_lo),
-    .v_o    (w_len_v_lo),
-    .data_o (w_len_data_lo),
-    .yumi_i (w_len_yumi_li)
   );
 
   bsg_fifo_1r1w_small #(
@@ -303,32 +262,54 @@ module axi_link_tx
   );
 
   // --------------------------------------------------------------------------
+  // W credit counter
+  // --------------------------------------------------------------------------
+  // Each accepted AW grants one W credit; each accepted W beat consumes one.
+  // AW acceptance is gated on credits-not-full so the counter cannot overflow
+  // beyond `aw_desc_fifo_els_p` outstanding AWs without their W beats.
+
+  logic [w_credit_width_lp-1:0] w_credit_r, w_credit_n;
+  logic w_credit_full;
+  logic aw_accept, ar_accept, w_accept, r_accept;
+
+  assign w_credit_full = (w_credit_r == w_credit_width_lp'(aw_desc_fifo_els_p));
+
+  always_comb begin
+    w_credit_n = w_credit_r;
+    case ({aw_accept, w_accept})
+      2'b10:   w_credit_n = w_credit_r + w_credit_width_lp'(1);
+      2'b01:   w_credit_n = w_credit_r - w_credit_width_lp'(1);
+      default: ;
+    endcase
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (reset_i) w_credit_r <= '0;
+    else         w_credit_r <= w_credit_n;
+  end
+
+  // --------------------------------------------------------------------------
   // Packet start arbitration
   // --------------------------------------------------------------------------
-  // Only one new packet start is accepted per cycle. This keeps the packet
-  // order FIFO unambiguous when several AXI channels become ready together.
-  // The round-robin pointer avoids permanently favoring one class.
 
   logic [2:0] start_req, start_grant;
   logic [1:0] rr_start_r, rr_start_n;
   logic aw_req, ar_req, r_start_req;
 
-  logic [beat_count_width_lp-1:0] aw_beats, ar_beats;
+  logic [beat_count_width_lp-1:0] ar_beats;
   logic [beat_count_width_lp-1:0] tx_r_beats_li;
-  logic aw_ctrl_ok, ar_ctrl_ok;
+  logic ar_ctrl_ok;
 
-  assign aw_beats      = {1'b0, awlen_i}    + beat_count_width_lp'(1);
   assign ar_beats      = {1'b0, arlen_i}    + beat_count_width_lp'(1);
   assign tx_r_beats_li = {1'b0, tx_r_len_i} + beat_count_width_lp'(1);
-  assign aw_ctrl_ok = (awsize_i == axi_size_lp) && (awburst_i == axi_burst_lp) && (aw_beats != '0);
-  assign ar_ctrl_ok = (arsize_i == axi_size_lp) && (arburst_i == axi_burst_lp) && (ar_beats != '0);
+  assign ar_ctrl_ok    = (arsize_i == axi_size_lp) && (arburst_i == axi_burst_lp) && (ar_beats != '0);
 
   logic r_capture_active_r, r_capture_active_n;
   logic [beat_count_width_lp-1:0] r_capture_beats_left_r, r_capture_beats_left_n;
   logic [beat_count_width_lp-1:0] r_accept_loaded_beats;
-  logic r_first_accept;
+  logic r_first_accept, r_final_accept;
 
-  assign aw_req      = awvalid_i && wr_desc_push_ready_lo && w_len_push_ready_lo && pkt_order_push_ready_lo && aw_ctrl_ok;
+  assign aw_req      = awvalid_i && wr_desc_push_ready_lo && !w_credit_full && pkt_order_push_ready_lo;
   assign ar_req      = arvalid_i && rd_desc_push_ready_lo && pkt_order_push_ready_lo && ar_ctrl_ok;
   assign r_start_req = rvalid_i && !r_capture_active_r
                        && tx_r_len_v_i && r_data_push_ready_lo && r_desc_push_ready_lo
@@ -370,15 +351,6 @@ module axi_link_tx
   // --------------------------------------------------------------------------
   // AXI request / response capture
   // --------------------------------------------------------------------------
-  // AW acceptance creates a pending WRITE_REQ descriptor immediately, while the
-  // corresponding W burst can arrive later and is matched purely by FIFO order.
-  // This is safe only under the module's strict in-order, no-ID assumption.
-
-  logic [beat_count_width_lp-1:0] w_accept_beats_left_r, w_accept_beats_left_n;
-  logic [beat_count_width_lp-1:0] w_accept_loaded_beats;
-  logic w_accept_active_r, w_accept_active_n;
-  logic aw_accept, ar_accept, r_accept, w_accept;
-  logic r_final_accept;
 
   assign aw_accept = start_grant[pkt_kind_e'(PKT_WR_REQ)];
   assign ar_accept = start_grant[pkt_kind_e'(PKT_RD_REQ)];
@@ -387,9 +359,7 @@ module axi_link_tx
   assign arready_o = ar_accept;
 
   assign wr_desc_push_v_li    = aw_accept;
-  assign wr_desc_push_data_li = {awaddr_i, aw_beats};
-  assign w_len_push_v_li      = aw_accept;
-  assign w_len_push_data_li   = aw_beats;
+  assign wr_desc_push_data_li = awaddr_i;
   assign pkt_order_push_v_li  = aw_accept || ar_accept || (r_accept && !r_capture_active_r);
   assign pkt_order_push_data_li = aw_accept ? pkt_kind_e'(PKT_WR_REQ)
                                   : ar_accept ? pkt_kind_e'(PKT_RD_REQ)
@@ -404,52 +374,13 @@ module axi_link_tx
                                  aruser_i[13] ? aruser_i[12:0]
                                               : meta_aruser_width_lp'(ar_beats)};
 
-  assign w_accept_loaded_beats = w_accept_active_r ? w_accept_beats_left_r : w_len_data_lo;
-  assign wready_o = w_data_push_ready_lo
-                    && (w_accept_active_r || w_len_v_lo);
+  // W accept is gated on a positive credit, meaning at least one AW has been
+  // accepted whose W beat hasn't yet arrived. Data flits stream straight
+  // into w_data_fifo.
+  assign wready_o = w_data_push_ready_lo && (w_credit_r != '0);
   assign w_accept = wvalid_i && wready_o;
   assign w_data_push_v_li    = w_accept;
   assign w_data_push_data_li = wdata_i;
-  assign w_len_yumi_li       = w_accept && !w_accept_active_r;
-
-  always_comb begin
-    // `w_accept_active_r` tracks whether we are in the middle of consuming the
-    // current burst's W beats. On the first beat we load the older AW length
-    // from `w_len_fifo_i`; subsequent beats count down locally until WLAST.
-    w_accept_active_n     = w_accept_active_r;
-    w_accept_beats_left_n = w_accept_beats_left_r;
-
-    if (w_accept) begin
-      if (!w_accept_active_r) begin
-        if (w_accept_loaded_beats == beat_count_width_lp'(1)) begin
-          w_accept_active_n     = 1'b0;
-          w_accept_beats_left_n = '0;
-        end
-        else begin
-          w_accept_active_n     = 1'b1;
-          w_accept_beats_left_n = w_accept_loaded_beats - beat_count_width_lp'(1);
-        end
-      end
-      else if (w_accept_beats_left_r == beat_count_width_lp'(1)) begin
-        w_accept_active_n     = 1'b0;
-        w_accept_beats_left_n = '0;
-      end
-      else begin
-        w_accept_beats_left_n = w_accept_beats_left_r - beat_count_width_lp'(1);
-      end
-    end
-  end
-
-  always_ff @(posedge clk_i) begin
-    if (reset_i) begin
-      w_accept_active_r     <= 1'b0;
-      w_accept_beats_left_r <= '0;
-    end
-    else begin
-      w_accept_active_r     <= w_accept_active_n;
-      w_accept_beats_left_r <= w_accept_beats_left_n;
-    end
-  end
 
   assign rready_o = r_data_push_ready_lo
                     && (r_capture_active_r || start_grant[pkt_kind_e'(PKT_RD_RESP)]);
@@ -509,8 +440,8 @@ module axi_link_tx
   // Link serializer
   // --------------------------------------------------------------------------
   // The serializer is intentionally simple:
-  //   TX_HEADER emits the 32-bit header flit {opcode, beats, addr}
-  //   TX_DATA   streams W or R payload beats from the corresponding FIFO
+  //   TX_HEADER emits the 32-bit header flit
+  //   TX_DATA   streams W (1 beat) or R (N beats) payload from the matching FIFO
   //
   // Only one packet is active at a time, and packet start order is supplied by
   // `pkt_order_fifo_i`, so no cross-packet reordering is possible.
@@ -518,17 +449,16 @@ module axi_link_tx
   tx_state_e state_r, state_n;
   logic [1:0] cur_kind_r, cur_kind_n;
   logic [addr_width_p-1:0] cur_addr_r, cur_addr_n;
-  // cur_beats_r transiently holds the middle-field value to emit in the
-  // header: 9-bit beats (zero-extended) for non-META, 13-bit aruser for META.
+  // cur_beats_r holds the middle-field value to emit in non-WRITE headers:
+  // 9-bit beats (zero-extended) for FETCH/READ_RESP, 13-bit aruser for LOAD.
+  // It is unused for WRITE_REQ headers.
   logic [meta_aruser_width_lp-1:0] cur_beats_r, cur_beats_n;
   logic [beat_count_width_lp-1:0]  cur_data_beats_left_r, cur_data_beats_left_n;
   logic                            cur_rd_is_meta_r, cur_rd_is_meta_n;
 
-  req_desc_s    wr_desc_cast;
   rd_req_desc_s rd_desc_cast;
   r_desc_s      r_desc_cast;
 
-  assign wr_desc_cast = req_desc_s'(wr_desc_data_lo);
   assign rd_desc_cast = rd_req_desc_s'(rd_desc_data_lo);
   assign r_desc_cast  = r_desc_s'(r_desc_data_lo);
 
@@ -561,12 +491,12 @@ module axi_link_tx
     cur_rd_is_meta_n      = cur_rd_is_meta_r;
 
     if (start_wr_pkt) begin
-      // WRITE_REQ = header + address + W data beats.
+      // WRITE_REQ = header + exactly one W payload flit.
       state_n               = TX_HEADER;
       cur_kind_n            = pkt_kind_e'(PKT_WR_REQ);
-      cur_addr_n            = wr_desc_cast.addr;
-      cur_beats_n           = wr_desc_cast.beats;
-      cur_data_beats_left_n = wr_desc_cast.beats;
+      cur_addr_n            = wr_desc_data_lo;
+      cur_beats_n           = '0;
+      cur_data_beats_left_n = beat_count_width_lp'(1);
       cur_rd_is_meta_n      = 1'b0;
     end
     else if (start_rd_pkt) begin
@@ -646,7 +576,7 @@ module axi_link_tx
         // FETCH encodes len as AXI-style (beats - 1) in 8 bits at [23:16].
         // LOAD keeps the full 13-bit aruser at [28:16]; the opcode disambiguates.
         unique case (cur_kind_r)
-          pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ,  6'b0, cur_beats_r[7:0] - 8'd1, cur_addr_r};
+          pkt_kind_e'(PKT_WR_REQ):  link_tx_data_o = {OP_WRITE_REQ,  14'b0, cur_addr_r};
           pkt_kind_e'(PKT_RD_REQ):  link_tx_data_o = cur_rd_is_meta_r
                                                        ? {OP_LOAD_REQ,  1'b0, cur_beats_r[12:0],         cur_addr_r}
                                                        : {OP_FETCH_REQ, 6'b0, cur_beats_r[7:0] - 8'd1,   cur_addr_r};
@@ -678,18 +608,11 @@ module axi_link_tx
 `ifndef SYNTHESIS
   always_ff @(posedge clk_i) begin
     if (!reset_i) begin
-      if (w_accept) begin
-        if (!w_accept_active_r && (w_len_data_lo == '0))
-          $error("axi_link_tx accepted W without an older AW burst length");
-        if (wlast_i != (w_accept_loaded_beats == beat_count_width_lp'(1)))
-          $error("axi_link_tx saw WLAST misaligned with AW/W FIFO order");
-      end
+      if (w_accept && (w_credit_r == '0))
+        $error("axi_link_tx accepted W with zero credit (no pending AW)");
 
       if (r_accept && (rlast_i != (r_accept_loaded_beats == beat_count_width_lp'(1))))
         $error("axi_link_tx observed RLAST misaligned with stored AR length");
-
-      if (awvalid_i && !aw_ctrl_ok && awready_o)
-        $error("axi_link_tx accepted malformed AW control");
 
       if (arvalid_i && !ar_ctrl_ok && arready_o)
         $error("axi_link_tx accepted malformed AR control");
