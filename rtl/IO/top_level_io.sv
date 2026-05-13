@@ -120,6 +120,11 @@ module top_level_io
   // The link protocol does not carry WRITE_RESP packets. B responses are
   // synthesized locally for outgoing writes and discarded for incoming writes.
   //
+  // The link also does not transport RRESP. tx_rresp_i is accepted from the
+  // local AXI source and ignored (mirroring the dropped B channel), and
+  // rx_rresp_o is driven to OKAY (2'b00) for every R beat by axi_link_rx.
+  // Per-read error reporting is therefore lost end-to-end.
+  //
   // Ordering model:
   //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
   // --------------------------------------------------------------------------
@@ -139,9 +144,11 @@ module top_level_io
   logic                    tx_r_len_yumi_li;
   logic                    tx_r_len_ready_lo;
 
-  // Incoming READ_REQ lengths are mirrored into a small FIFO so the local
-  // AXI R channel can start streaming a READ_RESP packet back over the link
-  // on the very first response beat.
+  // Incoming read lengths (from both FETCH_REQ and LOAD_REQ packets) are
+  // mirrored into a small FIFO so the local AXI R channel can start streaming
+  // a READ_RESP packet back over the link on the very first response beat.
+  // LOAD_REQ always produces arlen=0 (single-beat); FETCH_REQ can carry up
+  // to 256 beats.
   assign rx_arready_li = rx_arready_i && tx_r_len_ready_lo;
 
   bsg_fifo_1r1w_small #(

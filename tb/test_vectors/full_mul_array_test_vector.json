@@ -33,10 +33,10 @@
         "in_regs_bitmap": 0,
         "lat": 6,
         "ld_dest_regs": [
-          0,
-          1,
+          3,
           2,
-          3
+          1,
+          0
         ],
         "num_stores": 0,
         "out_regs_bitmap": 0,
@@ -62,10 +62,10 @@
         "in_regs_bitmap": 0,
         "lat": 6,
         "ld_dest_regs": [
-          4,
-          5,
+          7,
           6,
-          7
+          5,
+          4
         ],
         "num_stores": 0,
         "out_regs_bitmap": 0,
@@ -500,31 +500,31 @@
   },
   "stage_artifacts": [
     {
-      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.bin",
+      "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.bin",
       "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a_compile_report.json",
-      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.fasm",
+      "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.fasm",
       "kernel": "load_mul_array_a",
       "notes": [
         "A-side load stage for the staged mul-array flow.",
         "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
-        "Memory responses load into GPRs 0..3."
+        "Memory responses load into GPRs 0..3 after SV packed-array reversal."
       ]
     },
     {
-      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
+      "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
       "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
-      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
+      "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
       "kernel": "load_mul_array_b",
       "notes": [
         "B-side load stage for the staged mul-array flow.",
         "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
-        "Memory responses load into GPRs 4..7."
+        "Memory responses load into GPRs 4..7 after SV packed-array reversal."
       ]
     },
     {
-      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
+      "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
       "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
-      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
+      "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
       "kernel": "mul_array",
       "notes": [
         "Consumes GPRs 0..7 as mul operands.",
@@ -532,9 +532,9 @@
       ]
     },
     {
-      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
+      "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
       "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs_compile_report.json",
-      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
+      "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
       "kernel": "compute_store_addrs",
       "notes": [
         "Materializes C-side affine store addresses into GPRs 4..7.",
@@ -542,9 +542,9 @@
       ]
     },
     {
-      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
+      "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
       "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
-      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
+      "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
       "kernel": "store_mul_array",
       "notes": [
         "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",

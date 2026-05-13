@@ -30,7 +30,7 @@ module mini_dice_top
     parameter int FLIT_WIDTH             = 32,
     parameter int CHANNEL_WIDTH          = 8,
     parameter int ID_FIFO_DEPTH          = 4,
-    parameter int LG_FIFO_DEPTH          = 6,
+    parameter int LG_FIFO_DEPTH          = 4,
     parameter int LG_CREDIT_TO_TOKEN_DEC = 3,
     parameter int BYPASS_TWOFER_FIFO     = 0,
     parameter int BYPASS_GEARBOX         = 1,

@@ -13,7 +13,7 @@
 //   5. DPI verifier reports PASS/FAIL.
 // =============================================================================
 
-// `define TB_RTL_HIER_DEBUG
+`define TB_RTL_HIER_DEBUG
 
 `timescale 1ns / 1ps
 
@@ -75,7 +75,7 @@ module tb_chip_top;
   localparam logic [15:0] CTRL_CGRA_RESET = 16'h0002;
   localparam logic [15:0] CTRL_BSLOAD_EN = 16'h0004;
 
-  localparam string DEFAULT_TEST_VECTOR = "simple_branching_test_vector";
+  localparam string DEFAULT_TEST_VECTOR = "full_mul_array_test_vector";
   localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors";
 
   // --------------------------------------------------------------------------
@@ -580,6 +580,50 @@ module tb_chip_top;
             u_dut.u_mini_dice_top.dfetch_awvalid,
             u_dut.u_mini_dice_top.dfetch_awready,
             u_dut.u_mini_dice_top.dfetch_awaddr
+        );
+      if (|u_dut.u_mini_dice_top.dfetch_wvalid && |u_dut.u_mini_dice_top.dfetch_wready)
+        $display(
+            "[HIER][DC] t=%0t dfetch W  valid=%b ready=%b data=%p",
+            $time,
+            u_dut.u_mini_dice_top.dfetch_wvalid,
+            u_dut.u_mini_dice_top.dfetch_wready,
+            u_dut.u_mini_dice_top.dfetch_wdata
+        );
+      if (|u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_port_valid_lo) begin
+        $display(
+            "[HIER][CGRA_MEM] t=%0t tid=%0d eblock=%0d valid=%b op=%b p0={addr=0x%04x data=0x%04x} p1={addr=0x%04x data=0x%04x} p2={addr=0x%04x data=0x%04x} p3={addr=0x%04x data=0x%04x}",
+            $time,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_tid_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_e_block_id_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_port_valid_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_port_op_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_0,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_0,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_1,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_1,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_2,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_2,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_3,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_3
+        );
+      end
+      if (|u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awvalid_o
+          || |u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wvalid_o)
+        $display(
+            "[HIER][FIFO_AXI] t=%0t awv=%b awr=%b wv=%b wr=%b p0={aw=0x%04x w=0x%04x} p1={aw=0x%04x w=0x%04x} p2={aw=0x%04x w=0x%04x} p3={aw=0x%04x w=0x%04x}",
+            $time,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awvalid_o,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awready_i,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wvalid_o,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wready_i,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[0],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[0],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[1],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[1],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[2],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[2],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[3],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[3]
         );
       if (u_dut.u_mini_dice_top.u_io_top.xbar_mem_req.ar_valid &&
         u_dut.u_mini_dice_top.u_io_top.xbar_mem_resp.ar_ready)
