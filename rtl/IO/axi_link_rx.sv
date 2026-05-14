@@ -32,14 +32,12 @@ module axi_link_rx
    ,output logic [2:0]              arsize_o
    ,output logic [1:0]              arburst_o
    ,output logic [13:0]             aruser_o
-   ,output logic [2:0]              arid_o
 
    ,output logic                    rvalid_o
    ,input  logic                    rready_i
    ,output logic [31:0]             rdata_o
    ,output logic [1:0]              rresp_o
    ,output logic                    rlast_o
-   ,output logic [2:0]              rid_o
    );
 
   // --------------------------------------------------------------------------
@@ -52,26 +50,32 @@ module axi_link_rx
   //   2'b11 = LOAD_REQ
   //
   // Header flit layout (32 bits):
-  //   WRITE_REQ : [31:30] opcode, [29:16] reserved,                                              [15:0] address
-  //   FETCH_REQ : [31:30] opcode, [29:27] reserved, [26:24] arid[2:0], [23:16] AXI-style arlen,  [15:0] address
-  //   LOAD_REQ  : two-flit packet:
-  //               flit 0: [31:30] opcode, [29:27] reserved, [26:24] arid[2:0], [23:16] reserved, [15:0] address
-  //               flit 1: [31:13] reserved, [12:0] aruser[12:0]
-  //   READ_RESP : [31:30] opcode, [29:27] reserved, [26:24] rid[2:0],  [23:16] AXI-style rlen,   [15:0] reserved
-  //
-  // The link carries a 3-bit port ID with every read request and read
-  // response. AR/R reconstruction drives arid_o / rid_o from the wire so
-  // upstream demux can route responses to the correct master port without
-  // needing a local id-tracking FIFO.
+  //   WRITE_REQ : [31:30] opcode, [29:16] reserved,                          [15:0] address
+  //   FETCH_REQ : [31:30] opcode, [29:24] reserved, [23:16] AXI-style arlen, [15:0] address
+  //   LOAD_REQ  : [31:30] opcode, [29]    reserved, [28:16] aruser[12:0],    [15:0] address
+  //   READ_RESP : [31:30] opcode, [29:24] reserved, [23:16] AXI-style rlen,  [15:0] reserved
   //
   // WRITE_REQ is single-beat only: header + exactly one 32-bit W payload flit.
-  // LOAD_REQ is single-beat by definition (arlen=0 reconstructed locally).
+  // The reconstructed AXI W channel always asserts the equivalent of WLAST on
+  // every accepted beat (the link does not export a wlast wire).
   //
   // FETCH_REQ / READ_RESP length encoding still follows AXI semantics: the
-  // wire `len` field carries (beats - 1) in 8 bits.
+  // wire `len` field carries (beats - 1) in 8 bits, i.e. 0..255 representing
+  // 1..256 beats.
   //
-  // RRESP is intentionally not carried; rresp_o is driven RESP_OKAY for every
-  // beat. The B (write-response) channel is also not driven here.
+  // RRESP is intentionally not carried by this link, mirroring the dropped
+  // B channel. rresp_o is driven to RESP_OKAY (2'b00) for every beat.
+  //
+  // RX reconstructs four AXI channels from the simplified transport:
+  //   WRITE_REQ  -> AW + 1 W beat
+  //   FETCH_REQ  -> AR burst
+  //   LOAD_REQ   -> AR single beat with aruser_o[13]=1
+  //   READ_RESP  -> R burst
+  //
+  // The B (write-response) channel is intentionally not driven here; the
+  // upstream wrapper synthesizes a fake B beat per accepted write.
+  //
+  // Strict FIFO assumption: no AXI IDs or reorder logic exist here.
   // --------------------------------------------------------------------------
 
   initial begin
@@ -92,29 +96,28 @@ module axi_link_rx
     RX_IDLE      = 3'd0,
     RX_WR_DATA   = 3'd1,
     RX_R_DATA    = 3'd2,
-    RX_DROP      = 3'd3,
-    RX_LOAD_EXT  = 3'd4   // waiting for LOAD_REQ aruser-extension flit
+    RX_DROP      = 3'd3
   } rx_state_e;
 
-  localparam int portid_width_lp       = 3;
   localparam int beat_count_width_lp   = 9;   // reads only
-  localparam int meta_aruser_width_lp  = 13;
+  localparam int meta_aruser_width_lp  = 13;  // META aruser payload width
   localparam int drop_count_width_lp   = 9;
-  localparam int rd_req_desc_width_lp  = addr_width_p + 1 + portid_width_lp + meta_aruser_width_lp;
-  localparam int r_desc_width_lp       = portid_width_lp + beat_count_width_lp;
+  localparam int rd_req_desc_width_lp  = addr_width_p + 1 + meta_aruser_width_lp;
+  localparam int r_desc_width_lp       = beat_count_width_lp;
   localparam logic [2:0] axi_size_lp   = 3'b010;
   localparam logic [1:0] axi_burst_lp  = 2'b01;
 
+  // For FETCH_REQ, payload[8:0] is the AXI burst length as beats (1..256),
+  // zero-extended to meta_aruser_width_lp. For LOAD_REQ, payload[12:0] is the
+  // 13-bit aruser carried in the LOAD_REQ header.
   typedef struct packed {
     logic [addr_width_p-1:0]          addr;
     logic                             is_meta;
-    logic [portid_width_lp-1:0]       arid;
     logic [meta_aruser_width_lp-1:0]  payload;
   } rd_req_desc_s;
 
   typedef struct packed {
-    logic [portid_width_lp-1:0]      rid;
-    logic [beat_count_width_lp-1:0]  beats;
+    logic [beat_count_width_lp-1:0] beats;
   } r_desc_s;
 
   // --------------------------------------------------------------------------
@@ -261,30 +264,22 @@ module axi_link_rx
   logic [beat_count_width_lp-1:0] cur_beats_r, cur_beats_n;
   logic [drop_count_width_lp-1:0] payload_rem_r, payload_rem_n;
 
-  // Temp registers spanning LOAD_REQ flit 0 → flit 1.
-  logic [addr_width_p-1:0]    load_addr_r, load_addr_n;
-  logic [portid_width_lp-1:0] load_arid_r, load_arid_n;
-
   logic [1:0]                       hdr_opcode;
   logic [7:0]                       hdr_len_axi;
   logic [beat_count_width_lp-1:0]   hdr_beats;
-  logic [portid_width_lp-1:0]       hdr_portid;
-  logic [meta_aruser_width_lp-1:0]  ext_aruser;
+  logic [meta_aruser_width_lp-1:0]  hdr_aruser;
   logic [addr_width_p-1:0]          hdr_addr;
 
   assign hdr_opcode   = link_fifo_data_lo[31:30];
-  assign hdr_portid   = link_fifo_data_lo[26:24];
   assign hdr_len_axi  = link_fifo_data_lo[23:16];
   assign hdr_beats    = {1'b0, hdr_len_axi} + beat_count_width_lp'(1);
+  assign hdr_aruser   = link_fifo_data_lo[28:16];
   assign hdr_addr     = link_fifo_data_lo[15:0];
-  assign ext_aruser   = link_fifo_data_lo[meta_aruser_width_lp-1:0];
 
   always_comb begin
     state_n           = state_r;
     cur_beats_n       = cur_beats_r;
     payload_rem_n     = payload_rem_r;
-    load_addr_n       = load_addr_r;
-    load_arid_n       = load_arid_r;
 
     link_fifo_yumi_li = 1'b0;
 
@@ -315,35 +310,34 @@ module axi_link_rx
             end
 
             OP_FETCH_REQ: begin
-              // FETCH_REQ is a single header flit. Publish AR with the wire
-              // ARID and the burst length zero-extended into the payload slot.
+              // FETCH_REQ has no payload; one header flit publishes AR directly.
+              // hdr_beats (9 bits) is zero-extended into the wider payload slot.
               if (rd_desc_push_ready_lo) begin
                 link_fifo_yumi_li    = 1'b1;
                 rd_desc_push_v_li    = 1'b1;
-                rd_desc_push_data_li = {hdr_addr, 1'b0, hdr_portid,
-                                        meta_aruser_width_lp'(hdr_beats)};
+                rd_desc_push_data_li = {hdr_addr, 1'b0, meta_aruser_width_lp'(hdr_beats)};
                 state_n              = RX_IDLE;
               end
             end
 
             OP_LOAD_REQ: begin
-              // LOAD_REQ is two flits: header + aruser extension. Consume
-              // the header here, latch addr/arid, then wait for the
-              // extension flit in RX_LOAD_EXT to publish the rd_desc.
-              link_fifo_yumi_li = 1'b1;
-              load_addr_n       = hdr_addr;
-              load_arid_n       = hdr_portid;
-              state_n           = RX_LOAD_EXT;
+              // LOAD_REQ has no payload; AR fires once and the header's
+              // middle 13 bits are forwarded verbatim onto aruser_o.
+              if (rd_desc_push_ready_lo) begin
+                link_fifo_yumi_li    = 1'b1;
+                rd_desc_push_v_li    = 1'b1;
+                rd_desc_push_data_li = {hdr_addr, 1'b1, hdr_aruser};
+                state_n              = RX_IDLE;
+              end
             end
 
             OP_READ_RESP: begin
-              // Header carries response length and the matching RID. rresp_o
-              // is locally driven to RESP_OKAY (the link no longer transports
-              // rresp).
+              // Header carries only the response length; rresp_o is locally
+              // driven to RESP_OKAY (the link no longer transports RRESP).
               if (r_desc_push_ready_lo) begin
                 link_fifo_yumi_li   = 1'b1;
                 r_desc_push_v_li    = 1'b1;
-                r_desc_push_data_li = {hdr_portid, hdr_beats};
+                r_desc_push_data_li = hdr_beats;
                 cur_beats_n         = hdr_beats;
                 state_n             = RX_R_DATA;
               end
@@ -351,7 +345,8 @@ module axi_link_rx
 
             default: begin
               // Unknown opcode. Drop just the header flit and resync on the
-              // next header.
+              // next header; we can't trust hdr_beats since the layout is
+              // unknown.
               link_fifo_yumi_li = 1'b1;
               state_n           = RX_DROP;
               payload_rem_n     = '0;
@@ -361,7 +356,7 @@ module axi_link_rx
       end
 
       RX_WR_DATA: begin
-        // Single-beat: consume exactly one W payload flit and return to IDLE.
+        // Single-beat: consume exactly one payload flit and return to IDLE.
         if (link_fifo_v_lo && w_data_push_ready_lo) begin
           link_fifo_yumi_li = 1'b1;
           w_data_push_v_li  = 1'b1;
@@ -369,21 +364,10 @@ module axi_link_rx
         end
       end
 
-      RX_LOAD_EXT: begin
-        // Consume the aruser-extension flit and publish the LOAD AR descriptor
-        // with the captured addr/arid plus the wire-carried aruser payload.
-        if (link_fifo_v_lo && rd_desc_push_ready_lo) begin
-          link_fifo_yumi_li    = 1'b1;
-          rd_desc_push_v_li    = 1'b1;
-          rd_desc_push_data_li = {load_addr_r, 1'b1, load_arid_r, ext_aruser};
-          state_n              = RX_IDLE;
-        end
-      end
-
       RX_R_DATA: begin
         if (link_fifo_v_lo && r_data_push_ready_lo) begin
-          // READ_RESP data beats stream into the R data FIFO; AXI R can begin
-          // replaying before the full burst has arrived because the
+          // READ_RESP data beats stream into the R data FIFO first; AXI R can
+          // begin replaying before the full burst has arrived because the
           // descriptor was published from the header.
           link_fifo_yumi_li = 1'b1;
           r_data_push_v_li  = 1'b1;
@@ -398,7 +382,7 @@ module axi_link_rx
       end
 
       RX_DROP: begin
-        // Malformed packets are dropped by consuming any remaining payload
+        // Malformed packets are dropped by consuming the remaining payload
         // flits, which keeps the parser aligned to the next header.
         if (payload_rem_r == '0) begin
           state_n = RX_IDLE;
@@ -422,15 +406,11 @@ module axi_link_rx
       state_r       <= RX_IDLE;
       cur_beats_r   <= '0;
       payload_rem_r <= '0;
-      load_addr_r   <= '0;
-      load_arid_r   <= '0;
     end
     else begin
       state_r       <= state_n;
       cur_beats_r   <= cur_beats_n;
       payload_rem_r <= payload_rem_n;
-      load_addr_r   <= load_addr_n;
-      load_arid_r   <= load_arid_n;
     end
   end
 
@@ -471,10 +451,9 @@ module axi_link_rx
   // --------------------------------------------------------------------------
   // AXI AR reconstruction
   // --------------------------------------------------------------------------
-  // FETCH_REQ replays directly as an AR burst (length from the header).
-  // LOAD_REQ replays as a single-beat AR with aruser passthrough. The
-  // wire-carried ARID is driven onto arid_o so the upstream slave port can
-  // preserve it for response routing.
+  // FETCH_REQ packets replay directly as AR bursts because they carry only one
+  // address flit plus the burst length from the header. LOAD_REQ packets
+  // replay as a single-beat AR with aruser passthrough.
 
   rd_req_desc_s rd_desc_cast;
   assign rd_desc_cast = rd_req_desc_s'(rd_desc_data_lo);
@@ -486,12 +465,11 @@ module axi_link_rx
   assign arsize_o  = axi_size_lp;
   assign arburst_o = axi_burst_lp;
   // aruser_o[13] is the recovered meta flag (derived from opcode);
-  // aruser_o[12:0] is the metadata payload from the LOAD_REQ extension flit,
+  // aruser_o[12:0] is the metadata payload from the LOAD_REQ header,
   // or zero for a FETCH_REQ.
   assign aruser_o  = {rd_desc_cast.is_meta,
                       rd_desc_cast.is_meta ? rd_desc_cast.payload
                                            : meta_aruser_width_lp'(1'b0)};
-  assign arid_o    = rd_desc_cast.arid;
   assign rd_desc_yumi_li = arvalid_o && arready_i;
 
   // --------------------------------------------------------------------------
@@ -509,14 +487,13 @@ module axi_link_rx
   assign r_start_burst = !r_active_r && r_desc_v_lo && r_data_v_lo;
   assign rvalid_o      = (r_active_r || r_start_burst) && r_data_v_lo;
   assign rdata_o       = r_data_lo;
-  assign rresp_o       = 2'b00;
+  assign rresp_o       = 2'b00;  // RESP_OKAY — link does not carry rresp
   assign rlast_o       = r_active_r
                          ? (r_beats_left_r == beat_count_width_lp'(1))
                          : (r_desc_cast.beats == beat_count_width_lp'(1));
-  assign rid_o         = r_desc_cast.rid;
   assign r_handshake   = rvalid_o && rready_i;
 
-  assign r_desc_yumi_li = r_handshake && rlast_o;
+  assign r_desc_yumi_li = r_start_burst;
   assign r_data_yumi_li = r_handshake;
 
   always_comb begin

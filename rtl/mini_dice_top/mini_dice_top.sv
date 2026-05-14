@@ -29,7 +29,8 @@ module mini_dice_top
     parameter int DATA_WIDTH             = 32,
     parameter int FLIT_WIDTH             = 32,
     parameter int CHANNEL_WIDTH          = 8,
-    parameter int LG_FIFO_DEPTH          = 6,
+    parameter int ID_FIFO_DEPTH          = 4,
+    parameter int LG_FIFO_DEPTH          = 4,
     parameter int LG_CREDIT_TO_TOKEN_DEC = 3,
     parameter int BYPASS_TWOFER_FIFO     = 0,
     parameter int BYPASS_GEARBOX         = 1,
@@ -120,6 +121,14 @@ module mini_dice_top
   logic [                   15:0] csr_start_pc;
   logic [                   15:0] csr_thread_count;
 
+  // Hardware status wires from dice_core to cgra_io_csr
+  logic        core_hw_busy;
+  logic        core_dispatch_busy;
+  logic        core_stack_overflow;
+  logic [15:0] core_stack_depth;
+  logic [15:0] core_stack_error_pc;
+  logic [15:0] core_bsload_cnt;
+
   // csrX kernel arguments: cgra_io_csr regs 8-15 → dice_core
   logic [DICE_REG_DATA_WIDTH-1:0] csrX              [8];
   logic                           cta_complete_fire;
@@ -179,6 +188,12 @@ module mini_dice_top
 
       .cgra_prog_dout_o(cgra_prog_dout_o),
       .cgra_prog_we_o  (cgra_prog_we_o),
+      .hw_busy_o       (core_hw_busy),
+      .dispatch_busy_o (core_dispatch_busy),
+      .stack_overflow_o(core_stack_overflow),
+      .stack_depth_o   (core_stack_depth),
+      .stack_error_pc_o(core_stack_error_pc),
+      .bsload_cnt_o    (core_bsload_cnt),
 
       .axi_awaddr_o (dfetch_awaddr),
       .axi_awvalid_o(dfetch_awvalid),
@@ -208,6 +223,7 @@ module mini_dice_top
       .DATA_WIDTH            (DATA_WIDTH),
       .FLIT_WIDTH            (FLIT_WIDTH),
       .CHANNEL_WIDTH         (CHANNEL_WIDTH),
+      .ID_FIFO_DEPTH         (ID_FIFO_DEPTH),
       .LG_FIFO_DEPTH         (LG_FIFO_DEPTH),
       .LG_CREDIT_TO_TOKEN_DEC(LG_CREDIT_TO_TOKEN_DEC),
       .BYPASS_TWOFER_FIFO    (BYPASS_TWOFER_FIFO),
@@ -295,13 +311,13 @@ module mini_dice_top
       .bsload_en_o   (csr_bsload_en_o),
 
       // hw_* status exposed through CSR STATUS.
-      .hw_busy_i          (1'b0),
+      .hw_busy_i          (core_hw_busy),
       .hw_complete_i      (cta_complete_fire),
-      .hw_dispatching_i   (1'b0),
-      .hw_stack_overflow_i(1'b0),
-      .hw_stack_depth_i   ('0),
-      .hw_error_info_i    ('0),
-      .hw_bsload_cnt_i    ('0),
+      .hw_dispatching_i   (core_dispatch_busy),
+      .hw_stack_overflow_i(core_stack_overflow),
+      .hw_stack_depth_i   (core_stack_depth),
+      .hw_error_info_i    (core_stack_error_pc),
+      .hw_bsload_cnt_i    (core_bsload_cnt),
 
       // Regs 8-15: kernel argument outputs → dice_core csrX inputs
       .csrX0_o(csrX[0]),

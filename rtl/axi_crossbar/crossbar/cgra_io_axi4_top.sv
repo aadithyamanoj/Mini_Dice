@@ -32,6 +32,7 @@ module cgra_io_axi4_top
     parameter int DATA_WIDTH = 32,
     parameter int FLIT_WIDTH = 32,
     parameter int CHANNEL_WIDTH = 8,
+    parameter int ID_FIFO_DEPTH = 4,
     // bsg_link DDR parameters
     parameter int LG_FIFO_DEPTH = 6,  // bsg_link credit-FIFO depth (log2)
     parameter int LG_CREDIT_TO_TOKEN_DEC = 3,  // bsg_link token decimation (log2)
@@ -156,11 +157,7 @@ module cgra_io_axi4_top
     fpga_mst_req.ar.len   = rx_fpga_arlen;
     fpga_mst_req.ar.size  = rx_fpga_arsize;
     fpga_mst_req.ar.burst = rx_fpga_arburst;
-    // Stamp the FPGA-originated port ID into the slave-side id (slv_id_t is
-    // 4 bits, port ID is 3 bits → zero-extend). The crossbar preserves these
-    // bits through fpga_mst_resp.r.id; the chip-side glue then forwards them
-    // back to axi_link_tx as the outgoing RID.
-    fpga_mst_req.ar.id    = slv_id_t'(rx_fpga_arid);
+    fpga_mst_req.ar.id    = '0;
     fpga_mst_req.ar.user  = axi_user_t'(rx_fpga_aruser);
     fpga_mst_req.r_ready  = tx_fpga_rready;
   end
@@ -221,85 +218,76 @@ module cgra_io_axi4_top
   assign bsfetch_resp_o = bsfetch_resp;
 
   // --------------------------------------------------------------------------
-  // ID shim
-  //   Read path: the link carries the 3-bit port ID (== upper bits of the
-  //   crossbar's prepended AR id) on every FETCH_REQ / LOAD_REQ / READ_RESP,
-  //   so no local ar_id_fifo is needed. The wire-carried RID is splatted into
-  //   xbar_mem_resp.r.id[MstIdWidth-1:MstIdWidth-3]; the lower SlvIdWidth bits
-  //   are forced to 0 because all chip-side masters here issue with slv_id=0.
-  //
-  //   Write path: B is locally faked (top_level_io synthesizes fake-B beats)
-  //   and the link does NOT carry write IDs. Instead of a multi-entry FIFO,
-  //   a single-entry register captures the current outstanding AW id and
-  //   stamps it onto fake-B. tx_awready back-pressures until the pending B is
-  //   consumed (depth-1 outstanding writes), with a back-to-back fast path:
-  //   if B is being consumed this cycle, the slot frees up immediately and a
-  //   new AW can capture in the same cycle.
+  // ID shim — axi_link_rx carries no IDs; capture crossbar-prepended IDs on
+  // outgoing AR/AW and stamp them onto incoming R/B responses so the crossbar
+  // can route responses back to the correct master port.
   // --------------------------------------------------------------------------
-  localparam int PortIdWidth = 3;
-
   logic tx_awready, tx_wready, tx_arready;
   logic tx_awready_link, tx_arready_link;
+  logic aw_id_q_ready, ar_id_q_ready;
   logic rx_rvalid, rx_rlast;
   logic [DATA_WIDTH-1:0] rx_rdata;
   logic [           1:0] rx_rresp;
   logic                  rx_bvalid;
   logic [           1:0] rx_bresp;
 
-  // Wire-carried port IDs to/from axi_link_tx/rx.
-  logic [PortIdWidth-1:0] rx_rid;        // chip-originated read response → demux
-  logic [PortIdWidth-1:0] rx_fpga_arid;  // FPGA-originated read request
+  logic [MstIdWidth-1:0] ar_id_q_data, aw_id_q_data;
+  logic ar_id_q_v, aw_id_q_v;
+  logic ar_id_q_yumi, aw_id_q_yumi;
 
-  // Depth-1 AW id capture for fake-B stamping.
-  logic [MstIdWidth-1:0] aw_id_pending_r;
-  logic                  aw_id_pending_v_r;
-  logic                  aw_id_consume;
-  logic                  aw_id_slot_free;
-  logic                  aw_id_capture;
+  bsg_fifo_1r1w_small #(
+      .width_p           (MstIdWidth),
+      .els_p             (ID_FIFO_DEPTH),
+      .harden_p          (0),
+      .ready_THEN_valid_p(0)
+  ) ar_id_fifo_i (
+      .clk_i  (clk_i),
+      .reset_i(rst_i),
+      .v_i    (xbar_mem_req.ar_valid && tx_arready),
+      .data_i (xbar_mem_req.ar.id),
+      .ready_o(ar_id_q_ready),
+      .v_o    (ar_id_q_v),
+      .data_o (ar_id_q_data),
+      .yumi_i (ar_id_q_yumi)
+  );
 
-  assign aw_id_consume   = rx_bvalid && aw_id_pending_v_r && xbar_mem_req.b_ready;
-  assign aw_id_slot_free = !aw_id_pending_v_r || aw_id_consume;
-  assign aw_id_capture   = xbar_mem_req.aw_valid && tx_awready;
+  bsg_fifo_1r1w_small #(
+      .width_p           (MstIdWidth),
+      .els_p             (ID_FIFO_DEPTH),
+      .harden_p          (0),
+      .ready_THEN_valid_p(0)
+  ) aw_id_fifo_i (
+      .clk_i  (clk_i),
+      .reset_i(rst_i),
+      .v_i    (xbar_mem_req.aw_valid && tx_awready),
+      .data_i (xbar_mem_req.aw.id),
+      .ready_o(aw_id_q_ready),
+      .v_o    (aw_id_q_v),
+      .data_o (aw_id_q_data),
+      .yumi_i (aw_id_q_yumi)
+  );
 
-  always_ff @(posedge clk_i) begin
-    if (rst_i) begin
-      aw_id_pending_v_r <= 1'b0;
-      aw_id_pending_r   <= '0;
-    end
-    else begin
-      // Consume first; if a new AW also captures this cycle it overrides
-      // (later assignment wins in sequential always_ff).
-      if (aw_id_consume)
-        aw_id_pending_v_r <= 1'b0;
-      if (aw_id_capture) begin
-        aw_id_pending_r   <= xbar_mem_req.aw.id;
-        aw_id_pending_v_r <= 1'b1;
-      end
-    end
-  end
+  assign tx_arready = tx_arready_link && ar_id_q_ready;
+  assign tx_awready = tx_awready_link && aw_id_q_ready;
 
-  assign tx_arready = tx_arready_link;
-  assign tx_awready = tx_awready_link && aw_id_slot_free;
-
+  assign ar_id_q_yumi = rx_rvalid && ar_id_q_v && xbar_mem_req.r_ready && rx_rlast;
+  assign aw_id_q_yumi = rx_bvalid && aw_id_q_v && xbar_mem_req.b_ready;
   always_comb begin
     xbar_mem_resp          = '0;
     // Ready signals come from axi_link_tx
     xbar_mem_resp.aw_ready = tx_awready;
     xbar_mem_resp.w_ready  = tx_wready;
     xbar_mem_resp.ar_ready = tx_arready;
-    // R response: id reconstructed from the link's wire-carried RID. Upper
-    // PortIdWidth bits encode the originating master-port index (matches the
-    // crossbar's id_prepend convention); lower bits are 0 since all chip-side
-    // masters issue with slv_id=0.
-    xbar_mem_resp.r_valid  = rx_rvalid;
+    // R response from axi_link_rx, ID stamped from shim
+    xbar_mem_resp.r_valid  = rx_rvalid && ar_id_q_v;
     xbar_mem_resp.r.data   = axi_data_t'(rx_rdata);
     xbar_mem_resp.r.resp   = rx_rresp;
     xbar_mem_resp.r.last   = rx_rlast;
-    xbar_mem_resp.r.id     = {rx_rid, {(MstIdWidth-PortIdWidth){1'b0}}};
-    // B response: id comes from the depth-1 capture register.
-    xbar_mem_resp.b_valid  = rx_bvalid && aw_id_pending_v_r;
+    xbar_mem_resp.r.id     = ar_id_q_data;
+    // B response from axi_link_rx, ID stamped from shim
+    xbar_mem_resp.b_valid  = rx_bvalid && aw_id_q_v;
     xbar_mem_resp.b.resp   = rx_bresp;
-    xbar_mem_resp.b.id     = aw_id_pending_r;
+    xbar_mem_resp.b.id     = aw_id_q_data;
   end
 
   // --------------------------------------------------------------------------
@@ -344,7 +332,7 @@ module cgra_io_axi4_top
       .link_tx_valid_o           (link_tx_valid_o),
       .link_tx_ready_i           (link_tx_ready_i),
       // TX: chip → FPGA SRAM (AW/W/AR requests)
-      .tx_awvalid_i              (xbar_mem_req.aw_valid && aw_id_slot_free),
+      .tx_awvalid_i              (xbar_mem_req.aw_valid && aw_id_q_ready),
       .tx_awready_o              (tx_awready_link),
       .tx_awaddr_i               (xbar_mem_req.aw.addr[ADDR_WIDTH-1:0]),
       .tx_awsize_i               (xbar_mem_req.aw.size),
@@ -352,39 +340,30 @@ module cgra_io_axi4_top
       .tx_wvalid_i               (xbar_mem_req.w_valid),
       .tx_wready_o               (tx_wready),
       .tx_wdata_i                (xbar_mem_req.w.data[DATA_WIDTH-1:0]),
-      .tx_arvalid_i              (xbar_mem_req.ar_valid),
+      .tx_arvalid_i              (xbar_mem_req.ar_valid && ar_id_q_ready),
       .tx_arready_o              (tx_arready_link),
       .tx_araddr_i               (xbar_mem_req.ar.addr[ADDR_WIDTH-1:0]),
       .tx_arlen_i                (xbar_mem_req.ar.len),
       .tx_arsize_i               (xbar_mem_req.ar.size),
       .tx_arburst_i              (xbar_mem_req.ar.burst),
       .tx_aruser_i               (xbar_mem_req.ar.user[13:0]),
-      // Carry the crossbar's prepended master-port-index over the link as
-      // ARID; the FPGA echoes it back as RID for response routing.
-      .tx_arid_i                 (xbar_mem_req.ar.id[MstIdWidth-1 -: PortIdWidth]),
       // TX: R/B from crossbar fpga_mst slave port → FPGA host
       .tx_rvalid_i               (fpga_mst_resp.r_valid),
       .tx_rready_o               (tx_fpga_rready),
       .tx_rdata_i                (fpga_mst_resp.r.data[DATA_WIDTH-1:0]),
       .tx_rresp_i                (fpga_mst_resp.r.resp),
       .tx_rlast_i                (fpga_mst_resp.r.last),
-      // Echo back the port ID the FPGA host originally sent in its AR. The
-      // slv-side id was stamped with rx_fpga_arid; the crossbar preserves it,
-      // so the lower PortIdWidth bits of r.id carry the echo here.
-      .tx_rid_i                  (fpga_mst_resp.r.id[PortIdWidth-1:0]),
       .tx_bvalid_i               (fpga_mst_resp.b_valid),
       .tx_bready_o               (tx_fpga_bready),
       .tx_bresp_i                (fpga_mst_resp.b.resp),
-      // RX: R/B responses FPGA SRAM → crossbar fpga_mem port (R id reconstructed
-      // from rx_rid; B id stamped from depth-1 aw_id_pending_r since B is faked).
+      // RX: R/B responses FPGA SRAM → crossbar fpga_mem port (ID stamped by shim)
       .rx_rvalid_o               (rx_rvalid),
-      .rx_rready_i               (xbar_mem_req.r_ready),
+      .rx_rready_i               (xbar_mem_req.r_ready && ar_id_q_v),
       .rx_rdata_o                (rx_rdata),
       .rx_rresp_o                (rx_rresp),
       .rx_rlast_o                (rx_rlast),
-      .rx_rid_o                  (rx_rid),
       .rx_bvalid_o               (rx_bvalid),
-      .rx_bready_i               (xbar_mem_req.b_ready && aw_id_pending_v_r),
+      .rx_bready_i               (xbar_mem_req.b_ready && aw_id_q_v),
       .rx_bresp_o                (rx_bresp),
       // RX: AW/W/AR from FPGA host → crossbar fpga_mst slave port
       .rx_awvalid_o              (rx_fpga_awvalid),
@@ -401,8 +380,7 @@ module cgra_io_axi4_top
       .rx_arlen_o                (rx_fpga_arlen),
       .rx_arsize_o               (rx_fpga_arsize),
       .rx_arburst_o              (rx_fpga_arburst),
-      .rx_aruser_o               (rx_fpga_aruser),
-      .rx_arid_o                 (rx_fpga_arid)
+      .rx_aruser_o               (rx_fpga_aruser)
   );
 
   // --------------------------------------------------------------------------
