@@ -60,12 +60,14 @@ module top_level_io
    ,output logic [2:0]                                   rx_arsize_o
    ,output logic [1:0]                                   rx_arburst_o
    ,output logic [13:0]                                  rx_aruser_o
+   ,output logic [2:0]                                   rx_arid_o
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
    ,output logic [data_width_p-1:0]                      rx_rdata_o
    ,output logic [1:0]                                   rx_rresp_o
    ,output logic                                         rx_rlast_o
+   ,output logic [2:0]                                   rx_rid_o
 
    ,output logic                                         rx_bvalid_o
    ,input  logic                                         rx_bready_i
@@ -89,12 +91,14 @@ module top_level_io
    ,input  logic [2:0]                                   tx_arsize_i
    ,input  logic [1:0]                                   tx_arburst_i
    ,input  logic [13:0]                                  tx_aruser_i
+   ,input  logic [2:0]                                   tx_arid_i
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
    ,input  logic [data_width_p-1:0]                      tx_rdata_i
    ,input  logic [1:0]                                   tx_rresp_i
    ,input  logic                                         tx_rlast_i
+   ,input  logic [2:0]                                   tx_rid_i
 
    ,input  logic                                         tx_bvalid_i
    ,output logic                                         tx_bready_o
@@ -119,8 +123,13 @@ module top_level_io
   // rx_rresp_o is driven to OKAY (2'b00) for every R beat by axi_link_rx.
   // Per-read error reporting is therefore lost end-to-end.
   //
-  // Ordering model:
-  //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
+  // ARID/RID transport:
+  //   The link now carries a 3-bit port ID with every read request and read
+  //   response (see axi_link_tx/rx). tx_arid_i / rx_arid_o expose the wire-
+  //   carried ARID; tx_rid_i / rx_rid_o expose the matching RID. This lets the
+  //   upstream glue route read responses without a local ID-tracking FIFO.
+  //   Write IDs are not carried — B is still locally faked, so the AW id
+  //   shim lives in the upstream glue.
   // --------------------------------------------------------------------------
 
   initial begin
@@ -191,11 +200,13 @@ module top_level_io
     .arsize_o       (rx_arsize_o),
     .arburst_o      (rx_arburst_o),
     .aruser_o       (rx_aruser_o),
+    .arid_o         (rx_arid_o),
     .rvalid_o       (rx_rvalid_o),
     .rready_i       (rx_rready_i),
     .rdata_o        (rx_rdata_o),
     .rresp_o        (rx_rresp_o),
-    .rlast_o        (rx_rlast_o)
+    .rlast_o        (rx_rlast_o),
+    .rid_o          (rx_rid_o)
   );
 
   axi_link_tx #(
@@ -226,11 +237,13 @@ module top_level_io
     .arsize_i       (tx_arsize_i),
     .arburst_i      (tx_arburst_i),
     .aruser_i       (tx_aruser_i),
+    .arid_i         (tx_arid_i),
     .rvalid_i       (tx_rvalid_i),
     .rready_o       (tx_rready_o),
     .rdata_i        (tx_rdata_i),
     .rresp_i        (tx_rresp_i),
     .rlast_i        (tx_rlast_i),
+    .rid_i          (tx_rid_i),
     .tx_r_len_v_i   (tx_r_len_v_lo),
     .tx_r_len_i     (tx_r_len_lo),
     .tx_r_len_yumi_o(tx_r_len_yumi_li),
