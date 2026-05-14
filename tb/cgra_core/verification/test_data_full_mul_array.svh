@@ -426,7 +426,7 @@
     // ---- bsfetch bitstream: eblock 4 (store_mul_array) @ 0x0800 (135 bytes, 68 words) ----
     begin
       logic [15:0] bs [68];
-      bs[  0] = 16'h84C2;
+      bs[  0] = 16'h2C48;
       bs[  1] = 16'h91E6;
       bs[  2] = 16'h0000;
       bs[  3] = 16'h0000;

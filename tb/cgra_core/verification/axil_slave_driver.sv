@@ -121,16 +121,16 @@ class axil_slave_driver extends uvm_driver #(axil_seq_item);
   task serve_reads();
     pending_read_t req;
     logic [15:0]   data;
-    logic [11:0]   meta_echo;
+    logic [12:0]   meta_echo;   // 13 bits: tid[4:0] | eblock[2:0] | rsp_addr[4:0]
     forever begin
       // Wait until at least one AR has been captured
       while (read_q.size() == 0) @(posedge vif.clk);
       req = read_q.pop_front();
 
       data      = read_mem.exists(req.addr) ? read_mem[req.addr] : 16'h0000;
-      meta_echo = req.aruser[11:0];   // tid|eblock|rsp_addr (drop is_meta bit)
+      meta_echo = req.aruser[12:0];   // tid|eblock|rsp_addr (drop only is_meta @ [13])
 
-      vif.axi_rdata  = {4'b0, meta_echo, data};
+      vif.axi_rdata  = {3'b0, meta_echo, data};
       vif.axi_rresp  = read_resp_err.exists(req.addr) ? read_resp_err[req.addr]
                                                       : 2'b00;
       vif.axi_rvalid = 1'b1;
