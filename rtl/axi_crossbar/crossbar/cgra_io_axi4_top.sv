@@ -125,10 +125,12 @@ module cgra_io_axi4_top
   // --------------------------------------------------------------------------
   logic                       rx_fpga_awvalid;
   logic      [ADDR_WIDTH-1:0] rx_fpga_awaddr;
+  logic      [           7:0] rx_fpga_awlen;
   logic      [           2:0] rx_fpga_awsize;
   logic      [           1:0] rx_fpga_awburst;
   logic                       rx_fpga_wvalid;
   logic      [DATA_WIDTH-1:0] rx_fpga_wdata;
+  logic                       rx_fpga_wlast;
   logic                       rx_fpga_arvalid;
   logic      [ADDR_WIDTH-1:0] rx_fpga_araddr;
   logic      [           7:0] rx_fpga_arlen;
@@ -143,14 +145,14 @@ module cgra_io_axi4_top
     fpga_mst_req          = '0;
     fpga_mst_req.aw_valid = rx_fpga_awvalid;
     fpga_mst_req.aw.addr  = axi_addr_t'(rx_fpga_awaddr);
-    fpga_mst_req.aw.len   = '0;
+    fpga_mst_req.aw.len   = rx_fpga_awlen;
     fpga_mst_req.aw.size  = rx_fpga_awsize;
     fpga_mst_req.aw.burst = rx_fpga_awburst;
     fpga_mst_req.aw.id    = '0;
     fpga_mst_req.w_valid  = rx_fpga_wvalid;
     fpga_mst_req.w.data   = axi_data_t'(rx_fpga_wdata);
     fpga_mst_req.w.strb   = '1;
-    fpga_mst_req.w.last   = 1'b1;
+    fpga_mst_req.w.last   = rx_fpga_wlast;
     fpga_mst_req.b_ready  = tx_fpga_bready;
     fpga_mst_req.ar_valid = rx_fpga_arvalid;
     fpga_mst_req.ar.addr  = axi_addr_t'(rx_fpga_araddr);
@@ -310,6 +312,7 @@ module cgra_io_axi4_top
       .rx_link_fifo_els_p             (8),
       .rx_aw_desc_fifo_els_p          (2),
       .rx_ar_desc_fifo_els_p          (2),
+      .rx_w_len_fifo_els_p            (4),
       .rx_w_data_fifo_els_p           (8),
       .rx_r_len_fifo_els_p            (4),
       .rx_r_data_fifo_els_p           (8),
@@ -317,6 +320,7 @@ module cgra_io_axi4_top
       .tx_link_fifo_els_p             (8),
       .tx_aw_desc_fifo_els_p          (2),
       .tx_ar_desc_fifo_els_p          (2),
+      .tx_w_len_fifo_els_p            (4),
       .tx_w_data_fifo_els_p           (8),
       .tx_r_len_fifo_els_p            (4),
       .tx_r_data_fifo_els_p           (8),
@@ -335,11 +339,13 @@ module cgra_io_axi4_top
       .tx_awvalid_i              (xbar_mem_req.aw_valid && aw_id_q_ready),
       .tx_awready_o              (tx_awready_link),
       .tx_awaddr_i               (xbar_mem_req.aw.addr[ADDR_WIDTH-1:0]),
+      .tx_awlen_i                (xbar_mem_req.aw.len),
       .tx_awsize_i               (xbar_mem_req.aw.size),
       .tx_awburst_i              (xbar_mem_req.aw.burst),
       .tx_wvalid_i               (xbar_mem_req.w_valid),
       .tx_wready_o               (tx_wready),
       .tx_wdata_i                (xbar_mem_req.w.data[DATA_WIDTH-1:0]),
+      .tx_wlast_i                (xbar_mem_req.w.last),
       .tx_arvalid_i              (xbar_mem_req.ar_valid && ar_id_q_ready),
       .tx_arready_o              (tx_arready_link),
       .tx_araddr_i               (xbar_mem_req.ar.addr[ADDR_WIDTH-1:0]),
@@ -369,11 +375,13 @@ module cgra_io_axi4_top
       .rx_awvalid_o              (rx_fpga_awvalid),
       .rx_awready_i              (fpga_mst_resp.aw_ready),
       .rx_awaddr_o               (rx_fpga_awaddr),
+      .rx_awlen_o                (rx_fpga_awlen),
       .rx_awsize_o               (rx_fpga_awsize),
       .rx_awburst_o              (rx_fpga_awburst),
       .rx_wvalid_o               (rx_fpga_wvalid),
       .rx_wready_i               (fpga_mst_resp.w_ready),
       .rx_wdata_o                (rx_fpga_wdata),
+      .rx_wlast_o                (rx_fpga_wlast),
       .rx_arvalid_o              (rx_fpga_arvalid),
       .rx_arready_i              (fpga_mst_resp.ar_ready),
       .rx_araddr_o               (rx_fpga_araddr),
