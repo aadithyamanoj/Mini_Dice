@@ -51,6 +51,7 @@ module top_level_io
    ,output logic [7:0]                                   rx_awlen_o
    ,output logic [2:0]                                   rx_awsize_o
    ,output logic [1:0]                                   rx_awburst_o
+   ,output logic [1:0]                                   rx_awid_o
 
    ,output logic                                         rx_wvalid_o
    ,input  logic                                         rx_wready_i
@@ -63,17 +64,24 @@ module top_level_io
    ,output logic [7:0]                                   rx_arlen_o
    ,output logic [2:0]                                   rx_arsize_o
    ,output logic [1:0]                                   rx_arburst_o
-   ,output logic [13:0]                                  rx_aruser_o
+   ,output logic                                         rx_ar_is_burst_o
+   ,output logic [1:0]                                   rx_arid_o
+   ,output logic [3:0]                                   rx_ar_tid_o
+   ,output logic [2:0]                                   rx_ar_eblock_o
+   ,output logic [4:0]                                   rx_ar_regaddr_o
 
    ,output logic                                         rx_rvalid_o
    ,input  logic                                         rx_rready_i
    ,output logic [data_width_p-1:0]                      rx_rdata_o
    ,output logic [1:0]                                   rx_rresp_o
    ,output logic                                         rx_rlast_o
+   ,output logic [1:0]                                   rx_rid_o
+   ,output logic                                         rx_r_is_burst_o
 
    ,output logic                                         rx_bvalid_o
    ,input  logic                                         rx_bready_i
    ,output logic [1:0]                                   rx_bresp_o
+   ,output logic [1:0]                                   rx_bid_o
 
    // TX side from local AXI crossbar/sources.
    ,input  logic                                         tx_awvalid_i
@@ -82,6 +90,7 @@ module top_level_io
    ,input  logic [7:0]                                   tx_awlen_i
    ,input  logic [2:0]                                   tx_awsize_i
    ,input  logic [1:0]                                   tx_awburst_i
+   ,input  logic [1:0]                                   tx_awid_i
 
    ,input  logic                                         tx_wvalid_i
    ,output logic                                         tx_wready_o
@@ -94,13 +103,18 @@ module top_level_io
    ,input  logic [7:0]                                   tx_arlen_i
    ,input  logic [2:0]                                   tx_arsize_i
    ,input  logic [1:0]                                   tx_arburst_i
-   ,input  logic [13:0]                                  tx_aruser_i
+   ,input  logic                                         tx_ar_is_burst_i
+   ,input  logic [1:0]                                   tx_arid_i
+   ,input  logic [3:0]                                   tx_ar_tid_i
+   ,input  logic [2:0]                                   tx_ar_eblock_i
+   ,input  logic [4:0]                                   tx_ar_regaddr_i
 
    ,input  logic                                         tx_rvalid_i
    ,output logic                                         tx_rready_o
    ,input  logic [data_width_p-1:0]                      tx_rdata_i
    ,input  logic [1:0]                                   tx_rresp_i
    ,input  logic                                         tx_rlast_i
+   ,input  logic [1:0]                                   tx_rid_i
 
    ,input  logic                                         tx_bvalid_i
    ,output logic                                         tx_bready_o
@@ -120,19 +134,24 @@ module top_level_io
   // The link protocol does not carry WRITE_RESP packets. B responses are
   // synthesized locally for outgoing writes and discarded for incoming writes.
   //
-  // Writes are single-beat only. The WRITE_REQ header has no wire length
-  // field — it is hardcoded to 0 in axi_link_tx and ignored in
-  // axi_link_rx. axi_link_tx rejects AW unless awlen_i=0, so upstream
-  // masters must issue single-beat writes; the fake B counter therefore
-  // produces exactly one OKAY beat per accepted write.
+  // Writes are single-beat only. The WRITE header has no wire length
+  // field — it is implicit (single beat). axi_link_tx rejects AW unless
+  // awlen_i=0, so upstream masters must issue single-beat writes; the
+  // fake B counter therefore produces exactly one OKAY beat per accepted
+  // write.
   //
   // The link also does not transport RRESP. tx_rresp_i is accepted from the
   // local AXI source and ignored (mirroring the dropped B channel), and
   // rx_rresp_o is driven to OKAY (2'b00) for every R beat by axi_link_rx.
   // Per-read error reporting is therefore lost end-to-end.
   //
-  // Ordering model:
-  //   Still strict FIFO only. No AXI IDs or reorder logic are introduced here.
+  // Each request carries a small inline ID on the wire (2 bits for WRITE
+  // and READ, 1 bit for BURST_READ) — see axi_link_tx.sv for the wire
+  // layout. The IDs are routing tags the FPGA dispatcher uses to
+  // demultiplex packets across its downstream FIFOs, and are echoed back
+  // in the matching response packet so the upstream wrapper can stamp
+  // them onto the local crossbar response-ID line. This retires the
+  // chip-side AR-ID side FIFO that previously bridged the missing ID.
   // --------------------------------------------------------------------------
 
   initial begin
@@ -149,12 +168,20 @@ module top_level_io
   logic [7:0]              tx_r_len_lo;
   logic                    tx_r_len_yumi_li;
   logic                    tx_r_len_ready_lo;
+  logic                    tx_awvalid_li;
+  logic                    tx_awready_link_lo;
+  logic                    aw_id_mirror_ready_lo;
 
-  // Incoming read lengths (from both FETCH_REQ and LOAD_REQ packets) are
-  // mirrored into a small FIFO so the local AXI R channel can start streaming
-  // a READ_RESP packet back over the link on the very first response beat.
-  // LOAD_REQ always produces arlen=0 (single-beat); FETCH_REQ can carry up
-  // to 256 beats. WRITE_REQ does not feed this FIFO — writes are
+  // AW is gated by the mirror FIFO so we never accept a write the local
+  // fake-B path can't track.
+  assign tx_awvalid_li = tx_awvalid_i && aw_id_mirror_ready_lo;
+  assign tx_awready_o  = tx_awready_link_lo && aw_id_mirror_ready_lo;
+
+  // Incoming read lengths (from both BURST_READ and READ packets) are
+  // mirrored into a small FIFO so the local AXI R channel can start
+  // streaming a READ_RESP packet back over the link on the very first
+  // response beat. READ always produces arlen=0 (single-beat); BURST_READ
+  // can carry up to 256 beats. WRITE does not feed this FIFO — writes are
   // single-beat only and never generate a read response.
   assign rx_arready_li = rx_arready_i && tx_r_len_ready_lo;
 
@@ -196,6 +223,7 @@ module top_level_io
     .awlen_o        (rx_awlen_o),
     .awsize_o       (rx_awsize_o),
     .awburst_o      (rx_awburst_o),
+    .awid_o         (rx_awid_o),
     .wvalid_o       (rx_wvalid_o),
     .wready_i       (rx_wready_i),
     .wdata_o        (rx_wdata_o),
@@ -206,12 +234,18 @@ module top_level_io
     .arlen_o        (rx_arlen_o),
     .arsize_o       (rx_arsize_o),
     .arburst_o      (rx_arburst_o),
-    .aruser_o       (rx_aruser_o),
+    .ar_is_burst_o  (rx_ar_is_burst_o),
+    .arid_o         (rx_arid_o),
+    .ar_tid_o       (rx_ar_tid_o),
+    .ar_eblock_o    (rx_ar_eblock_o),
+    .ar_regaddr_o   (rx_ar_regaddr_o),
     .rvalid_o       (rx_rvalid_o),
     .rready_i       (rx_rready_i),
     .rdata_o        (rx_rdata_o),
     .rresp_o        (rx_rresp_o),
-    .rlast_o        (rx_rlast_o)
+    .rlast_o        (rx_rlast_o),
+    .rid_o          (rx_rid_o),
+    .r_is_burst_o   (rx_r_is_burst_o)
   );
 
   axi_link_tx #(
@@ -228,12 +262,13 @@ module top_level_io
   ) axi_link_tx_i (
     .clk_i          (core_clk_i),
     .reset_i        (reset_i),
-    .awvalid_i      (tx_awvalid_i),
-    .awready_o      (tx_awready_o),
+    .awvalid_i      (tx_awvalid_li),
+    .awready_o      (tx_awready_link_lo),
     .awaddr_i       (tx_awaddr_i),
     .awlen_i        (tx_awlen_i),
     .awsize_i       (tx_awsize_i),
     .awburst_i      (tx_awburst_i),
+    .awid_i         (tx_awid_i),
     .wvalid_i       (tx_wvalid_i),
     .wready_o       (tx_wready_o),
     .wdata_i        (tx_wdata_i),
@@ -244,12 +279,17 @@ module top_level_io
     .arlen_i        (tx_arlen_i),
     .arsize_i       (tx_arsize_i),
     .arburst_i      (tx_arburst_i),
-    .aruser_i       (tx_aruser_i),
+    .ar_is_burst_i  (tx_ar_is_burst_i),
+    .arid_i         (tx_arid_i),
+    .ar_tid_i       (tx_ar_tid_i),
+    .ar_eblock_i    (tx_ar_eblock_i),
+    .ar_regaddr_i   (tx_ar_regaddr_i),
     .rvalid_i       (tx_rvalid_i),
     .rready_o       (tx_rready_o),
     .rdata_i        (tx_rdata_i),
     .rresp_i        (tx_rresp_i),
     .rlast_i        (tx_rlast_i),
+    .rid_i          (tx_rid_i),
     .tx_r_len_v_i   (tx_r_len_v_lo),
     .tx_r_len_i     (tx_r_len_lo),
     .tx_r_len_yumi_o(tx_r_len_yumi_li),
@@ -261,9 +301,17 @@ module top_level_io
   // --------------------------------------------------------------------------
   // B-channel handling without WRITE_RESP packets
   // --------------------------------------------------------------------------
-  // The link no longer carries WRITE_RESP, so each accepted outgoing write gets
-  // a local OKAY B beat. Real B responses from the local slave are accepted and
-  // dropped because there is no response packet to serialize.
+  // The link no longer carries WRITE_RESP, so each accepted outgoing write
+  // gets a local OKAY B beat. Real B responses from the local slave are
+  // accepted and dropped because there is no response packet to serialize.
+  //
+  // A small mirror FIFO captures tx_awid_i at AW-accept so the synthesized
+  // B response can reproduce the routing-tag ID inline on rx_bid_o, in the
+  // same way the link carries id inline on the request and on READ_RESP.
+  // The wrapper consumes that 2-bit id and zero-extends it back into the
+  // crossbar's wider master-side ID, retiring the chip-side AW-ID FIFO.
+  // fake_b_count_r keeps the AXI B-after-WLAST ordering: B is not asserted
+  // until at least one WLAST has been observed since the last B handshake.
 
   localparam int fake_b_count_width_lp =
       (fake_b_max_outstanding_p <= 1) ? 1 : $clog2(fake_b_max_outstanding_p + 1);
@@ -288,8 +336,32 @@ module top_level_io
     else         fake_b_count_r <= fake_b_count_n;
   end
 
-  assign rx_bvalid_o = (fake_b_count_r != '0);
+  logic        aw_id_mirror_push, aw_id_mirror_pop;
+  logic        aw_id_mirror_v_lo;
+  logic [1:0]  aw_id_mirror_data_lo;
+
+  assign aw_id_mirror_push = tx_awvalid_li && tx_awready_link_lo;
+  assign aw_id_mirror_pop  = fake_b_pop;
+
+  bsg_fifo_1r1w_small #(
+    .width_p            (2),
+    .els_p              (fake_b_max_outstanding_p),
+    .harden_p           (0),
+    .ready_THEN_valid_p (0)
+  ) aw_id_mirror_fifo_i (
+    .clk_i  (core_clk_i),
+    .reset_i(reset_i),
+    .v_i    (aw_id_mirror_push),
+    .data_i (tx_awid_i),
+    .ready_o(aw_id_mirror_ready_lo),
+    .v_o    (aw_id_mirror_v_lo),
+    .data_o (aw_id_mirror_data_lo),
+    .yumi_i (aw_id_mirror_pop)
+  );
+
+  assign rx_bvalid_o = (fake_b_count_r != '0) && aw_id_mirror_v_lo;
   assign rx_bresp_o  = 2'b00;
+  assign rx_bid_o    = aw_id_mirror_data_lo;
 
   assign tx_bready_o = 1'b1;
 
