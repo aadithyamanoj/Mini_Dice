@@ -13,7 +13,7 @@
 //   5. DPI verifier reports PASS/FAIL.
 // =============================================================================
 
-`define TB_RTL_HIER_DEBUG
+// `define TB_RTL_HIER_DEBUG
 
 `timescale 1ns / 1ps
 
@@ -82,19 +82,24 @@ module tb_chip_top;
   // Clock / reset drivers (TB-side logic, mapped to PAD below)
   // --------------------------------------------------------------------------
   bit   clk_i;
+  bit   dn_io_clk;  // FPGA TX I/O master clock; oddr PHY forwards PAD[8].
   logic rst_i = 1'b1;  // FPGA endpoint/core reset
   logic hard_reset = 1'b1;  // chip hard reset on PAD[45]
   logic ep_upstream_io_link_reset = 1'b1;
   logic ep_async_token_reset = 1'b0;
   logic ep_downstream_io_link_reset = 1'b1;
+  logic ep_downstream_io_link_reset_sync;
+  logic tb_pad_drive_en = 1'b0;
 
   initial forever #(CLK_HALF_NS * 1ns) clk_i = ~clk_i;
+  initial forever #(CLK_HALF_NS * 1ns) dn_io_clk = ~dn_io_clk;
 
   // --------------------------------------------------------------------------
   // PAD bus — chip_top inout
   // --------------------------------------------------------------------------
-  wire  [  47:0] PAD;
+  tri   [  47:0] PAD;
   logic [  47:0] pad_drv;
+  logic [  47:0] pad_oe;
 
   // EP upstream outputs -> chip downstream inputs.
   wire           ep_up_clk_r;
@@ -103,27 +108,45 @@ module tb_chip_top;
   wire           ep_dn_token_r;
 
   function automatic logic kz(input logic v);
-    kz = v;
+    kz = (v === 1'b1) ? 1'b1 : 1'b0;
   endfunction
 
-  assign PAD = pad_drv;
+  genvar pad_idx;
+  generate
+    for (pad_idx = 0; pad_idx < 48; pad_idx++) begin : gen_pad_drive
+      assign PAD[pad_idx] = pad_oe[pad_idx] ? pad_drv[pad_idx] : 1'bz;
+    end
+  endgenerate
 
   always_comb begin
-    pad_drv = 'z;
+    pad_drv = '0;
+    pad_oe = '0;
 
     // zeroscatter-compatible chip_top pad map.
     pad_drv[44] = kz(clk_i);  // core_clk
     pad_drv[45] = kz(hard_reset);
+    pad_oe[44] = tb_pad_drive_en;
+    pad_oe[45] = tb_pad_drive_en;
 
     // EP upstream outputs -> chip downstream inputs.
     pad_drv[8] = kz(ep_up_clk_r);
     pad_drv[9] = kz(ep_up_valid_r);
+    pad_oe[8] = tb_pad_drive_en;
+    pad_oe[9] = tb_pad_drive_en;
     for (int i = 0; i < CW; i++) begin
       pad_drv[dn_data_pad(i)] = kz(ep_up_data_r[i]);
+      pad_oe[dn_data_pad(i)]  = tb_pad_drive_en;
     end
 
     // Chip TX-side credit return into EP upstream.
     pad_drv[12] = kz(ep_dn_token_r);
+    pad_oe[12]  = tb_pad_drive_en;
+
+    // DFT scan inputs tied off when the scan config enables them.
+    pad_drv[11] = 1'b0;
+    pad_drv[46] = 1'b0;
+    pad_oe[11]  = tb_pad_drive_en;
+    pad_oe[46]  = tb_pad_drive_en;
   end
 
   function automatic int dn_data_pad(input int bit_idx);
@@ -271,30 +294,50 @@ module tb_chip_top;
   logic          ep_link_tx_valid;
   logic          ep_link_tx_ready;
 
-  bsg_link_wrapper #(
-      .FLIT_WIDTH   (FW),
-      .CHANNEL_WIDTH(CW)
-  ) u_fpga_link (
-      .core_clk_i                (clk_i),
-      .reset_i                   (rst_i),
-      .io_master_clk_i           (clk_i),
-      .upstream_io_link_reset_i  (ep_upstream_io_link_reset),
-      .async_token_reset_i       (ep_async_token_reset),
-      .token_clk_i               (dut_dn_token_r),
-      .downstream_io_link_reset_i(ep_downstream_io_link_reset),
-      .downstream_io_clk_i       (dut_up_clk_r),
-      .downstream_io_data_i      (dut_up_data_r),
-      .downstream_io_valid_i     (dut_up_valid_r),
-      .upstream_io_clk_r_o       (ep_up_clk_r),
-      .upstream_io_data_r_o      (ep_up_data_r),
-      .upstream_io_valid_r_o     (ep_up_valid_r),
-      .downstream_core_token_r_o (ep_dn_token_r),
-      .rx_data_o                 (ep_link_rx_data),
-      .rx_valid_o                (ep_link_rx_valid),
-      .rx_yumi_i                 (ep_link_rx_yumi),
-      .tx_data_i                 (ep_link_tx_data),
-      .tx_valid_i                (ep_link_tx_valid),
-      .tx_ready_o                (ep_link_tx_ready)
+  bsg_link_ddr_upstream #(
+      .width_p        (FW),
+      .channel_width_p(CW),
+      .num_channels_p (1),
+      .lg_fifo_depth_p(4)
+  ) u_fpga_tx_link (
+      .core_clk_i         (clk_i),
+      .core_link_reset_i  (rst_i),
+      .core_data_i        (ep_link_tx_data),
+      .core_valid_i       (ep_link_tx_valid),
+      .core_ready_o       (ep_link_tx_ready),
+      .io_clk_i           (dn_io_clk),
+      .io_link_reset_i    (ep_upstream_io_link_reset),
+      .async_token_reset_i(ep_async_token_reset),
+      .io_clk_r_o         (ep_up_clk_r),
+      .io_data_r_o        (ep_up_data_r),
+      .io_valid_r_o       (ep_up_valid_r),
+      .token_clk_i        (dut_dn_token_r)
+  );
+
+  bsg_sync_sync #(
+      .width_p(1)
+  ) u_fpga_rx_reset_sync (
+      .oclk_i     (dut_up_clk_r),
+      .iclk_data_i(ep_downstream_io_link_reset),
+      .oclk_data_o(ep_downstream_io_link_reset_sync)
+  );
+
+  bsg_link_ddr_downstream #(
+      .width_p        (FW),
+      .channel_width_p(CW),
+      .num_channels_p (1),
+      .lg_fifo_depth_p(4)
+  ) u_fpga_rx_link (
+      .core_clk_i       (clk_i),
+      .core_link_reset_i(rst_i),
+      .io_link_reset_i  (ep_downstream_io_link_reset_sync),
+      .core_data_o      (ep_link_rx_data),
+      .core_valid_o     (ep_link_rx_valid),
+      .core_yumi_i      (ep_link_rx_yumi),
+      .io_clk_i         (dut_up_clk_r),
+      .io_data_i        (dut_up_data_r),
+      .io_valid_i       (dut_up_valid_r),
+      .core_token_r_o   (ep_dn_token_r)
   );
 
   axi_link_rx #(
@@ -423,25 +466,26 @@ module tb_chip_top;
   localparam int MetaBeatBytes = DW / 8;
 
   localparam int unsigned TB_READ_RESP_DELAY_CYC = 10;
-  localparam int unsigned TB_READ_RESP_DELAY_W =
-      (TB_READ_RESP_DELAY_CYC <= 1) ? 1 : $clog2(TB_READ_RESP_DELAY_CYC + 1);
+  localparam int unsigned TB_READ_RESP_DELAY_W = (TB_READ_RESP_DELAY_CYC <= 1) ? 1 : $clog2(
+      TB_READ_RESP_DELAY_CYC + 1
+  );
 
   typedef enum logic [1:0] {
     RD_IDLE,
     RD_WAIT,
     RD_ACTIVE
   } rd_state_e;
-  rd_state_e               rd_state_q;
-  logic           [AW-1:0] rd_base_addr_q;
-  logic           [   7:0] rd_arlen_q;
-  logic           [   7:0] rd_beat_idx_q;
-  logic [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
-  logic           [   1:0] rd_kind_q;
-  logic                    rd_aruser_is_meta_q;
-  logic           [  12:0] rd_aruser_q;
-  logic           [  15:0] csr_values          [0:7];
-  logic           [  15:0] start_pc_val;
-  dice_cta_desc_t          launch_desc;
+  rd_state_e                                 rd_state_q;
+  logic           [                  AW-1:0] rd_base_addr_q;
+  logic           [                     7:0] rd_arlen_q;
+  logic           [                     7:0] rd_beat_idx_q;
+  logic           [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
+  logic           [                     1:0] rd_kind_q;
+  logic                                      rd_aruser_is_meta_q;
+  logic           [                    12:0] rd_aruser_q;
+  logic           [                    15:0] csr_values          [0:7];
+  logic           [                    15:0] start_pc_val;
+  dice_cta_desc_t                            launch_desc;
 
   function automatic int unsigned fetch_beat(input logic [1:0] kind, input logic [AW-1:0] base,
                                              input int unsigned beat_idx);
@@ -802,37 +846,44 @@ module tb_chip_top;
       ep_upstream_io_link_reset   = 1'b1;
       ep_downstream_io_link_reset = 1'b1;
       ep_async_token_reset        = 1'b0;
-      repeat (4) @(posedge clk_i);
+      tb_pad_drive_en             = 1'b0;
 
+
+      #(1ns);
+      tb_pad_drive_en = 1'b1;
+
+      // 1) Pulse FPGA TX async_token_reset while the FPGA TX I/O link is still
+      // in reset.  This initializes the sender-side credit counters.
+      repeat (8) @(posedge clk_i);
       @(posedge clk_i);
       #1;
       ep_async_token_reset = 1'b1;
-      @(posedge clk_i);
+      repeat (2) @(posedge clk_i);
       #1;
       ep_async_token_reset = 1'b0;
-      repeat (8) @(posedge clk_i);
 
+      // 2) Release FPGA TX I/O reset so the forwarded dn_clk on PAD[8] is
+      // running before the chip's RX async FIFO reset is released.
+      repeat (8) @(posedge dn_io_clk);
       @(posedge clk_i);
       #1;
       ep_upstream_io_link_reset = 1'b0;
-      repeat (8) @(posedge clk_i);
 
-      // Release chip hard reset first; chip_top internally sequences its
-      // bsg_link resets before Mini_Dice consumes the core-side flit stream.
+      // 3) Release chip hard reset; chip_top internally sequences its bsg_link
+      // reset domains over the next ~32 core clocks.
       @(posedge clk_i);
-      #1;
+      @(negedge clk_i);
       hard_reset = 1'b0;
       repeat (64) @(posedge clk_i);
 
-      // The chip is now driving up_clk, so the FPGA-side downstream receiver
+      // 4) The chip is now driving up_clk, so the FPGA-side downstream receiver
       // can safely start sampling the chip -> FPGA link.
       @(posedge clk_i);
-      #1;
+      #1ns;
       ep_downstream_io_link_reset = 1'b0;
       repeat (8) @(posedge clk_i);
 
-      // Release FPGA core-side logic last, matching the zeroscatter link TB.
-      @(posedge clk_i);
+      // 5) Release FPGA core-side logic last.
       #1;
       rst_i = 1'b0;
       repeat (4) @(posedge clk_i);

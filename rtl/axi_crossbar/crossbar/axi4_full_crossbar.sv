@@ -52,8 +52,8 @@ package axi4_xbar_pkg;
   // ---------------------------------------------------------------------------
   // Crossbar topology
   // ---------------------------------------------------------------------------
-  localparam int unsigned NoMasters   = 7;  // slave ports on the xbar
-  localparam int unsigned NoSlaves    = 2;  // master ports on the xbar
+  localparam int unsigned NoMasters = 7;  // slave ports on the xbar
+  localparam int unsigned NoSlaves = 2;  // master ports on the xbar
   localparam int unsigned NoAddrRules = 2;
 
   // ---------------------------------------------------------------------------
@@ -62,13 +62,13 @@ package axi4_xbar_pkg;
   // $clog2(NoMasters) bits so every slave sees globally unique IDs.
   // ---------------------------------------------------------------------------
   localparam int unsigned SlvIdWidth = 4;
-  localparam int unsigned MstIdWidth = SlvIdWidth + $clog2(NoMasters); // = 7
+  localparam int unsigned MstIdWidth = SlvIdWidth + $clog2(NoMasters);  // = 7
 
   // ---------------------------------------------------------------------------
   // Slave-port index constants
   // ---------------------------------------------------------------------------
   localparam int unsigned IDX_FPGAMEM = 0;
-  localparam int unsigned IDX_CSR     = 1;
+  localparam int unsigned IDX_CSR = 1;
 
   // ---------------------------------------------------------------------------
   // Address map
@@ -80,9 +80,9 @@ package axi4_xbar_pkg;
   // the sentinel for end-of-address-space.
   // ---------------------------------------------------------------------------
   localparam logic [AxiAddrWidth-1:0] FPGAMEM_BASE = 16'h0000;
-  localparam logic [AxiAddrWidth-1:0] FPGAMEM_END  = 16'hFF00;
-  localparam logic [AxiAddrWidth-1:0] CSR_BASE      = 16'hFF00;
-  localparam logic [AxiAddrWidth-1:0] CSR_END       = 16'h0000;
+  localparam logic [AxiAddrWidth-1:0] FPGAMEM_END = 16'hFF00;
+  localparam logic [AxiAddrWidth-1:0] CSR_BASE = 16'hFF00;
+  localparam logic [AxiAddrWidth-1:0] CSR_END = 16'h0000;
 
   // ---------------------------------------------------------------------------
   // 16-bit address rule type
@@ -98,19 +98,19 @@ package axi4_xbar_pkg;
   // Crossbar configuration struct
   // ---------------------------------------------------------------------------
   localparam axi_pkg::xbar_cfg_t XbarCfg = '{
-    NoSlvPorts:         NoMasters,
-    NoMstPorts:         NoSlaves,
-    MaxMstTrans:        8,
-    MaxSlvTrans:        8,
-    FallThrough:        1'b0,
-    LatencyMode:        axi_pkg::CUT_ALL_PORTS,
-    PipelineStages:     0,
-    AxiIdWidthSlvPorts: SlvIdWidth,
-    AxiIdUsedSlvPorts:  SlvIdWidth,
-    UniqueIds:          1'b0,
-    AxiAddrWidth:       AxiAddrWidth,
-    AxiDataWidth:       AxiDataWidth,
-    NoAddrRules:        NoAddrRules
+      NoSlvPorts: NoMasters,
+      NoMstPorts: NoSlaves,
+      MaxMstTrans: 8,
+      MaxSlvTrans: 8,
+      FallThrough: 1'b0,
+      LatencyMode: axi_pkg::NO_LATENCY,
+      PipelineStages: 0,
+      AxiIdWidthSlvPorts: SlvIdWidth,
+      AxiIdUsedSlvPorts: SlvIdWidth,
+      UniqueIds: 1'b0,
+      AxiAddrWidth: AxiAddrWidth,
+      AxiDataWidth: AxiDataWidth,
+      NoAddrRules: NoAddrRules
   };
 
   // ---------------------------------------------------------------------------
@@ -120,29 +120,29 @@ package axi4_xbar_pkg;
   typedef logic [AxiDataWidth-1:0] axi_data_t;
   typedef logic [AxiStrbWidth-1:0] axi_strb_t;
   typedef logic [AxiUserWidth-1:0] axi_user_t;
-  typedef logic [SlvIdWidth-1:0]   slv_id_t;
-  typedef logic [MstIdWidth-1:0]   mst_id_t;
+  typedef logic [SlvIdWidth-1:0] slv_id_t;
+  typedef logic [MstIdWidth-1:0] mst_id_t;
 
   // ---------------------------------------------------------------------------
   // Slave-port types  (master→xbar, narrow SlvIdWidth-bit IDs)
   // ---------------------------------------------------------------------------
-  `AXI_TYPEDEF_AW_CHAN_T(slv_aw_t,  axi_addr_t, slv_id_t, axi_user_t)
-  `AXI_TYPEDEF_W_CHAN_T (w_t,        axi_data_t, axi_strb_t, axi_user_t)
-  `AXI_TYPEDEF_B_CHAN_T (slv_b_t,   slv_id_t, axi_user_t)
-  `AXI_TYPEDEF_AR_CHAN_T(slv_ar_t,  axi_addr_t, slv_id_t, axi_user_t)
-  `AXI_TYPEDEF_R_CHAN_T (slv_r_t,   axi_data_t, slv_id_t, axi_user_t)
-  `AXI_TYPEDEF_REQ_T    (slv_req_t, slv_aw_t, w_t, slv_ar_t)
-  `AXI_TYPEDEF_RESP_T   (slv_resp_t, slv_b_t, slv_r_t)
+  `AXI_TYPEDEF_AW_CHAN_T(slv_aw_t, axi_addr_t, slv_id_t, axi_user_t)
+  `AXI_TYPEDEF_W_CHAN_T(w_t, axi_data_t, axi_strb_t, axi_user_t)
+  `AXI_TYPEDEF_B_CHAN_T(slv_b_t, slv_id_t, axi_user_t)
+  `AXI_TYPEDEF_AR_CHAN_T(slv_ar_t, axi_addr_t, slv_id_t, axi_user_t)
+  `AXI_TYPEDEF_R_CHAN_T(slv_r_t, axi_data_t, slv_id_t, axi_user_t)
+  `AXI_TYPEDEF_REQ_T(slv_req_t, slv_aw_t, w_t, slv_ar_t)
+  `AXI_TYPEDEF_RESP_T(slv_resp_t, slv_b_t, slv_r_t)
 
   // ---------------------------------------------------------------------------
   // Master-port types  (xbar→slave, wide MstIdWidth-bit IDs)
   // ---------------------------------------------------------------------------
-  `AXI_TYPEDEF_AW_CHAN_T(mst_aw_t,  axi_addr_t, mst_id_t, axi_user_t)
-  `AXI_TYPEDEF_B_CHAN_T (mst_b_t,   mst_id_t, axi_user_t)
-  `AXI_TYPEDEF_AR_CHAN_T(mst_ar_t,  axi_addr_t, mst_id_t, axi_user_t)
-  `AXI_TYPEDEF_R_CHAN_T (mst_r_t,   axi_data_t, mst_id_t, axi_user_t)
-  `AXI_TYPEDEF_REQ_T    (mst_req_t, mst_aw_t, w_t, mst_ar_t)
-  `AXI_TYPEDEF_RESP_T   (mst_resp_t, mst_b_t, mst_r_t)
+  `AXI_TYPEDEF_AW_CHAN_T(mst_aw_t, axi_addr_t, mst_id_t, axi_user_t)
+  `AXI_TYPEDEF_B_CHAN_T(mst_b_t, mst_id_t, axi_user_t)
+  `AXI_TYPEDEF_AR_CHAN_T(mst_ar_t, axi_addr_t, mst_id_t, axi_user_t)
+  `AXI_TYPEDEF_R_CHAN_T(mst_r_t, axi_data_t, mst_id_t, axi_user_t)
+  `AXI_TYPEDEF_REQ_T(mst_req_t, mst_aw_t, w_t, mst_ar_t)
+  `AXI_TYPEDEF_RESP_T(mst_resp_t, mst_b_t, mst_r_t)
 
 endpackage : axi4_xbar_pkg
 
@@ -153,47 +153,47 @@ endpackage : axi4_xbar_pkg
 module axi4_full_crossbar
   import axi4_xbar_pkg::*;
 (
-  input  logic clk_i,
-  input  logic rst_i,   // active-high synchronous reset
-  input  logic test_i,
+    input logic clk_i,
+    input logic rst_i,  // active-high synchronous reset
+    input logic test_i,
 
-  // --------------------------------------------------------------------------
-  // Slave ports – one per master driving the crossbar
-  // --------------------------------------------------------------------------
+    // --------------------------------------------------------------------------
+    // Slave ports – one per master driving the crossbar
+    // --------------------------------------------------------------------------
 
-  // [0] FPGA host
-  input  slv_req_t  fpga_mst_req_i,
-  output slv_resp_t fpga_mst_resp_o,
+    // [0] FPGA host
+    input  slv_req_t  fpga_mst_req_i,
+    output slv_resp_t fpga_mst_resp_o,
 
-  // [1:4] CGRA data-fetch
-  input  slv_req_t  dfetch0_req_i,
-  output slv_resp_t dfetch0_resp_o,
-  input  slv_req_t  dfetch1_req_i,
-  output slv_resp_t dfetch1_resp_o,
-  input  slv_req_t  dfetch2_req_i,
-  output slv_resp_t dfetch2_resp_o,
-  input  slv_req_t  dfetch3_req_i,
-  output slv_resp_t dfetch3_resp_o,
+    // [1:4] CGRA data-fetch
+    input  slv_req_t  dfetch0_req_i,
+    output slv_resp_t dfetch0_resp_o,
+    input  slv_req_t  dfetch1_req_i,
+    output slv_resp_t dfetch1_resp_o,
+    input  slv_req_t  dfetch2_req_i,
+    output slv_resp_t dfetch2_resp_o,
+    input  slv_req_t  dfetch3_req_i,
+    output slv_resp_t dfetch3_resp_o,
 
-  // [5] CGRA metadata-fetch
-  input  slv_req_t  mfetch_req_i,
-  output slv_resp_t mfetch_resp_o,
+    // [5] CGRA metadata-fetch
+    input  slv_req_t  mfetch_req_i,
+    output slv_resp_t mfetch_resp_o,
 
-  // [6] CGRA bitstream-fetch
-  input  slv_req_t  bsfetch_req_i,
-  output slv_resp_t bsfetch_resp_o,
+    // [6] CGRA bitstream-fetch
+    input  slv_req_t  bsfetch_req_i,
+    output slv_resp_t bsfetch_resp_o,
 
-  // --------------------------------------------------------------------------
-  // Master ports – one per slave reachable through the crossbar
-  // --------------------------------------------------------------------------
+    // --------------------------------------------------------------------------
+    // Master ports – one per slave reachable through the crossbar
+    // --------------------------------------------------------------------------
 
-  // [0] FPGA-side SRAM   0x0800 – 0x0FFF
-  output mst_req_t  fpga_mem_req_o,
-  input  mst_resp_t fpga_mem_resp_i,
+    // [0] FPGA-side SRAM   0x0800 – 0x0FFF
+    output mst_req_t  fpga_mem_req_o,
+    input  mst_resp_t fpga_mem_resp_i,
 
-  // [1] CGRA CSR bank    0x0000 – 0x00FF
-  output mst_req_t  cgra_csr_req_o,
-  input  mst_resp_t cgra_csr_resp_i
+    // [1] CGRA CSR bank    0x0000 – 0x00FF
+    output mst_req_t  cgra_csr_req_o,
+    input  mst_resp_t cgra_csr_resp_i
 );
 
   // Active-low reset required by pulp-platform AXI IP
@@ -215,12 +215,12 @@ module axi4_full_crossbar
   assign slv_ports_req[6] = bsfetch_req_i;
 
   assign fpga_mst_resp_o = slv_ports_resp[0];
-  assign dfetch0_resp_o  = slv_ports_resp[1];
-  assign dfetch1_resp_o  = slv_ports_resp[2];
-  assign dfetch2_resp_o  = slv_ports_resp[3];
-  assign dfetch3_resp_o  = slv_ports_resp[4];
-  assign mfetch_resp_o   = slv_ports_resp[5];
-  assign bsfetch_resp_o  = slv_ports_resp[6];
+  assign dfetch0_resp_o = slv_ports_resp[1];
+  assign dfetch1_resp_o = slv_ports_resp[2];
+  assign dfetch2_resp_o = slv_ports_resp[3];
+  assign dfetch3_resp_o = slv_ports_resp[4];
+  assign mfetch_resp_o = slv_ports_resp[5];
+  assign bsfetch_resp_o = slv_ports_resp[6];
 
   // --------------------------------------------------------------------------
   // Pack slave requests/responses into arrays for axi_xbar
@@ -228,8 +228,8 @@ module axi4_full_crossbar
   mst_req_t  [NoSlaves-1:0] mst_ports_req;
   mst_resp_t [NoSlaves-1:0] mst_ports_resp;
 
-  assign fpga_mem_req_o = mst_ports_req[IDX_FPGAMEM];
-  assign cgra_csr_req_o = mst_ports_req[IDX_CSR];
+  assign fpga_mem_req_o              = mst_ports_req[IDX_FPGAMEM];
+  assign cgra_csr_req_o              = mst_ports_req[IDX_CSR];
 
   assign mst_ports_resp[IDX_FPGAMEM] = fpga_mem_resp_i;
   assign mst_ports_resp[IDX_CSR]     = cgra_csr_resp_i;
@@ -238,8 +238,8 @@ module axi4_full_crossbar
   // Static address map
   // --------------------------------------------------------------------------
   localparam xbar_rule_16_t [NoAddrRules-1:0] AddrMap = '{
-    '{idx: IDX_FPGAMEM, start_addr: FPGAMEM_BASE, end_addr: FPGAMEM_END},
-    '{idx: IDX_CSR,     start_addr: CSR_BASE,     end_addr: CSR_END    }
+      '{idx: IDX_FPGAMEM, start_addr: FPGAMEM_BASE, end_addr: FPGAMEM_END},
+      '{idx: IDX_CSR, start_addr: CSR_BASE, end_addr: CSR_END}
   };
 
   // Transactions hitting no rule get a DECERR from the internal error slave.
@@ -252,33 +252,33 @@ module axi4_full_crossbar
   // Full AXI4 crossbar (pulp-platform axi_xbar)
   // --------------------------------------------------------------------------
   axi_xbar #(
-    .Cfg           ( XbarCfg        ),
-    .ATOPs         ( 1'b0           ),  // no atomic ops in this design; avoids axi_atop_filter dep
-    .slv_aw_chan_t ( slv_aw_t       ),
-    .mst_aw_chan_t ( mst_aw_t       ),
-    .w_chan_t      ( w_t            ),
-    .slv_b_chan_t  ( slv_b_t        ),
-    .mst_b_chan_t  ( mst_b_t        ),
-    .slv_ar_chan_t ( slv_ar_t       ),
-    .mst_ar_chan_t ( mst_ar_t       ),
-    .slv_r_chan_t  ( slv_r_t        ),
-    .mst_r_chan_t  ( mst_r_t        ),
-    .slv_req_t     ( slv_req_t      ),
-    .slv_resp_t    ( slv_resp_t     ),
-    .mst_req_t     ( mst_req_t      ),
-    .mst_resp_t    ( mst_resp_t     ),
-    .rule_t        ( xbar_rule_16_t )
+      .Cfg          (XbarCfg),
+      .ATOPs        (1'b0),           // no atomic ops in this design; avoids axi_atop_filter dep
+      .slv_aw_chan_t(slv_aw_t),
+      .mst_aw_chan_t(mst_aw_t),
+      .w_chan_t     (w_t),
+      .slv_b_chan_t (slv_b_t),
+      .mst_b_chan_t (mst_b_t),
+      .slv_ar_chan_t(slv_ar_t),
+      .mst_ar_chan_t(mst_ar_t),
+      .slv_r_chan_t (slv_r_t),
+      .mst_r_chan_t (mst_r_t),
+      .slv_req_t    (slv_req_t),
+      .slv_resp_t   (slv_resp_t),
+      .mst_req_t    (mst_req_t),
+      .mst_resp_t   (mst_resp_t),
+      .rule_t       (xbar_rule_16_t)
   ) i_xbar (
-    .clk_i                 ( clk_i           ),
-    .rst_ni                ( rst_n           ),
-    .test_i                ( test_i          ),
-    .slv_ports_req_i       ( slv_ports_req   ),
-    .slv_ports_resp_o      ( slv_ports_resp  ),
-    .mst_ports_req_o       ( mst_ports_req   ),
-    .mst_ports_resp_i      ( mst_ports_resp  ),
-    .addr_map_i            ( AddrMap         ),
-    .en_default_mst_port_i ( en_default_mst  ),
-    .default_mst_port_i    ( default_mst     )
+      .clk_i                (clk_i),
+      .rst_ni               (rst_n),
+      .test_i               (test_i),
+      .slv_ports_req_i      (slv_ports_req),
+      .slv_ports_resp_o     (slv_ports_resp),
+      .mst_ports_req_o      (mst_ports_req),
+      .mst_ports_resp_i     (mst_ports_resp),
+      .addr_map_i           (AddrMap),
+      .en_default_mst_port_i(en_default_mst),
+      .default_mst_port_i   (default_mst)
   );
 
 endmodule : axi4_full_crossbar
