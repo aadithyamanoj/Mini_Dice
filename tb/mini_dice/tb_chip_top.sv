@@ -114,6 +114,8 @@ module tb_chip_top;
     // zeroscatter-compatible chip_top pad map.
     pad_drv[44] = kz(clk_i);  // core_clk
     pad_drv[45] = kz(hard_reset);
+    pad_drv[11] = 1'b0;  // scan_en = 0: functional mode (not scan shift)
+    pad_drv[46] = 1'b0;  // scan_in = 0: idle
 
     // EP upstream outputs -> chip downstream inputs.
     pad_drv[8] = kz(ep_up_clk_r);
