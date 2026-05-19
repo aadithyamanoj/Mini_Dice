@@ -1,16 +1,14 @@
-// Random-data multiply test on the 32-thread cgra-nopred design.
+// dice_core_mul_random_data_test
+// ------------------------------
+// full_mul_array_test with random A/B values per (tid, lane) instead of
+// mem[i]=i. Hits Booth-multiplier data-dependent paths the directed tests
+// don't reach. Overrides csrX0=0 to keep the A/B address ranges from
+// overlapping (the canonical csrX0=1 puts both regions at addr 0x80).
 //
-// Same 5-eblock pipeline as full_mul_array_test, but A and B values are
-// randomized per (tid, lane). Expected stores are computed from the
-// 16-bit multiply (mod 2^16) of those random pairs.
+// Run with +ntb_random_seed=<N> for reproducibility (tested on 1, 42, 1234).
 //
-// Run with +ntb_random_seed=<N> for reproducibility.
-//
-// Coverage rationale: the directed tests hit specific patterns. Random pulls
-// in mid-range bit patterns that neither covers — sign-bit flips, partial
-// products that cancel, etc. Booth radix-4 has data-dependent code paths in
-// the partial-product encoder; random inputs exercise the trip-bit case
-// statement across all 32 threads × 4 lanes.
+// How to run:
+//   ../simv +UVM_TESTNAME=dice_core_mul_random_data_test +UVM_VERBOSITY=UVM_LOW
 class dice_core_mul_random_data_test extends dice_core_full_mul_array_test;
   `uvm_component_utils(dice_core_mul_random_data_test)
 
@@ -28,7 +26,7 @@ class dice_core_mul_random_data_test extends dice_core_full_mul_array_test;
     //    read_mem[i]=i, and 128 canonical expect_store() calls.
     super.setup_thread_inputs_and_expectations();
 
-    // 2) Wipe the canonical expectations — we're replacing them with random.
+    // 2) Wipe the canonical expectations, we're replacing them with random.
     env.sb.expected_data.delete();
     env.sb.stores_expected = 0;
 

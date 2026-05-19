@@ -135,6 +135,10 @@ ${DICE_HOME}/rtl/cgra_core/BE/regfile/dice_shift_reg.sv
 
 // ---- Backend: LDST unit ----
 +incdir+${DICE_HOME}/rtl/cgra_core/BE/ldst_unit
+
+// ---- UVM verification: enable nested `include lookup of tests/ data files ----
++incdir+${DICE_HOME}/tb/cgra_core/verification
++incdir+${DICE_HOME}/tb/cgra_core/verification/tests
 ${DICE_HOME}/rtl/cgra_core/BE/ldst_unit/mem_req_fifo_4port.sv
 ${DICE_HOME}/rtl/cgra_core/BE/ldst_unit/mem_req_fifo.sv
 

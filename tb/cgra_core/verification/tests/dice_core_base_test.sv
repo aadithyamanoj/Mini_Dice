@@ -1,5 +1,8 @@
-// Base test: creates the env, retrieves the vif, nothing else.
-// All real tests extend this class.
+// dice_core_base_test
+// -------------------
+// Builds the env and wraps run_body() in objection raise/drop.
+// All other tests in this directory inherit from this class. Not runnable
+// on its own — subclasses override run_body() to load data and dispatch a CTA.
 class dice_core_base_test extends uvm_test;
   `uvm_component_utils(dice_core_base_test)
 

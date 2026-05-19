@@ -1,15 +1,11 @@
-// AXI-Lite error-response test on the 32-thread cgra-nopred design.
+// dice_core_axil_error_test
+// -------------------------
+// full_mul_array_test + SLVERR injection on one read address. Verifies the
+// DUT survives a non-OKAY rresp without deadlocking. All 128 stores still
+// match (data is still delivered, only the resp code differs).
 //
-// Reuses the full_mul_array_test harness (all 5 eblocks, 32 threads, 128
-// stores, identity lane convention). Adds one SLVERR injection on a single
-// load address (A[tid=0, lane=0] at 0x0001) to verify:
-//
-//   - DUT does NOT deadlock on a non-OKAY rresp (mem_req_fifo today does
-//     not gate on rresp, so the load completes and the pipeline continues).
-//   - All 128 stores still match — mem[0x0001]=1 is delivered alongside
-//     rresp=SLVERR, and the multiplier consumes the correct data anyway.
-//   - The scoreboard tolerates the deliberately-injected error via
-//     expect_axil_error().
+// How to run:
+//   ../simv +UVM_TESTNAME=dice_core_axil_error_test +UVM_VERBOSITY=UVM_LOW
 class dice_core_axil_error_test extends dice_core_full_mul_array_test;
   `uvm_component_utils(dice_core_axil_error_test)
 

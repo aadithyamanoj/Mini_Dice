@@ -20,9 +20,11 @@ class axil_slave_driver extends uvm_driver #(axil_seq_item);
   // Configurable response data for reads (address → data)
   logic [15:0] read_mem [logic [15:0]];
 
-  // Configurable error responses (addr → 2-bit rresp/bresp)
+  // Configurable read error response per address (addr → 2-bit rresp).
+  // Note: write-side BRESP is not exposed for injection. The chip's IO link
+  // wrapper eliminates the B channel (presentation slide 39) and the master
+  // does not gate on BRESP, so a write SLVERR would be invisible end-to-end.
   logic [1:0]  read_resp_err  [logic [15:0]];
-  logic [1:0]  write_resp_err [logic [15:0]];
 
   // Pending read queue (FIFO of captured ARs awaiting R service)
   typedef struct packed {
@@ -146,11 +148,11 @@ class axil_slave_driver extends uvm_driver #(axil_seq_item);
     end
   endtask
 
-  // Override to implement custom write response logic
+  // Write response — always OKAY. The link wrapper eliminates BRESP and
+  // the master ignores it, so error injection on this side would be inert.
   virtual function logic [1:0] respond_write(logic [15:0] addr,
                                               logic [15:0] data,
                                               logic [1:0]  strb);
-    if (write_resp_err.exists(addr)) return write_resp_err[addr];
     return 2'b00;  // OKAY
   endfunction
 

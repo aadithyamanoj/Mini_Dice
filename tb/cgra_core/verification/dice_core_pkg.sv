@@ -41,17 +41,20 @@ package dice_core_uvm_pkg;
   `include "dice_core_scoreboard.sv"
   `include "dice_core_env.sv"
 
-  // Tests
-  `include "dice_core_base_test.sv"
-  `include "dice_core_full_mul_array_test.sv"
-  `include "dice_core_fetch_latency_test.sv"
-  `include "dice_core_axil_error_test.sv"
-  `include "dice_core_mul_random_data_test.sv"
-  `include "dice_core_add_array_test.sv"
-  // Pending data-regen for cgra-nopred + 32-thread CTA:
-  // `include "dice_core_smoke_test.sv"
-  // `include "dice_core_multi_cta_test.sv"
-  // `include "dice_core_multi_cta_full_test.sv"
-  // `include "dice_core_mul_edge_data_test.sv"
+  // Tests — live in tests/ subdirectory. 9 active tests, all passing.
+  `include "tests/dice_core_base_test.sv"
+  `include "tests/dice_core_full_mul_array_test.sv"
+  `include "tests/dice_core_fetch_latency_test.sv"
+  `include "tests/dice_core_axil_error_test.sv"
+  `include "tests/dice_core_mul_random_data_test.sv"
+  `include "tests/dice_core_add_array_test.sv"
+  `include "tests/dice_core_simple_branching_test.sv"
+  `include "tests/dice_core_partial_thread_test.sv"
+  `include "tests/dice_core_branch_axil_error_test.sv"
+  `include "tests/dice_core_dual_branch_test.sv"
+  `include "tests/dice_core_random_regression_test.sv"
+  `include "tests/dice_core_random_dag_test.sv"
+  `include "tests/dice_core_sequential_cta_test.sv"
+  `include "tests/dice_core_sequential_cta_random_test.sv"
 
 endpackage

@@ -1,0 +1,1041 @@
+{
+  "dice_cta_desc": {
+    "cta_id": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "kernel_desc": {
+      "grid_size": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "start_pc": 4096,
+      "thread_count": 32
+    }
+  },
+  "pgraph_metadata": [
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 0,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 0,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 6,
+        "ld_dest_regs": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 0,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4096
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 512,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 0,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 6,
+        "ld_dest_regs": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 0,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4352
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 1024,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 1,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 1,
+          "branch_jump_target_offset": 2,
+          "branch_reconv_offset": 3,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 1,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 65536,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4608
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 1536,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 1,
+          "branch_uni": 1,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 2,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 15,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4864
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 2048,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 0,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 15,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 5120
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 2560,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 1,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 1,
+          "branch_jump_target_offset": 2,
+          "branch_reconv_offset": 3,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 1,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 65536,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 5376
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 3072,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 1,
+          "branch_uni": 1,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 2,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 15,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 5632
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 3584,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 0,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 15,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 5888
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 4096,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 0,
+          "branch_reconv_offset": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 6,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 240,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 6144
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 4608,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_uni": 0,
+          "branch_pred_reg": 0,
+          "branch_neg_pred": 0,
+          "branch_jump_target_offset": 0,
+          "branch_reconv_offset": 0,
+          "is_return": 1
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 4,
+        "out_regs_bitmap": 0,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 6400
+    }
+  ],
+  "runtime": {
+    "axi": {
+      "expected_writes": [
+        {
+          "addr": 256,
+          "data": 257,
+          "strb": 3
+        },
+        {
+          "addr": 257,
+          "data": 260,
+          "strb": 3
+        },
+        {
+          "addr": 258,
+          "data": 263,
+          "strb": 3
+        },
+        {
+          "addr": 259,
+          "data": 266,
+          "strb": 3
+        },
+        {
+          "addr": 260,
+          "data": 21584,
+          "strb": 3
+        },
+        {
+          "addr": 261,
+          "data": 40598,
+          "strb": 3
+        },
+        {
+          "addr": 262,
+          "data": 60156,
+          "strb": 3
+        },
+        {
+          "addr": 263,
+          "data": 14728,
+          "strb": 3
+        },
+        {
+          "addr": 264,
+          "data": 35392,
+          "strb": 3
+        },
+        {
+          "addr": 265,
+          "data": 56618,
+          "strb": 3
+        },
+        {
+          "addr": 266,
+          "data": 12876,
+          "strb": 3
+        },
+        {
+          "addr": 267,
+          "data": 35244,
+          "strb": 3
+        },
+        {
+          "addr": 268,
+          "data": 58192,
+          "strb": 3
+        },
+        {
+          "addr": 269,
+          "data": 16190,
+          "strb": 3
+        },
+        {
+          "addr": 270,
+          "data": 40316,
+          "strb": 3
+        },
+        {
+          "addr": 271,
+          "data": 65040,
+          "strb": 3
+        },
+        {
+          "addr": 272,
+          "data": 24832,
+          "strb": 3
+        },
+        {
+          "addr": 273,
+          "data": 50770,
+          "strb": 3
+        },
+        {
+          "addr": 274,
+          "data": 11788,
+          "strb": 3
+        },
+        {
+          "addr": 275,
+          "data": 38964,
+          "strb": 3
+        },
+        {
+          "addr": 276,
+          "data": 1232,
+          "strb": 3
+        },
+        {
+          "addr": 277,
+          "data": 29670,
+          "strb": 3
+        },
+        {
+          "addr": 278,
+          "data": 58748,
+          "strb": 3
+        },
+        {
+          "addr": 279,
+          "data": 22936,
+          "strb": 3
+        },
+        {
+          "addr": 280,
+          "data": 53312,
+          "strb": 3
+        },
+        {
+          "addr": 281,
+          "data": 18810,
+          "strb": 3
+        },
+        {
+          "addr": 282,
+          "data": 50508,
+          "strb": 3
+        },
+        {
+          "addr": 283,
+          "data": 17340,
+          "strb": 3
+        },
+        {
+          "addr": 284,
+          "data": 50384,
+          "strb": 3
+        },
+        {
+          "addr": 285,
+          "data": 18574,
+          "strb": 3
+        },
+        {
+          "addr": 286,
+          "data": 52988,
+          "strb": 3
+        },
+        {
+          "addr": 287,
+          "data": 22560,
+          "strb": 3
+        },
+        {
+          "addr": 288,
+          "data": 58368,
+          "strb": 3
+        },
+        {
+          "addr": 289,
+          "data": 29346,
+          "strb": 3
+        },
+        {
+          "addr": 290,
+          "data": 1036,
+          "strb": 3
+        },
+        {
+          "addr": 291,
+          "data": 38980,
+          "strb": 3
+        },
+        {
+          "addr": 292,
+          "data": 12112,
+          "strb": 3
+        },
+        {
+          "addr": 293,
+          "data": 51510,
+          "strb": 3
+        },
+        {
+          "addr": 294,
+          "data": 26108,
+          "strb": 3
+        },
+        {
+          "addr": 295,
+          "data": 1448,
+          "strb": 3
+        },
+        {
+          "addr": 296,
+          "data": 43072,
+          "strb": 3
+        },
+        {
+          "addr": 297,
+          "data": 19914,
+          "strb": 3
+        },
+        {
+          "addr": 298,
+          "data": 63052,
+          "strb": 3
+        },
+        {
+          "addr": 299,
+          "data": 41420,
+          "strb": 3
+        },
+        {
+          "addr": 300,
+          "data": 20560,
+          "strb": 3
+        },
+        {
+          "addr": 301,
+          "data": 478,
+          "strb": 3
+        },
+        {
+          "addr": 302,
+          "data": 46716,
+          "strb": 3
+        },
+        {
+          "addr": 303,
+          "data": 28208,
+          "strb": 3
+        },
+        {
+          "addr": 304,
+          "data": 10496,
+          "strb": 3
+        },
+        {
+          "addr": 305,
+          "data": 59122,
+          "strb": 3
+        },
+        {
+          "addr": 306,
+          "data": 43020,
+          "strb": 3
+        },
+        {
+          "addr": 307,
+          "data": 27732,
+          "strb": 3
+        },
+        {
+          "addr": 308,
+          "data": 13264,
+          "strb": 3
+        },
+        {
+          "addr": 309,
+          "data": 65158,
+          "strb": 3
+        },
+        {
+          "addr": 310,
+          "data": 52348,
+          "strb": 3
+        },
+        {
+          "addr": 311,
+          "data": 40376,
+          "strb": 3
+        },
+        {
+          "addr": 312,
+          "data": 29248,
+          "strb": 3
+        },
+        {
+          "addr": 313,
+          "data": 18970,
+          "strb": 3
+        },
+        {
+          "addr": 314,
+          "data": 9548,
+          "strb": 3
+        },
+        {
+          "addr": 315,
+          "data": 988,
+          "strb": 3
+        },
+        {
+          "addr": 316,
+          "data": 58832,
+          "strb": 3
+        },
+        {
+          "addr": 317,
+          "data": 52014,
+          "strb": 3
+        },
+        {
+          "addr": 318,
+          "data": 46076,
+          "strb": 3
+        },
+        {
+          "addr": 319,
+          "data": 41024,
+          "strb": 3
+        },
+        {
+          "addr": 320,
+          "data": 36864,
+          "strb": 3
+        },
+        {
+          "addr": 321,
+          "data": 33602,
+          "strb": 3
+        },
+        {
+          "addr": 322,
+          "data": 31244,
+          "strb": 3
+        },
+        {
+          "addr": 323,
+          "data": 29796,
+          "strb": 3
+        },
+        {
+          "addr": 324,
+          "data": 29264,
+          "strb": 3
+        },
+        {
+          "addr": 325,
+          "data": 29654,
+          "strb": 3
+        },
+        {
+          "addr": 326,
+          "data": 30972,
+          "strb": 3
+        },
+        {
+          "addr": 327,
+          "data": 33224,
+          "strb": 3
+        },
+        {
+          "addr": 328,
+          "data": 36416,
+          "strb": 3
+        },
+        {
+          "addr": 329,
+          "data": 40554,
+          "strb": 3
+        },
+        {
+          "addr": 330,
+          "data": 45644,
+          "strb": 3
+        },
+        {
+          "addr": 331,
+          "data": 51692,
+          "strb": 3
+        },
+        {
+          "addr": 332,
+          "data": 58704,
+          "strb": 3
+        },
+        {
+          "addr": 333,
+          "data": 1150,
+          "strb": 3
+        },
+        {
+          "addr": 334,
+          "data": 10108,
+          "strb": 3
+        },
+        {
+          "addr": 335,
+          "data": 20048,
+          "strb": 3
+        },
+        {
+          "addr": 336,
+          "data": 30976,
+          "strb": 3
+        },
+        {
+          "addr": 337,
+          "data": 42898,
+          "strb": 3
+        },
+        {
+          "addr": 338,
+          "data": 55820,
+          "strb": 3
+        },
+        {
+          "addr": 339,
+          "data": 4212,
+          "strb": 3
+        },
+        {
+          "addr": 340,
+          "data": 19152,
+          "strb": 3
+        },
+        {
+          "addr": 341,
+          "data": 35110,
+          "strb": 3
+        },
+        {
+          "addr": 342,
+          "data": 52092,
+          "strb": 3
+        },
+        {
+          "addr": 343,
+          "data": 4568,
+          "strb": 3
+        },
+        {
+          "addr": 344,
+          "data": 23616,
+          "strb": 3
+        },
+        {
+          "addr": 345,
+          "data": 43706,
+          "strb": 3
+        },
+        {
+          "addr": 346,
+          "data": 64844,
+          "strb": 3
+        },
+        {
+          "addr": 347,
+          "data": 21500,
+          "strb": 3
+        },
+        {
+          "addr": 348,
+          "data": 44752,
+          "strb": 3
+        },
+        {
+          "addr": 349,
+          "data": 3534,
+          "strb": 3
+        },
+        {
+          "addr": 350,
+          "data": 28924,
+          "strb": 3
+        },
+        {
+          "addr": 351,
+          "data": 55392,
+          "strb": 3
+        },
+        {
+          "addr": 352,
+          "data": 17408,
+          "strb": 3
+        },
+        {
+          "addr": 353,
+          "data": 46050,
+          "strb": 3
+        },
+        {
+          "addr": 354,
+          "data": 10252,
+          "strb": 3
+        },
+        {
+          "addr": 355,
+          "data": 41092,
+          "strb": 3
+        },
+        {
+          "addr": 356,
+          "data": 7504,
+          "strb": 3
+        },
+        {
+          "addr": 357,
+          "data": 40566,
+          "strb": 3
+        },
+        {
+          "addr": 358,
+          "data": 9212,
+          "strb": 3
+        },
+        {
+          "addr": 359,
+          "data": 44520,
+          "strb": 3
+        },
+        {
+          "addr": 360,
+          "data": 15424,
+          "strb": 3
+        },
+        {
+          "addr": 361,
+          "data": 53002,
+          "strb": 3
+        },
+        {
+          "addr": 362,
+          "data": 26188,
+          "strb": 3
+        },
+        {
+          "addr": 363,
+          "data": 524,
+          "strb": 3
+        },
+        {
+          "addr": 364,
+          "data": 41552,
+          "strb": 3
+        },
+        {
+          "addr": 365,
+          "data": 18206,
+          "strb": 3
+        },
+        {
+          "addr": 366,
+          "data": 61564,
+          "strb": 3
+        },
+        {
+          "addr": 367,
+          "data": 40560,
+          "strb": 3
+        },
+        {
+          "addr": 368,
+          "data": 20736,
+          "strb": 3
+        },
+        {
+          "addr": 369,
+          "data": 2098,
+          "strb": 3
+        },
+        {
+          "addr": 370,
+          "data": 50188,
+          "strb": 3
+        },
+        {
+          "addr": 371,
+          "data": 33940,
+          "strb": 3
+        },
+        {
+          "addr": 372,
+          "data": 18896,
+          "strb": 3
+        },
+        {
+          "addr": 373,
+          "data": 5062,
+          "strb": 3
+        },
+        {
+          "addr": 374,
+          "data": 57980,
+          "strb": 3
+        },
+        {
+          "addr": 375,
+          "data": 46584,
+          "strb": 3
+        },
+        {
+          "addr": 376,
+          "data": 36416,
+          "strb": 3
+        },
+        {
+          "addr": 377,
+          "data": 27482,
+          "strb": 3
+        },
+        {
+          "addr": 378,
+          "data": 19788,
+          "strb": 3
+        },
+        {
+          "addr": 379,
+          "data": 13340,
+          "strb": 3
+        },
+        {
+          "addr": 380,
+          "data": 8144,
+          "strb": 3
+        },
+        {
+          "addr": 381,
+          "data": 4206,
+          "strb": 3
+        },
+        {
+          "addr": 382,
+          "data": 1532,
+          "strb": 3
+        },
+        {
+          "addr": 383,
+          "data": 128,
+          "strb": 3
+        }
+      ]
+    },
+    "csr_values": {
+      "csrX0": 1,
+      "csrX1": 128,
+      "csrX2": 256,
+      "csrX3": 4,
+      "csrX4": 0,
+      "csrX5": 1,
+      "csrX6": 2,
+      "csrX7": 3
+    }
+  },
+  "stage_artifacts": [
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.fasm",
+      "kernel": "load_mul_array_a",
+      "notes": [
+        "A-side load stage for the staged mul-array flow.",
+        "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
+        "Memory responses load into GPRs 0..3."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
+      "kernel": "load_mul_array_b",
+      "notes": [
+        "B-side load stage for the staged mul-array flow.",
+        "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
+        "Memory responses load into GPRs 4..7."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_gen_tid_nonzero_pred.fasm",
+      "kernel": "gen_tid_nonzero_pred",
+      "notes": [
+        "Computes PR0 = (tid != 0) through ext_pred_o_0.",
+        "Carries simple-branching control metadata in the coalesced test vector."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_mul_array.fasm",
+      "kernel": "mul_array",
+      "notes": [
+        "Consumes GPRs 0..7 as mul operands.",
+        "Assumes result writeback targets GPRs 0..3."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.fasm",
+      "kernel": "add_array",
+      "notes": [
+        "Consumes GPRs 0..7 as add operands.",
+        "Assumes result writeback targets GPRs 0..3."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
+      "kernel": "compute_store_addrs",
+      "notes": [
+        "Materializes C-side affine store addresses into GPRs 4..7.",
+        "Uses csrX2 as base, regS_i_0 as tid, csrX3 as thread_stride, and csrX4..7 as lane offsets."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
+      "kernel": "store_mul_array",
+      "notes": [
+        "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
+        "This stage is a pure register-to-memory route and does not recompute affine addresses.",
+        "All four memory ports are marked as stores."
+      ]
+    }
+  ]
+}

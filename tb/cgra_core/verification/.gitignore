@@ -1,0 +1,8 @@
+simv
+simv.daidir/
+simv.vdb/
+csrc/
+ucli.key
+*.log
+*.vpd
+*.fsdb
