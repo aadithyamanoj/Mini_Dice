@@ -1,0 +1,875 @@
+{
+  "dice_cta_desc": {
+    "cta_id": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "kernel_desc": {
+      "grid_size": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "start_pc": 4096,
+      "thread_count": 32
+    }
+  },
+  "pgraph_metadata": [
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 0,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
+          "branch_neg_pred": 0,
+          "branch_pred_reg": 0,
+          "branch_reconv_offset": 0,
+          "branch_uni": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 6,
+        "ld_dest_regs": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 0,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4096
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 512,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
+          "branch_neg_pred": 0,
+          "branch_pred_reg": 0,
+          "branch_reconv_offset": 0,
+          "branch_uni": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 6,
+        "ld_dest_regs": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 0,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4352
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 1024,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
+          "branch_neg_pred": 0,
+          "branch_pred_reg": 0,
+          "branch_reconv_offset": 0,
+          "branch_uni": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 15,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4608
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 1536,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
+          "branch_neg_pred": 0,
+          "branch_pred_reg": 0,
+          "branch_reconv_offset": 0,
+          "branch_uni": 0,
+          "is_return": 0
+        },
+        "in_regs_bitmap": 0,
+        "lat": 6,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 0,
+        "out_regs_bitmap": 240,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 4864
+    },
+    {
+      "meta": {
+        "barrier": 0,
+        "bitstream_addr": 2048,
+        "bitstream_length": 135,
+        "branch_meta": {
+          "branch_ena": 0,
+          "branch_jump_target_offset": 0,
+          "branch_neg_pred": 0,
+          "branch_pred_reg": 0,
+          "branch_reconv_offset": 0,
+          "branch_uni": 0,
+          "is_return": 1
+        },
+        "in_regs_bitmap": 255,
+        "lat": 5,
+        "ld_dest_regs": [
+          31,
+          31,
+          31,
+          31
+        ],
+        "num_stores": 4,
+        "out_regs_bitmap": 0,
+        "parameter_load": 0,
+        "unrolling_factor": 0
+      },
+      "pc": 5120
+    }
+  ],
+  "runtime": {
+    "axi": {
+      "expected_writes": [
+        {
+          "addr": 256,
+          "data": 129,
+          "strb": 3
+        },
+        {
+          "addr": 257,
+          "data": 131,
+          "strb": 3
+        },
+        {
+          "addr": 258,
+          "data": 133,
+          "strb": 3
+        },
+        {
+          "addr": 259,
+          "data": 135,
+          "strb": 3
+        },
+        {
+          "addr": 260,
+          "data": 137,
+          "strb": 3
+        },
+        {
+          "addr": 261,
+          "data": 139,
+          "strb": 3
+        },
+        {
+          "addr": 262,
+          "data": 141,
+          "strb": 3
+        },
+        {
+          "addr": 263,
+          "data": 143,
+          "strb": 3
+        },
+        {
+          "addr": 264,
+          "data": 145,
+          "strb": 3
+        },
+        {
+          "addr": 265,
+          "data": 147,
+          "strb": 3
+        },
+        {
+          "addr": 266,
+          "data": 149,
+          "strb": 3
+        },
+        {
+          "addr": 267,
+          "data": 151,
+          "strb": 3
+        },
+        {
+          "addr": 268,
+          "data": 153,
+          "strb": 3
+        },
+        {
+          "addr": 269,
+          "data": 155,
+          "strb": 3
+        },
+        {
+          "addr": 270,
+          "data": 157,
+          "strb": 3
+        },
+        {
+          "addr": 271,
+          "data": 159,
+          "strb": 3
+        },
+        {
+          "addr": 272,
+          "data": 161,
+          "strb": 3
+        },
+        {
+          "addr": 273,
+          "data": 163,
+          "strb": 3
+        },
+        {
+          "addr": 274,
+          "data": 165,
+          "strb": 3
+        },
+        {
+          "addr": 275,
+          "data": 167,
+          "strb": 3
+        },
+        {
+          "addr": 276,
+          "data": 169,
+          "strb": 3
+        },
+        {
+          "addr": 277,
+          "data": 171,
+          "strb": 3
+        },
+        {
+          "addr": 278,
+          "data": 173,
+          "strb": 3
+        },
+        {
+          "addr": 279,
+          "data": 175,
+          "strb": 3
+        },
+        {
+          "addr": 280,
+          "data": 177,
+          "strb": 3
+        },
+        {
+          "addr": 281,
+          "data": 179,
+          "strb": 3
+        },
+        {
+          "addr": 282,
+          "data": 181,
+          "strb": 3
+        },
+        {
+          "addr": 283,
+          "data": 183,
+          "strb": 3
+        },
+        {
+          "addr": 284,
+          "data": 185,
+          "strb": 3
+        },
+        {
+          "addr": 285,
+          "data": 187,
+          "strb": 3
+        },
+        {
+          "addr": 286,
+          "data": 189,
+          "strb": 3
+        },
+        {
+          "addr": 287,
+          "data": 191,
+          "strb": 3
+        },
+        {
+          "addr": 288,
+          "data": 193,
+          "strb": 3
+        },
+        {
+          "addr": 289,
+          "data": 195,
+          "strb": 3
+        },
+        {
+          "addr": 290,
+          "data": 197,
+          "strb": 3
+        },
+        {
+          "addr": 291,
+          "data": 199,
+          "strb": 3
+        },
+        {
+          "addr": 292,
+          "data": 201,
+          "strb": 3
+        },
+        {
+          "addr": 293,
+          "data": 203,
+          "strb": 3
+        },
+        {
+          "addr": 294,
+          "data": 205,
+          "strb": 3
+        },
+        {
+          "addr": 295,
+          "data": 207,
+          "strb": 3
+        },
+        {
+          "addr": 296,
+          "data": 209,
+          "strb": 3
+        },
+        {
+          "addr": 297,
+          "data": 211,
+          "strb": 3
+        },
+        {
+          "addr": 298,
+          "data": 213,
+          "strb": 3
+        },
+        {
+          "addr": 299,
+          "data": 215,
+          "strb": 3
+        },
+        {
+          "addr": 300,
+          "data": 217,
+          "strb": 3
+        },
+        {
+          "addr": 301,
+          "data": 219,
+          "strb": 3
+        },
+        {
+          "addr": 302,
+          "data": 221,
+          "strb": 3
+        },
+        {
+          "addr": 303,
+          "data": 223,
+          "strb": 3
+        },
+        {
+          "addr": 304,
+          "data": 225,
+          "strb": 3
+        },
+        {
+          "addr": 305,
+          "data": 227,
+          "strb": 3
+        },
+        {
+          "addr": 306,
+          "data": 229,
+          "strb": 3
+        },
+        {
+          "addr": 307,
+          "data": 231,
+          "strb": 3
+        },
+        {
+          "addr": 308,
+          "data": 233,
+          "strb": 3
+        },
+        {
+          "addr": 309,
+          "data": 235,
+          "strb": 3
+        },
+        {
+          "addr": 310,
+          "data": 237,
+          "strb": 3
+        },
+        {
+          "addr": 311,
+          "data": 239,
+          "strb": 3
+        },
+        {
+          "addr": 312,
+          "data": 241,
+          "strb": 3
+        },
+        {
+          "addr": 313,
+          "data": 243,
+          "strb": 3
+        },
+        {
+          "addr": 314,
+          "data": 245,
+          "strb": 3
+        },
+        {
+          "addr": 315,
+          "data": 247,
+          "strb": 3
+        },
+        {
+          "addr": 316,
+          "data": 249,
+          "strb": 3
+        },
+        {
+          "addr": 317,
+          "data": 251,
+          "strb": 3
+        },
+        {
+          "addr": 318,
+          "data": 253,
+          "strb": 3
+        },
+        {
+          "addr": 319,
+          "data": 255,
+          "strb": 3
+        },
+        {
+          "addr": 320,
+          "data": 257,
+          "strb": 3
+        },
+        {
+          "addr": 321,
+          "data": 259,
+          "strb": 3
+        },
+        {
+          "addr": 322,
+          "data": 261,
+          "strb": 3
+        },
+        {
+          "addr": 323,
+          "data": 263,
+          "strb": 3
+        },
+        {
+          "addr": 324,
+          "data": 265,
+          "strb": 3
+        },
+        {
+          "addr": 325,
+          "data": 267,
+          "strb": 3
+        },
+        {
+          "addr": 326,
+          "data": 269,
+          "strb": 3
+        },
+        {
+          "addr": 327,
+          "data": 271,
+          "strb": 3
+        },
+        {
+          "addr": 328,
+          "data": 273,
+          "strb": 3
+        },
+        {
+          "addr": 329,
+          "data": 275,
+          "strb": 3
+        },
+        {
+          "addr": 330,
+          "data": 277,
+          "strb": 3
+        },
+        {
+          "addr": 331,
+          "data": 279,
+          "strb": 3
+        },
+        {
+          "addr": 332,
+          "data": 281,
+          "strb": 3
+        },
+        {
+          "addr": 333,
+          "data": 283,
+          "strb": 3
+        },
+        {
+          "addr": 334,
+          "data": 285,
+          "strb": 3
+        },
+        {
+          "addr": 335,
+          "data": 287,
+          "strb": 3
+        },
+        {
+          "addr": 336,
+          "data": 289,
+          "strb": 3
+        },
+        {
+          "addr": 337,
+          "data": 291,
+          "strb": 3
+        },
+        {
+          "addr": 338,
+          "data": 293,
+          "strb": 3
+        },
+        {
+          "addr": 339,
+          "data": 295,
+          "strb": 3
+        },
+        {
+          "addr": 340,
+          "data": 297,
+          "strb": 3
+        },
+        {
+          "addr": 341,
+          "data": 299,
+          "strb": 3
+        },
+        {
+          "addr": 342,
+          "data": 301,
+          "strb": 3
+        },
+        {
+          "addr": 343,
+          "data": 303,
+          "strb": 3
+        },
+        {
+          "addr": 344,
+          "data": 305,
+          "strb": 3
+        },
+        {
+          "addr": 345,
+          "data": 307,
+          "strb": 3
+        },
+        {
+          "addr": 346,
+          "data": 309,
+          "strb": 3
+        },
+        {
+          "addr": 347,
+          "data": 311,
+          "strb": 3
+        },
+        {
+          "addr": 348,
+          "data": 313,
+          "strb": 3
+        },
+        {
+          "addr": 349,
+          "data": 315,
+          "strb": 3
+        },
+        {
+          "addr": 350,
+          "data": 317,
+          "strb": 3
+        },
+        {
+          "addr": 351,
+          "data": 319,
+          "strb": 3
+        },
+        {
+          "addr": 352,
+          "data": 321,
+          "strb": 3
+        },
+        {
+          "addr": 353,
+          "data": 323,
+          "strb": 3
+        },
+        {
+          "addr": 354,
+          "data": 325,
+          "strb": 3
+        },
+        {
+          "addr": 355,
+          "data": 327,
+          "strb": 3
+        },
+        {
+          "addr": 356,
+          "data": 329,
+          "strb": 3
+        },
+        {
+          "addr": 357,
+          "data": 331,
+          "strb": 3
+        },
+        {
+          "addr": 358,
+          "data": 333,
+          "strb": 3
+        },
+        {
+          "addr": 359,
+          "data": 335,
+          "strb": 3
+        },
+        {
+          "addr": 360,
+          "data": 337,
+          "strb": 3
+        },
+        {
+          "addr": 361,
+          "data": 339,
+          "strb": 3
+        },
+        {
+          "addr": 362,
+          "data": 341,
+          "strb": 3
+        },
+        {
+          "addr": 363,
+          "data": 343,
+          "strb": 3
+        },
+        {
+          "addr": 364,
+          "data": 345,
+          "strb": 3
+        },
+        {
+          "addr": 365,
+          "data": 347,
+          "strb": 3
+        },
+        {
+          "addr": 366,
+          "data": 349,
+          "strb": 3
+        },
+        {
+          "addr": 367,
+          "data": 351,
+          "strb": 3
+        },
+        {
+          "addr": 368,
+          "data": 353,
+          "strb": 3
+        },
+        {
+          "addr": 369,
+          "data": 355,
+          "strb": 3
+        },
+        {
+          "addr": 370,
+          "data": 357,
+          "strb": 3
+        },
+        {
+          "addr": 371,
+          "data": 359,
+          "strb": 3
+        },
+        {
+          "addr": 372,
+          "data": 361,
+          "strb": 3
+        },
+        {
+          "addr": 373,
+          "data": 363,
+          "strb": 3
+        },
+        {
+          "addr": 374,
+          "data": 365,
+          "strb": 3
+        },
+        {
+          "addr": 375,
+          "data": 367,
+          "strb": 3
+        },
+        {
+          "addr": 376,
+          "data": 369,
+          "strb": 3
+        },
+        {
+          "addr": 377,
+          "data": 371,
+          "strb": 3
+        },
+        {
+          "addr": 378,
+          "data": 373,
+          "strb": 3
+        },
+        {
+          "addr": 379,
+          "data": 375,
+          "strb": 3
+        },
+        {
+          "addr": 380,
+          "data": 377,
+          "strb": 3
+        },
+        {
+          "addr": 381,
+          "data": 379,
+          "strb": 3
+        },
+        {
+          "addr": 382,
+          "data": 381,
+          "strb": 3
+        },
+        {
+          "addr": 383,
+          "data": 383,
+          "strb": 3
+        }
+      ]
+    },
+    "csr_values": {
+      "csrX0": 1,
+      "csrX1": 128,
+      "csrX2": 256,
+      "csrX3": 4,
+      "csrX4": 0,
+      "csrX5": 1,
+      "csrX6": 2,
+      "csrX7": 3
+    }
+  },
+  "stage_artifacts": [
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_a.fasm",
+      "kernel": "load_mul_array_a",
+      "notes": [
+        "A-side load stage for the staged mul-array flow.",
+        "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
+        "Memory responses load into GPRs 0..3."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
+      "kernel": "load_mul_array_b",
+      "notes": [
+        "B-side load stage for the staged mul-array flow.",
+        "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
+        "Memory responses load into GPRs 4..7."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_add_array.fasm",
+      "kernel": "add_array",
+      "notes": [
+        "A+B element-wise add stage (replaces mul for the add_array test)."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
+      "kernel": "compute_store_addrs",
+      "notes": [
+        "Materializes C-side affine store addresses into GPRs 4..7.",
+        "Uses csrX2 as base, regS_i_0 as tid, csrX3 as thread_stride, and csrX4..7 as lane offsets."
+      ]
+    },
+    {
+      "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.bin",
+      "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array_compile_report.json",
+      "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_store_mul_array.fasm",
+      "kernel": "store_mul_array",
+      "notes": [
+        "Uses GPRs 0..3 as store data and precomputed GPRs 4..7 as store addresses.",
+        "This stage is a pure register-to-memory route and does not recompute affine addresses.",
+        "All four memory ports are marked as stores."
+      ]
+    }
+  ]
+}

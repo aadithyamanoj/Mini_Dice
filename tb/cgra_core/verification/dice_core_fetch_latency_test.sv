@@ -1,12 +1,10 @@
-// Fetch-latency test: identical to full_mul_array_test but with extra AXI4
-// read latency injected on both fetch ports.
+// Fetch-latency test on the 32-thread cgra-nopred design.
+// Identical to full_mul_array_test but with extra AXI4 read latency injected
+// on both fetch ports (mfetch + bsfetch).
+//
 // Exercises AR-to-first-R backpressure handling in meta_fetch and
 // bitstream_fetch_load while preserving end-to-end correctness checks
-// (5 bitstream epochs + 4 store addr/data verified bit/word-exact).
-//
-// Inheriting from full_mul_array_test (rather than smoke_test) avoids the
-// IO-less single-eblock kernel premature-complete race and gives us real
-// observable IO to verify under slow-fetch conditions.
+// (5 bitstream epochs bit-exact + 128 store addr/data verified word-exact).
 class dice_core_fetch_latency_test extends dice_core_full_mul_array_test;
   `uvm_component_utils(dice_core_fetch_latency_test)
 
