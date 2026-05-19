@@ -202,7 +202,6 @@ DICE_BITSTREAM_SIZE = _load_pkg_parameter(DICE_PKG_SV, "DICE_BITSTREAM_SIZE")
 BRANCH_META_WIDTH = 1 + 1 + PR_INDEX_WIDTH + 1 + 1 + PGRAPH_OFFSET_WIDTH + PGRAPH_OFFSET_WIDTH
 PGRAPH_META_WIDTH = (
     DICE_ADDR_WIDTH
-    + BITSTREAM_LENGTH_WIDTH
     + 2
     + 8
     + REG_NUM
@@ -275,7 +274,6 @@ def pack_pgraph_meta(meta):
     """Pack current pgraph_meta_t."""
     p = BitPacker()
     p.push(parse_int(meta["bitstream_addr"]),    DICE_ADDR_WIDTH)
-    p.push(parse_int(meta["bitstream_length"]),  BITSTREAM_LENGTH_WIDTH)
     p.push(parse_int(meta["unrolling_factor"]),  2)
     p.push(parse_int(meta["lat"]),               8)
     p.push(parse_int(meta["in_regs_bitmap"]),    REG_NUM)

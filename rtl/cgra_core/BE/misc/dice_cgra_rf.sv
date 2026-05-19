@@ -21,6 +21,7 @@ module dice_cgra_rf
     output logic [1:0] bank_valid_o,
     output logic prog_dout_o,
     output logic prog_we_o,
+    output logic [15:0] bsload_cnt_o,
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX0_i,
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX1_i,
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX2_i,
@@ -78,7 +79,7 @@ module dice_cgra_rf
   localparam int NUM_PRED = DICE_NUM_PRED;
   localparam int TOTAL_REGS = DICE_TOTAL_REGS;
   localparam int DATA_WIDTH = DICE_REG_DATA_WIDTH;
-  localparam int MAX_PIPE_STAGE = 32;
+  localparam int MAX_PIPE_STAGE = 16;
   localparam int SHIFT_LAT_W = $clog2(MAX_PIPE_STAGE);
   localparam int LAUNCH_TAG_W = DICE_TID_WIDTH + 1;
 
@@ -170,6 +171,7 @@ module dice_cgra_rf
       .bank_valid_o(bank_valid_o),
       .prog_dout_o(prog_dout_o),
       .prog_we_o(prog_we_o),
+      .bsload_cnt_o(bsload_cnt_o),
       .ext_data_i_0(rf_launch_data_lo[0*DATA_WIDTH+:DATA_WIDTH]),
       .ext_data_i_1(rf_launch_data_lo[1*DATA_WIDTH+:DATA_WIDTH]),
       .ext_data_i_2(rf_launch_data_lo[2*DATA_WIDTH+:DATA_WIDTH]),
@@ -249,97 +251,6 @@ module dice_cgra_rf
       , .in_data(launch_tag_li)
       , .out_data(launch_tag_lo)
   );
-
-  /*
-  // Old shift-based metadata alignment kept here for reference.
-  assign mem_port_valid_li = gen_mem_port_valid(ld_dest_regs_lo, num_stores_lo);
-  assign mem_port_op_li    = gen_mem_port_op(ld_dest_regs_lo, num_stores_lo);
-  assign mem_rsp_addr_li   = rf_rd_valid_lo ? ld_dest_regs_lo : '1;
-
-  shift_reg #(
-        .WIDTH         (DICE_TID_WIDTH)
-      , .MAX_PIPE_STAGE(128)
-  ) TID_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(cgra_tid_li)
-      , .out_data(cgra_tid_lo)
-  );
-
-  shift_reg #(
-        .WIDTH         (DICE_TOTAL_REGS)
-      , .MAX_PIPE_STAGE(128)
-  ) WB_MAP_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(wr_bitmap_reg_li)
-      , .out_data(cgra_wr_bitmap_li)
-  );
-
-  shift_reg #(
-        .WIDTH         (DICE_EBLOCK_ID_WIDTH)
-      , .MAX_PIPE_STAGE(128)
-  ) EBLOCK_ID_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(e_block_id_li)
-      , .out_data(e_block_id_lo)
-  );
-
-  shift_reg #(
-        .WIDTH         (NUM_MEM_PORTS)
-      , .MAX_PIPE_STAGE(128)
-  ) LDST_PORT_VALID_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(rf_rd_valid_lo ? mem_port_valid_li : '0)
-      , .out_data(mem_port_valid_lo)
-  );
-
-  shift_reg #(
-        .WIDTH         (NUM_MEM_PORTS)
-      , .MAX_PIPE_STAGE(128)
-  ) LDST_PORT_OP_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(rf_rd_valid_lo ? mem_port_op_li : '0)
-      , .out_data(mem_port_op_lo)
-  );
-
-  shift_reg #(
-        .WIDTH         (NUM_MEM_PORTS * DICE_REG_ADDR_WIDTH)
-      , .MAX_PIPE_STAGE(128)
-  ) LDST_RSP_ADDR_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(mem_rsp_addr_li)
-      , .out_data(mem_rsp_addr_lo)
-  );
-
-  shift_reg #(
-        .WIDTH         (1)
-      , .MAX_PIPE_STAGE(128)
-  ) VALID_SHIFT (
-      .clk_i(clk_i)
-      , .reset_i(reset_i)
-      , .clear_i(shift_clear_i)
-      , .latency(cgra_lat)
-      , .in_data(rf_rd_valid_lo)
-      , .out_data(cgra_valid_lo)
-  );
-  */
 
   dice_rf_ctrl rf_ctrl_inst (
       .clk_i(clk_i),

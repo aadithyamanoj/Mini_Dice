@@ -13,6 +13,8 @@
 //   5. DPI verifier reports PASS/FAIL.
 // =============================================================================
 
+// `define TB_RTL_HIER_DEBUG
+
 `timescale 1ns / 1ps
 
 import "DPI-C" context function void dice_core_tb_init(
@@ -80,19 +82,24 @@ module tb_chip_top;
   // Clock / reset drivers (TB-side logic, mapped to PAD below)
   // --------------------------------------------------------------------------
   bit   clk_i;
+  bit   dn_io_clk;  // FPGA TX I/O master clock; oddr PHY forwards PAD[8].
   logic rst_i = 1'b1;  // FPGA endpoint/core reset
   logic hard_reset = 1'b1;  // chip hard reset on PAD[45]
   logic ep_upstream_io_link_reset = 1'b1;
   logic ep_async_token_reset = 1'b0;
   logic ep_downstream_io_link_reset = 1'b1;
+  logic ep_downstream_io_link_reset_sync;
+  logic tb_pad_drive_en = 1'b0;
 
   initial forever #(CLK_HALF_NS * 1ns) clk_i = ~clk_i;
+  initial forever #(CLK_HALF_NS * 1ns) dn_io_clk = ~dn_io_clk;
 
   // --------------------------------------------------------------------------
   // PAD bus — chip_top inout
   // --------------------------------------------------------------------------
-  wire  [  47:0] PAD;
+  tri   [  47:0] PAD;
   logic [  47:0] pad_drv;
+  logic [  47:0] pad_oe;
 
   // EP upstream outputs -> chip downstream inputs.
   wire           ep_up_clk_r;
@@ -101,27 +108,45 @@ module tb_chip_top;
   wire           ep_dn_token_r;
 
   function automatic logic kz(input logic v);
-    kz = v;
+    kz = (v === 1'b1) ? 1'b1 : 1'b0;
   endfunction
 
-  assign PAD = pad_drv;
+  genvar pad_idx;
+  generate
+    for (pad_idx = 0; pad_idx < 48; pad_idx++) begin : gen_pad_drive
+      assign PAD[pad_idx] = pad_oe[pad_idx] ? pad_drv[pad_idx] : 1'bz;
+    end
+  endgenerate
 
   always_comb begin
-    pad_drv = 'z;
+    pad_drv = '0;
+    pad_oe = '0;
 
     // zeroscatter-compatible chip_top pad map.
     pad_drv[44] = kz(clk_i);  // core_clk
     pad_drv[45] = kz(hard_reset);
+    pad_oe[44] = tb_pad_drive_en;
+    pad_oe[45] = tb_pad_drive_en;
 
     // EP upstream outputs -> chip downstream inputs.
     pad_drv[8] = kz(ep_up_clk_r);
     pad_drv[9] = kz(ep_up_valid_r);
+    pad_oe[8] = tb_pad_drive_en;
+    pad_oe[9] = tb_pad_drive_en;
     for (int i = 0; i < CW; i++) begin
       pad_drv[dn_data_pad(i)] = kz(ep_up_data_r[i]);
+      pad_oe[dn_data_pad(i)]  = tb_pad_drive_en;
     end
 
     // Chip TX-side credit return into EP upstream.
     pad_drv[12] = kz(ep_dn_token_r);
+    pad_oe[12]  = tb_pad_drive_en;
+
+    // DFT scan inputs tied off when the scan config enables them.
+    pad_drv[11] = 1'b0;
+    pad_drv[46] = 1'b0;
+    pad_oe[11]  = tb_pad_drive_en;
+    pad_oe[46]  = tb_pad_drive_en;
   end
 
   function automatic int dn_data_pad(input int bit_idx);
@@ -192,8 +217,8 @@ module tb_chip_top;
   );
 
   // --------------------------------------------------------------------------
-  // FPGA endpoint: top_level_io packetizer + external bsg_link wrapper
-  // back-to-back with DUT over DDR pads.
+  // FPGA endpoint: decode packets from the DUT with axi_link_rx, and emit the
+  // FPGA-side WRITE / READ_RESP packet headers directly into bsg_link.
   // --------------------------------------------------------------------------
   logic          ep_tx_awvalid = 1'b0;
   logic          ep_tx_awready;
@@ -201,6 +226,7 @@ module tb_chip_top;
   logic [   7:0] ep_tx_awlen = '0;
   logic [   2:0] ep_tx_awsize = 3'b010;
   logic [   1:0] ep_tx_awburst = BURST_INCR;
+  logic [   1:0] ep_tx_awid = '0;
 
   logic          ep_tx_wvalid = 1'b0;
   logic          ep_tx_wready;
@@ -213,11 +239,19 @@ module tb_chip_top;
   logic [   7:0] ep_tx_arlen = '0;
   logic [   2:0] ep_tx_arsize = 3'b010;
   logic [   1:0] ep_tx_arburst = BURST_INCR;
+  logic          ep_tx_ar_is_burst = 1'b0;
+  logic [   1:0] ep_tx_arid = '0;
+  logic [   3:0] ep_tx_ar_tid = '0;
+  logic [   2:0] ep_tx_ar_eblock = '0;
+  logic [   4:0] ep_tx_ar_regaddr = '0;
 
   logic          ep_tx_rvalid = 1'b0;
   logic [DW-1:0] ep_tx_rdata = '0;
   logic          ep_tx_rlast = 1'b0;
   logic [   1:0] ep_tx_rresp = '0;
+  logic [   1:0] ep_tx_rid = '0;
+  logic          ep_tx_r_is_burst = 1'b0;
+  logic [   7:0] ep_tx_rlen = '0;
   logic          ep_tx_rready;
 
   logic          ep_tx_bvalid = 1'b0;
@@ -227,6 +261,7 @@ module tb_chip_top;
   logic          ep_rx_awvalid;
   logic [AW-1:0] ep_rx_awaddr;
   logic [   7:0] ep_rx_awlen;
+  logic [   1:0] ep_rx_awid;
   logic          ep_rx_wvalid;
   logic [DW-1:0] ep_rx_wdata;
   logic          ep_rx_wlast;
@@ -234,13 +269,20 @@ module tb_chip_top;
   logic          ep_rx_arready;
   logic [AW-1:0] ep_rx_araddr;
   logic [   7:0] ep_rx_arlen;
-  logic [  13:0] ep_rx_aruser;
+  logic          ep_rx_ar_is_burst;
+  logic [   1:0] ep_rx_arid;
+  logic [   3:0] ep_rx_ar_tid;
+  logic [   2:0] ep_rx_ar_eblock;
+  logic [   4:0] ep_rx_ar_regaddr;
   logic          ep_rx_aruser_is_meta;
+  logic [  12:0] ep_rx_aruser_meta;
   logic          ep_rx_rvalid;
   logic          ep_rx_rready = 1'b0;
   logic [DW-1:0] ep_rx_rdata;
   logic [   1:0] ep_rx_rresp;
   logic          ep_rx_rlast;
+  logic [   1:0] ep_rx_rid;
+  logic          ep_rx_r_is_burst;
   logic          ep_rx_bvalid;
   logic          ep_rx_bready = 1'b0;
   logic [   1:0] ep_rx_bresp;
@@ -252,139 +294,198 @@ module tb_chip_top;
   logic          ep_link_tx_valid;
   logic          ep_link_tx_ready;
 
-  bsg_link_wrapper #(
-      .FLIT_WIDTH   (FW),
-      .CHANNEL_WIDTH(CW)
-  ) u_fpga_link (
-      .core_clk_i                (clk_i),
-      .reset_i                   (rst_i),
-      .io_master_clk_i           (clk_i),
-      .upstream_io_link_reset_i  (ep_upstream_io_link_reset),
-      .async_token_reset_i       (ep_async_token_reset),
-      .token_clk_i               (dut_dn_token_r),
-      .downstream_io_link_reset_i(ep_downstream_io_link_reset),
-      .downstream_io_clk_i       (dut_up_clk_r),
-      .downstream_io_data_i      (dut_up_data_r),
-      .downstream_io_valid_i     (dut_up_valid_r),
-      .upstream_io_clk_r_o       (ep_up_clk_r),
-      .upstream_io_data_r_o      (ep_up_data_r),
-      .upstream_io_valid_r_o     (ep_up_valid_r),
-      .downstream_core_token_r_o (ep_dn_token_r),
-      .rx_data_o                 (ep_link_rx_data),
-      .rx_valid_o                (ep_link_rx_valid),
-      .rx_yumi_i                 (ep_link_rx_yumi),
-      .tx_data_i                 (ep_link_tx_data),
-      .tx_valid_i                (ep_link_tx_valid),
-      .tx_ready_o                (ep_link_tx_ready)
+  bsg_link_ddr_upstream #(
+      .width_p        (FW),
+      .channel_width_p(CW),
+      .num_channels_p (1),
+      .lg_fifo_depth_p(4)
+  ) u_fpga_tx_link (
+      .core_clk_i         (clk_i),
+      .core_link_reset_i  (rst_i),
+      .core_data_i        (ep_link_tx_data),
+      .core_valid_i       (ep_link_tx_valid),
+      .core_ready_o       (ep_link_tx_ready),
+      .io_clk_i           (dn_io_clk),
+      .io_link_reset_i    (ep_upstream_io_link_reset),
+      .async_token_reset_i(ep_async_token_reset),
+      .io_clk_r_o         (ep_up_clk_r),
+      .io_data_r_o        (ep_up_data_r),
+      .io_valid_r_o       (ep_up_valid_r),
+      .token_clk_i        (dut_dn_token_r)
   );
 
-  top_level_io #(
-      .flit_width_p           (FW),
-      .addr_width_p           (AW),
-      .channel_width_p        (CW),
-      .num_channels_p         (1),
-      .bypass_gearbox_p       (1),
-      .bypass_twofer_fifo_p   (1),
-      .rx_link_fifo_els_p     (64),
-      .rx_aw_desc_fifo_els_p  (2),
-      .rx_ar_desc_fifo_els_p  (2),
-      .rx_w_len_fifo_els_p    (4),
-      .rx_w_data_fifo_els_p   (8),
-      .rx_r_len_fifo_els_p    (4),
-      .rx_r_data_fifo_els_p   (64),
-      .tx_link_fifo_els_p     (64),
-      .tx_aw_desc_fifo_els_p  (2),
-      .tx_ar_desc_fifo_els_p  (2),
-      .tx_w_len_fifo_els_p    (4),
-      .tx_w_data_fifo_els_p   (8),
-      .tx_r_len_fifo_els_p    (4),
-      .tx_r_data_fifo_els_p   (64),
-      .tx_pkt_order_fifo_els_p(8)
-  ) u_fpga_ep (
-      .core_clk_i(clk_i),
-      .reset_i   (rst_i),
-
-      .link_rx_data_i (ep_link_rx_data),
-      .link_rx_valid_i(ep_link_rx_valid),
-      .link_rx_yumi_o (ep_link_rx_yumi),
-      .link_tx_data_o (ep_link_tx_data),
-      .link_tx_valid_o(ep_link_tx_valid),
-      .link_tx_ready_i(ep_link_tx_ready),
-
-      .tx_awvalid_i(ep_tx_awvalid),
-      .tx_awready_o(ep_tx_awready),
-      .tx_awaddr_i (ep_tx_awaddr),
-      .tx_awlen_i  (ep_tx_awlen),
-      .tx_awsize_i (ep_tx_awsize),
-      .tx_awburst_i(ep_tx_awburst),
-      .tx_wvalid_i (ep_tx_wvalid),
-      .tx_wready_o (ep_tx_wready),
-      .tx_wdata_i  (ep_tx_wdata),
-      .tx_wlast_i  (ep_tx_wlast),
-      .tx_arvalid_i(ep_tx_arvalid),
-      .tx_arready_o(ep_tx_arready),
-      .tx_araddr_i (ep_tx_araddr),
-      .tx_arlen_i  (ep_tx_arlen),
-      .tx_arsize_i (ep_tx_arsize),
-      .tx_arburst_i(ep_tx_arburst),
-      .tx_aruser_i (14'b0),
-      .tx_rvalid_i (ep_tx_rvalid),
-      .tx_rready_o (ep_tx_rready),
-      .tx_rdata_i  (ep_tx_rdata),
-      .tx_rresp_i  (ep_tx_rresp),
-      .tx_rlast_i  (ep_tx_rlast),
-      .tx_bvalid_i (ep_tx_bvalid),
-      .tx_bready_o (ep_tx_bready),
-      .tx_bresp_i  (ep_tx_bresp),
-
-      .rx_awvalid_o(ep_rx_awvalid),
-      .rx_awready_i(1'b1),
-      .rx_awaddr_o (ep_rx_awaddr),
-      .rx_awlen_o  (ep_rx_awlen),
-      .rx_awsize_o (),
-      .rx_awburst_o(),
-      .rx_wvalid_o (ep_rx_wvalid),
-      .rx_wready_i (1'b1),
-      .rx_wdata_o  (ep_rx_wdata),
-      .rx_wlast_o  (ep_rx_wlast),
-      .rx_arvalid_o(ep_rx_arvalid),
-      .rx_arready_i(ep_rx_arready),
-      .rx_araddr_o (ep_rx_araddr),
-      .rx_arlen_o  (ep_rx_arlen),
-      .rx_arsize_o (),
-      .rx_arburst_o(),
-      .rx_aruser_o (ep_rx_aruser),
-      .rx_rvalid_o (ep_rx_rvalid),
-      .rx_rready_i (ep_rx_rready),
-      .rx_rdata_o  (ep_rx_rdata),
-      .rx_rresp_o  (ep_rx_rresp),
-      .rx_rlast_o  (ep_rx_rlast),
-      .rx_bvalid_o (ep_rx_bvalid),
-      .rx_bready_i (ep_rx_bready),
-      .rx_bresp_o  (ep_rx_bresp)
+  bsg_sync_sync #(
+      .width_p(1)
+  ) u_fpga_rx_reset_sync (
+      .oclk_i     (dut_up_clk_r),
+      .iclk_data_i(ep_downstream_io_link_reset),
+      .oclk_data_o(ep_downstream_io_link_reset_sync)
   );
 
-  assign ep_rx_aruser_is_meta = ep_rx_aruser[13];
+  bsg_link_ddr_downstream #(
+      .width_p        (FW),
+      .channel_width_p(CW),
+      .num_channels_p (1),
+      .lg_fifo_depth_p(4)
+  ) u_fpga_rx_link (
+      .core_clk_i       (clk_i),
+      .core_link_reset_i(rst_i),
+      .io_link_reset_i  (ep_downstream_io_link_reset_sync),
+      .core_data_o      (ep_link_rx_data),
+      .core_valid_o     (ep_link_rx_valid),
+      .core_yumi_i      (ep_link_rx_yumi),
+      .io_clk_i         (dut_up_clk_r),
+      .io_data_i        (dut_up_data_r),
+      .io_valid_i       (dut_up_valid_r),
+      .core_token_r_o   (ep_dn_token_r)
+  );
+
+  axi_link_rx #(
+      .flit_width_p      (FW),
+      .addr_width_p      (AW),
+      .link_fifo_els_p   (64),
+      .aw_desc_fifo_els_p(2),
+      .ar_desc_fifo_els_p(2),
+      .w_len_fifo_els_p  (4),
+      .w_data_fifo_els_p (8),
+      .r_len_fifo_els_p  (4),
+      .r_data_fifo_els_p (64)
+  ) u_fpga_ep_rx (
+      .clk_i  (clk_i),
+      .reset_i(rst_i),
+
+      .link_rx_data_i(ep_link_rx_data),
+      .link_rx_v_i   (ep_link_rx_valid),
+      .link_rx_yumi_o(ep_link_rx_yumi),
+
+      .awvalid_o    (ep_rx_awvalid),
+      .awready_i    (1'b1),
+      .awaddr_o     (ep_rx_awaddr),
+      .awlen_o      (ep_rx_awlen),
+      .awsize_o     (),
+      .awburst_o    (),
+      .awid_o       (ep_rx_awid),
+      .wvalid_o     (ep_rx_wvalid),
+      .wready_i     (1'b1),
+      .wdata_o      (ep_rx_wdata),
+      .wlast_o      (ep_rx_wlast),
+      .arvalid_o    (ep_rx_arvalid),
+      .arready_i    (ep_rx_arready),
+      .araddr_o     (ep_rx_araddr),
+      .arlen_o      (ep_rx_arlen),
+      .arsize_o     (),
+      .arburst_o    (),
+      .ar_is_burst_o(ep_rx_ar_is_burst),
+      .arid_o       (ep_rx_arid),
+      .ar_tid_o     (ep_rx_ar_tid),
+      .ar_eblock_o  (ep_rx_ar_eblock),
+      .ar_regaddr_o (ep_rx_ar_regaddr),
+      .rvalid_o     (ep_rx_rvalid),
+      .rready_i     (ep_rx_rready),
+      .rdata_o      (ep_rx_rdata),
+      .rresp_o      (ep_rx_rresp),
+      .rlast_o      (ep_rx_rlast),
+      .rid_o        (ep_rx_rid),
+      .r_is_burst_o (ep_rx_r_is_burst)
+  );
+
+  localparam logic [1:0] EP_OP_WRITE = 2'b00;
+  localparam logic [1:0] EP_OP_READ_RESP = 2'b01;
+
+  typedef enum logic [1:0] {
+    EP_TX_IDLE,
+    EP_TX_WR_DATA,
+    EP_TX_R_DATA
+  } ep_tx_state_e;
+
+  ep_tx_state_e ep_tx_state_q, ep_tx_state_n;
+
+  always_comb begin
+    ep_link_tx_valid = 1'b0;
+    ep_link_tx_data  = '0;
+    ep_tx_awready    = 1'b0;
+    ep_tx_wready     = 1'b0;
+    ep_tx_arready    = 1'b0;
+    ep_tx_rready     = 1'b0;
+    ep_tx_bready     = 1'b1;
+    ep_tx_state_n    = ep_tx_state_q;
+
+    unique case (ep_tx_state_q)
+      EP_TX_IDLE: begin
+        if (ep_tx_rvalid) begin
+          ep_link_tx_valid = 1'b1;
+          ep_link_tx_data = {EP_OP_READ_RESP, ep_tx_rid, ep_tx_r_is_burst, 3'b0, ep_tx_rlen, 16'b0};
+          if (ep_link_tx_ready) ep_tx_state_n = EP_TX_R_DATA;
+        end else if (ep_tx_awvalid) begin
+          ep_link_tx_valid = 1'b1;
+          ep_link_tx_data  = {EP_OP_WRITE, ep_tx_awid, 12'b0, ep_tx_awaddr};
+          ep_tx_awready    = ep_link_tx_ready;
+          if (ep_link_tx_ready) ep_tx_state_n = EP_TX_WR_DATA;
+        end
+      end
+
+      EP_TX_WR_DATA: begin
+        ep_link_tx_valid = ep_tx_wvalid;
+        ep_link_tx_data  = ep_tx_wdata;
+        ep_tx_wready     = ep_link_tx_ready;
+        if (ep_tx_wvalid && ep_link_tx_ready) ep_tx_state_n = EP_TX_IDLE;
+      end
+
+      EP_TX_R_DATA: begin
+        ep_link_tx_valid = ep_tx_rvalid;
+        ep_link_tx_data  = ep_tx_rdata;
+        ep_tx_rready     = ep_link_tx_ready;
+        if (ep_tx_rvalid && ep_link_tx_ready && ep_tx_rlast) ep_tx_state_n = EP_TX_IDLE;
+      end
+
+      default: ep_tx_state_n = EP_TX_IDLE;
+    endcase
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      ep_tx_state_q <= EP_TX_IDLE;
+      ep_rx_bvalid  <= 1'b0;
+      ep_rx_bresp   <= '0;
+    end else begin
+      ep_tx_state_q <= ep_tx_state_n;
+      if (ep_rx_bvalid && ep_rx_bready) ep_rx_bvalid <= 1'b0;
+      if (ep_tx_state_q == EP_TX_WR_DATA && ep_tx_wvalid && ep_link_tx_ready) begin
+        ep_rx_bvalid <= 1'b1;
+        ep_rx_bresp  <= 2'b00;
+      end
+    end
+  end
+
+  assign ep_rx_aruser_is_meta = !ep_rx_ar_is_burst;
+  assign ep_rx_aruser_meta    = {1'b0, ep_rx_ar_tid, ep_rx_ar_eblock, ep_rx_ar_regaddr};
 
   // --------------------------------------------------------------------------
-  // FPGA memory model (identical to tb_mini_dice)
+  // FPGA memory model
   // --------------------------------------------------------------------------
   localparam int MetaBeatBytes = DW / 8;
 
-  typedef enum logic [0:0] {
+  localparam int unsigned TB_READ_RESP_DELAY_CYC = 10;
+  localparam int unsigned TB_READ_RESP_DELAY_W = (TB_READ_RESP_DELAY_CYC <= 1) ? 1 : $clog2(
+      TB_READ_RESP_DELAY_CYC + 1
+  );
+
+  typedef enum logic [1:0] {
     RD_IDLE,
+    RD_WAIT,
     RD_ACTIVE
   } rd_state_e;
-  rd_state_e               rd_state_q;
-  logic           [AW-1:0] rd_base_addr_q;
-  logic           [   7:0] rd_arlen_q;
-  logic           [   7:0] rd_beat_idx_q;
-  logic           [   1:0] rd_kind_q;
-  logic                    rd_aruser_is_meta_q;
-  logic           [  12:0] rd_aruser_q;
-  logic           [  15:0] csr_values          [0:7];
-  logic           [  15:0] start_pc_val;
-  dice_cta_desc_t          launch_desc;
+  rd_state_e                                 rd_state_q;
+  logic           [                  AW-1:0] rd_base_addr_q;
+  logic           [                     7:0] rd_arlen_q;
+  logic           [                     7:0] rd_beat_idx_q;
+  logic           [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
+  logic           [                     1:0] rd_kind_q;
+  logic                                      rd_aruser_is_meta_q;
+  logic           [                    12:0] rd_aruser_q;
+  logic           [                    15:0] csr_values          [0:7];
+  logic           [                    15:0] start_pc_val;
+  dice_cta_desc_t                            launch_desc;
 
   function automatic int unsigned fetch_beat(input logic [1:0] kind, input logic [AW-1:0] base,
                                              input int unsigned beat_idx);
@@ -419,6 +520,7 @@ module tb_chip_top;
       rd_base_addr_q      <= '0;
       rd_arlen_q          <= '0;
       rd_beat_idx_q       <= '0;
+      rd_delay_q          <= '0;
       rd_kind_q           <= '0;
       rd_aruser_is_meta_q <= 1'b0;
       rd_aruser_q         <= '0;
@@ -426,6 +528,9 @@ module tb_chip_top;
       ep_tx_rlast         <= 1'b0;
       ep_tx_rdata         <= '0;
       ep_tx_rresp         <= '0;
+      ep_tx_rid           <= '0;
+      ep_tx_r_is_burst    <= 1'b0;
+      ep_tx_rlen          <= '0;
       ep_tx_bvalid        <= 1'b0;
       ep_aw_pending       <= 1'b0;
       ep_aw_addr_lat      <= '0;
@@ -434,22 +539,33 @@ module tb_chip_top;
         RD_IDLE: begin
           if (ep_rx_arvalid && ep_rx_arready) begin
             logic [1:0] kind;
-            if (ep_rx_araddr >= start_pc_val) kind = 2'd1;
-            else if (ep_rx_arlen > 8'd8) kind = 2'd2;
+            if (ep_rx_ar_is_burst) kind = ep_rx_arid[0] ? 2'd2 : 2'd1;
             else kind = 2'd0;
             rd_base_addr_q <= ep_rx_araddr;
             rd_arlen_q <= ep_rx_arlen;
             rd_beat_idx_q <= '0;
             rd_kind_q <= kind;
             rd_aruser_is_meta_q <= ep_rx_aruser_is_meta;
-            rd_aruser_q <= ep_rx_aruser[12:0];
-            ep_tx_rdata <= pack_read_beat(
-                kind, ep_rx_araddr, 0, ep_rx_aruser_is_meta, ep_rx_aruser[12:0]
-            );
-            ep_tx_rlast <= (ep_rx_arlen == 8'd0);
+            rd_aruser_q <= ep_rx_aruser_meta;
+            ep_tx_rid <= ep_rx_arid;
+            ep_tx_r_is_burst <= ep_rx_ar_is_burst;
+            ep_tx_rlen <= ep_rx_arlen;
             ep_tx_rresp <= 2'b00;
+            rd_delay_q <= TB_READ_RESP_DELAY_W'(TB_READ_RESP_DELAY_CYC);
+            rd_state_q <= RD_WAIT;
+          end
+        end
+        RD_WAIT: begin
+          if (rd_delay_q == TB_READ_RESP_DELAY_W'(1)) begin
+            rd_delay_q <= '0;
+            ep_tx_rdata <= pack_read_beat(
+                rd_kind_q, rd_base_addr_q, 0, rd_aruser_is_meta_q, rd_aruser_q
+            );
+            ep_tx_rlast <= (rd_arlen_q == 8'd0);
             ep_tx_rvalid <= 1'b1;
             rd_state_q <= RD_ACTIVE;
+          end else begin
+            rd_delay_q <= rd_delay_q - TB_READ_RESP_DELAY_W'(1);
           end
         end
         RD_ACTIVE: begin
@@ -533,13 +649,17 @@ module tb_chip_top;
     if (!rst_i) begin
       if (ep_rx_arvalid && ep_rx_arready)
         $display(
-            "[EP] t=%0t AR addr=0x%04x len=%0d kind=%0d is_meta=%0b meta=0x%03x",
+            "[EP] t=%0t AR addr=0x%04x len=%0d kind=%0d is_burst=%0b id=%0d tid=%0d eblock=%0d reg=%0d meta=0x%03x",
             $time,
             ep_rx_araddr,
             ep_rx_arlen,
-            (ep_rx_araddr >= start_pc_val) ? 2'd1 : (ep_rx_arlen > 8'd8) ? 2'd2 : 2'd0,
-            ep_rx_aruser_is_meta,
-            ep_rx_aruser[12:0]
+            ep_rx_ar_is_burst ? (ep_rx_arid[0] ? 2'd2 : 2'd1) : 2'd0,
+            ep_rx_ar_is_burst,
+            ep_rx_arid,
+            ep_rx_ar_tid,
+            ep_rx_ar_eblock,
+            ep_rx_ar_regaddr,
+            ep_rx_aruser_meta
         );
       if (ep_rx_awvalid && !ep_aw_pending)
         $display("[EP] t=%0t AW addr=0x%04x", $time, ep_rx_awaddr);
@@ -578,6 +698,48 @@ module tb_chip_top;
             u_dut.u_mini_dice_top.dfetch_awvalid,
             u_dut.u_mini_dice_top.dfetch_awready,
             u_dut.u_mini_dice_top.dfetch_awaddr
+        );
+      if (|u_dut.u_mini_dice_top.dfetch_wvalid && |u_dut.u_mini_dice_top.dfetch_wready)
+        $display(
+            "[HIER][DC] t=%0t dfetch W  valid=%b ready=%b data=%p",
+            $time,
+            u_dut.u_mini_dice_top.dfetch_wvalid,
+            u_dut.u_mini_dice_top.dfetch_wready,
+            u_dut.u_mini_dice_top.dfetch_wdata
+        );
+      if (|u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_port_valid_lo) begin
+        $display(
+            "[HIER][CGRA_MEM] t=%0t tid=%0d eblock=%0d valid=%b op=%b p0={addr=0x%04x data=0x%04x} p1={addr=0x%04x data=0x%04x} p2={addr=0x%04x data=0x%04x} p3={addr=0x%04x data=0x%04x}",
+            $time, u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_tid_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_e_block_id_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_port_valid_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_port_op_lo,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_0,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_0,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_1,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_1,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_2,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_2,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_addr_lo_3,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.cgra_mem_data_lo_3);
+      end
+      if (|u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awvalid_o
+          || |u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wvalid_o)
+        $display(
+            "[HIER][FIFO_AXI] t=%0t awv=%b awr=%b wv=%b wr=%b p0={aw=0x%04x w=0x%04x} p1={aw=0x%04x w=0x%04x} p2={aw=0x%04x w=0x%04x} p3={aw=0x%04x w=0x%04x}",
+            $time,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awvalid_o,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awready_i,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wvalid_o,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wready_i,
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[0],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[0],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[1],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[1],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[2],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[2],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_awaddr_o[3],
+            u_dut.u_mini_dice_top.u_dice_core.u_dice_backend.axi_wdata_o[3]
         );
       if (u_dut.u_mini_dice_top.u_io_top.xbar_mem_req.ar_valid &&
         u_dut.u_mini_dice_top.u_io_top.xbar_mem_resp.ar_ready)
@@ -639,6 +801,7 @@ module tb_chip_top;
       ep_tx_awlen   = '0;
       ep_tx_awsize  = 3'b010;
       ep_tx_awburst = BURST_INCR;
+      ep_tx_awid    = '0;
       ep_tx_awvalid = 1'b1;
       do @(posedge clk_i); while (!ep_tx_awready);
       #1;
@@ -683,37 +846,44 @@ module tb_chip_top;
       ep_upstream_io_link_reset   = 1'b1;
       ep_downstream_io_link_reset = 1'b1;
       ep_async_token_reset        = 1'b0;
-      repeat (4) @(posedge clk_i);
+      tb_pad_drive_en             = 1'b0;
 
+
+      #(1ns);
+      tb_pad_drive_en = 1'b1;
+
+      // 1) Pulse FPGA TX async_token_reset while the FPGA TX I/O link is still
+      // in reset.  This initializes the sender-side credit counters.
+      repeat (8) @(posedge clk_i);
       @(posedge clk_i);
       #1;
       ep_async_token_reset = 1'b1;
-      @(posedge clk_i);
+      repeat (2) @(posedge clk_i);
       #1;
       ep_async_token_reset = 1'b0;
-      repeat (8) @(posedge clk_i);
 
+      // 2) Release FPGA TX I/O reset so the forwarded dn_clk on PAD[8] is
+      // running before the chip's RX async FIFO reset is released.
+      repeat (8) @(posedge dn_io_clk);
       @(posedge clk_i);
       #1;
       ep_upstream_io_link_reset = 1'b0;
-      repeat (8) @(posedge clk_i);
 
-      // Release chip hard reset first; chip_top internally sequences its
-      // bsg_link resets before Mini_Dice consumes the core-side flit stream.
+      // 3) Release chip hard reset; chip_top internally sequences its bsg_link
+      // reset domains over the next ~32 core clocks.
       @(posedge clk_i);
-      #1;
+      @(negedge clk_i);
       hard_reset = 1'b0;
       repeat (64) @(posedge clk_i);
 
-      // The chip is now driving up_clk, so the FPGA-side downstream receiver
+      // 4) The chip is now driving up_clk, so the FPGA-side downstream receiver
       // can safely start sampling the chip -> FPGA link.
       @(posedge clk_i);
-      #1;
+      #1ns;
       ep_downstream_io_link_reset = 1'b0;
       repeat (8) @(posedge clk_i);
 
-      // Release FPGA core-side logic last, matching the zeroscatter link TB.
-      @(posedge clk_i);
+      // 5) Release FPGA core-side logic last.
       #1;
       rst_i = 1'b0;
       repeat (4) @(posedge clk_i);
