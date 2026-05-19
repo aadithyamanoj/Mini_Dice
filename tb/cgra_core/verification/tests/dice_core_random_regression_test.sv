@@ -1,7 +1,7 @@
 // dice_core_random_regression_test
 // --------------------------------
 // Constrained-random regression with functional coverage. Randomizes:
-//   - thread_count    (1..32)
+//   - thread_count    (1..16)
 //   - inject_err      (whether to inject SLVERR on one load)
 //   - err_addr        (which load address if injecting)
 //   - fetch_latency   (mfetch/bsfetch resp_latency, 0..16)
@@ -19,7 +19,7 @@
 class cta_random_seq extends uvm_sequence #(cta_seq_item);
   `uvm_object_utils(cta_random_seq)
   cta_seq_item item;
-  int unsigned tcount = 32;
+  int unsigned tcount = 16;
   function new(string name = "cta_random_seq"); super.new(name); endfunction
   task body();
     item = cta_seq_item::type_id::create("item");
@@ -43,12 +43,13 @@ class dice_core_random_regression_test extends dice_core_full_mul_array_test;
   rand logic [15:0] r_err_addr;
   rand int unsigned r_fetch_latency;
 
-  constraint c_tcount  { r_tcount inside {[1:32]}; }
+  constraint c_tcount  { r_tcount inside {[1:16]}; }
   constraint c_err     {
     // 50/50 error injection
     r_inject_err dist {0 := 1, 1 := 1};
-    // If injecting, pick a real load address (A or B range under csrX0=1)
-    if (r_inject_err) r_err_addr inside {[16'h0001:16'h00FF]};
+    // If injecting, pick a real load address: A range [0x01..0x40] or B range
+    // [0x80..0xBF] under csrX0=1, csrX1=128, 16 threads × 4 ports.
+    if (r_inject_err) r_err_addr inside {[16'h0001:16'h0040], [16'h0080:16'h00BF]};
     else              r_err_addr == 16'h0000;
   }
   constraint c_latency { r_fetch_latency inside {0, 1, 2, 4, 8, 16}; }
@@ -58,11 +59,11 @@ class dice_core_random_regression_test extends dice_core_full_mul_array_test;
   covergroup cg_random;
     cp_tcount: coverpoint r_tcount {
       bins b_one      = {1};
-      bins b_2_8      = {[2:8]};
-      bins b_9_16     = {[9:16]};
-      bins b_17_24    = {[17:24]};
-      bins b_25_31    = {[25:31]};
-      bins b_32       = {32};
+      bins b_2_4      = {[2:4]};
+      bins b_5_8      = {[5:8]};
+      bins b_9_12     = {[9:12]};
+      bins b_13_15    = {[13:15]};
+      bins b_16       = {16};
     }
     cp_err: coverpoint r_inject_err {
       bins b_no_err   = {0};
@@ -90,7 +91,7 @@ class dice_core_random_regression_test extends dice_core_full_mul_array_test;
   virtual function void setup_thread_inputs_and_expectations();
     logic [15:0] a_addr, b_addr, c_addr, a_val, b_val, expected;
 
-    super.setup_thread_inputs_and_expectations();  // canonical 128 expects
+    super.setup_thread_inputs_and_expectations();  // canonical 64 expects
     env.sb.expected_data.delete();
     env.sb.stores_expected = 0;
 

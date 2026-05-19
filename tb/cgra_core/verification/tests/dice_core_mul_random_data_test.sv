@@ -23,7 +23,7 @@ class dice_core_mul_random_data_test extends dice_core_full_mul_array_test;
     logic [15:0] a_addr, b_addr, c_addr;
 
     // 1) Pull in the canonical setup: bitstreams (mfetch/bsfetch), CSRs,
-    //    read_mem[i]=i, and 128 canonical expect_store() calls.
+    //    read_mem[i]=i, and 64 canonical expect_store() calls.
     super.setup_thread_inputs_and_expectations();
 
     // 2) Wipe the canonical expectations, we're replacing them with random.
@@ -31,20 +31,17 @@ class dice_core_mul_random_data_test extends dice_core_full_mul_array_test;
     env.sb.stores_expected = 0;
 
     // 3) Override csrX0 to 0 to avoid address overlap between the A and B
-    //    ranges. Canonical csrX0=1 makes A span 0x01..0x80 and B span
-    //    0x80..0xFF — they share addr 0x80 (A[31,3] AND B[0,0]). The
-    //    canonical full_mul_array sails through that overlap by coincidence
-    //    (mem[0x80]=128 happens to be valid for both reads), but with
-    //    random data each address must hold one value, not two.
+    //    ranges. With csrX0=0, A spans 0x00..0x3F and B spans 0x80..0xBF —
+    //    disjoint. Random data needs each address to hold one value, not two.
     env.cta_agnt.drv.vif.csrX[0] = 16'd0;
 
     // 4) Override A/B load values and compute the new expected stores.
     //    Address layout (with csrX0=0, csrX1=128, csrX2=256, csrX3=4,
     //    csrX4..7=0..3):
-    //      A: addr = 0   + 4*tid + lane   →  range 0x0000..0x007F  (128 addrs)
-    //      B: addr = 128 + 4*tid + lane   →  range 0x0080..0x00FF  (128 addrs)
-    //      C: addr = 256 + 4*tid + lane   →  range 0x0100..0x017F  (128 addrs)
-    for (int t = 0; t < 32; t++) begin
+    //      A: addr = 0   + 4*tid + lane   →  range 0x0000..0x003F  (64 addrs)
+    //      B: addr = 128 + 4*tid + lane   →  range 0x0080..0x00BF  (64 addrs)
+    //      C: addr = 256 + 4*tid + lane   →  range 0x0100..0x013F  (64 addrs)
+    for (int t = 0; t < 16; t++) begin
       for (int k = 0; k < 4; k++) begin
         a_val  = $urandom() & 16'hFFFF;
         b_val  = $urandom() & 16'hFFFF;
@@ -59,7 +56,7 @@ class dice_core_mul_random_data_test extends dice_core_full_mul_array_test;
     end
 
     `uvm_info("RAND",
-      $sformatf("Registered 128 random A*B expectations (32 threads x 4 lanes)"),
+      $sformatf("Registered 64 random A*B expectations (16 threads x 4 lanes)"),
       UVM_LOW)
   endfunction
 

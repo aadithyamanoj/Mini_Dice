@@ -12,7 +12,7 @@
         "z": 1
       },
       "start_pc": 4096,
-      "thread_count": 32
+      "thread_count": 16
     }
   },
   "pgraph_metadata": [
@@ -33,10 +33,10 @@
         "in_regs_bitmap": 0,
         "lat": 6,
         "ld_dest_regs": [
-          0,
-          1,
+          3,
           2,
-          3
+          1,
+          0
         ],
         "num_stores": 0,
         "out_regs_bitmap": 0,
@@ -62,10 +62,10 @@
         "in_regs_bitmap": 0,
         "lat": 6,
         "ld_dest_regs": [
-          4,
-          5,
+          7,
           6,
-          7
+          5,
+          4
         ],
         "num_stores": 0,
         "out_regs_bitmap": 0,
@@ -483,326 +483,6 @@
         {
           "addr": 319,
           "data": 255,
-          "strb": 3
-        },
-        {
-          "addr": 320,
-          "data": 257,
-          "strb": 3
-        },
-        {
-          "addr": 321,
-          "data": 259,
-          "strb": 3
-        },
-        {
-          "addr": 322,
-          "data": 261,
-          "strb": 3
-        },
-        {
-          "addr": 323,
-          "data": 263,
-          "strb": 3
-        },
-        {
-          "addr": 324,
-          "data": 265,
-          "strb": 3
-        },
-        {
-          "addr": 325,
-          "data": 267,
-          "strb": 3
-        },
-        {
-          "addr": 326,
-          "data": 269,
-          "strb": 3
-        },
-        {
-          "addr": 327,
-          "data": 271,
-          "strb": 3
-        },
-        {
-          "addr": 328,
-          "data": 273,
-          "strb": 3
-        },
-        {
-          "addr": 329,
-          "data": 275,
-          "strb": 3
-        },
-        {
-          "addr": 330,
-          "data": 277,
-          "strb": 3
-        },
-        {
-          "addr": 331,
-          "data": 279,
-          "strb": 3
-        },
-        {
-          "addr": 332,
-          "data": 281,
-          "strb": 3
-        },
-        {
-          "addr": 333,
-          "data": 283,
-          "strb": 3
-        },
-        {
-          "addr": 334,
-          "data": 285,
-          "strb": 3
-        },
-        {
-          "addr": 335,
-          "data": 287,
-          "strb": 3
-        },
-        {
-          "addr": 336,
-          "data": 289,
-          "strb": 3
-        },
-        {
-          "addr": 337,
-          "data": 291,
-          "strb": 3
-        },
-        {
-          "addr": 338,
-          "data": 293,
-          "strb": 3
-        },
-        {
-          "addr": 339,
-          "data": 295,
-          "strb": 3
-        },
-        {
-          "addr": 340,
-          "data": 297,
-          "strb": 3
-        },
-        {
-          "addr": 341,
-          "data": 299,
-          "strb": 3
-        },
-        {
-          "addr": 342,
-          "data": 301,
-          "strb": 3
-        },
-        {
-          "addr": 343,
-          "data": 303,
-          "strb": 3
-        },
-        {
-          "addr": 344,
-          "data": 305,
-          "strb": 3
-        },
-        {
-          "addr": 345,
-          "data": 307,
-          "strb": 3
-        },
-        {
-          "addr": 346,
-          "data": 309,
-          "strb": 3
-        },
-        {
-          "addr": 347,
-          "data": 311,
-          "strb": 3
-        },
-        {
-          "addr": 348,
-          "data": 313,
-          "strb": 3
-        },
-        {
-          "addr": 349,
-          "data": 315,
-          "strb": 3
-        },
-        {
-          "addr": 350,
-          "data": 317,
-          "strb": 3
-        },
-        {
-          "addr": 351,
-          "data": 319,
-          "strb": 3
-        },
-        {
-          "addr": 352,
-          "data": 321,
-          "strb": 3
-        },
-        {
-          "addr": 353,
-          "data": 323,
-          "strb": 3
-        },
-        {
-          "addr": 354,
-          "data": 325,
-          "strb": 3
-        },
-        {
-          "addr": 355,
-          "data": 327,
-          "strb": 3
-        },
-        {
-          "addr": 356,
-          "data": 329,
-          "strb": 3
-        },
-        {
-          "addr": 357,
-          "data": 331,
-          "strb": 3
-        },
-        {
-          "addr": 358,
-          "data": 333,
-          "strb": 3
-        },
-        {
-          "addr": 359,
-          "data": 335,
-          "strb": 3
-        },
-        {
-          "addr": 360,
-          "data": 337,
-          "strb": 3
-        },
-        {
-          "addr": 361,
-          "data": 339,
-          "strb": 3
-        },
-        {
-          "addr": 362,
-          "data": 341,
-          "strb": 3
-        },
-        {
-          "addr": 363,
-          "data": 343,
-          "strb": 3
-        },
-        {
-          "addr": 364,
-          "data": 345,
-          "strb": 3
-        },
-        {
-          "addr": 365,
-          "data": 347,
-          "strb": 3
-        },
-        {
-          "addr": 366,
-          "data": 349,
-          "strb": 3
-        },
-        {
-          "addr": 367,
-          "data": 351,
-          "strb": 3
-        },
-        {
-          "addr": 368,
-          "data": 353,
-          "strb": 3
-        },
-        {
-          "addr": 369,
-          "data": 355,
-          "strb": 3
-        },
-        {
-          "addr": 370,
-          "data": 357,
-          "strb": 3
-        },
-        {
-          "addr": 371,
-          "data": 359,
-          "strb": 3
-        },
-        {
-          "addr": 372,
-          "data": 361,
-          "strb": 3
-        },
-        {
-          "addr": 373,
-          "data": 363,
-          "strb": 3
-        },
-        {
-          "addr": 374,
-          "data": 365,
-          "strb": 3
-        },
-        {
-          "addr": 375,
-          "data": 367,
-          "strb": 3
-        },
-        {
-          "addr": 376,
-          "data": 369,
-          "strb": 3
-        },
-        {
-          "addr": 377,
-          "data": 371,
-          "strb": 3
-        },
-        {
-          "addr": 378,
-          "data": 373,
-          "strb": 3
-        },
-        {
-          "addr": 379,
-          "data": 375,
-          "strb": 3
-        },
-        {
-          "addr": 380,
-          "data": 377,
-          "strb": 3
-        },
-        {
-          "addr": 381,
-          "data": 379,
-          "strb": 3
-        },
-        {
-          "addr": 382,
-          "data": 381,
-          "strb": 3
-        },
-        {
-          "addr": 383,
-          "data": 383,
           "strb": 3
         }
       ]

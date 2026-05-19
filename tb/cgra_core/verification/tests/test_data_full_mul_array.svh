@@ -13,7 +13,7 @@
       mfetch_words[ 2] = 16'h0018;
       mfetch_words[ 3] = 16'h0000;
       mfetch_words[ 4] = 16'h6000;
-      mfetch_words[ 5] = 16'h21C0;
+      mfetch_words[ 5] = 16'h0000;
       mfetch_words[ 6] = 16'h0000;
       mfetch_words[ 7] = 16'h0000;
       mfetch_words[ 8] = 16'h0000;
@@ -36,8 +36,8 @@
       mfetch_words[ 2] = 16'h0039;
       mfetch_words[ 3] = 16'h0000;
       mfetch_words[ 4] = 16'h6000;
-      mfetch_words[ 5] = 16'h21C0;
-      mfetch_words[ 6] = 16'h0080;
+      mfetch_words[ 5] = 16'h8000;
+      mfetch_words[ 6] = 16'h0000;
       mfetch_words[ 7] = 16'h0000;
       mfetch_words[ 8] = 16'h0000;
       mfetch_words[ 9] = 16'h0000;
@@ -59,8 +59,8 @@
       mfetch_words[ 2] = 16'h0FFF;
       mfetch_words[ 3] = 16'hFC00;
       mfetch_words[ 4] = 16'h5003;
-      mfetch_words[ 5] = 16'h21C0;
-      mfetch_words[ 6] = 16'h0100;
+      mfetch_words[ 5] = 16'h0000;
+      mfetch_words[ 6] = 16'h0001;
       mfetch_words[ 7] = 16'h0000;
       mfetch_words[ 8] = 16'h0000;
       mfetch_words[ 9] = 16'h0000;
@@ -82,8 +82,8 @@
       mfetch_words[ 2] = 16'hF0FF;
       mfetch_words[ 3] = 16'h0000;
       mfetch_words[ 4] = 16'h6000;
-      mfetch_words[ 5] = 16'h21C0;
-      mfetch_words[ 6] = 16'h0180;
+      mfetch_words[ 5] = 16'h8000;
+      mfetch_words[ 6] = 16'h0001;
       mfetch_words[ 7] = 16'h0000;
       mfetch_words[ 8] = 16'h0000;
       mfetch_words[ 9] = 16'h0000;
@@ -105,8 +105,8 @@
       mfetch_words[ 2] = 16'h00FF;
       mfetch_words[ 3] = 16'hFC00;
       mfetch_words[ 4] = 16'h5003;
-      mfetch_words[ 5] = 16'h21C0;
-      mfetch_words[ 6] = 16'h0200;
+      mfetch_words[ 5] = 16'h0000;
+      mfetch_words[ 6] = 16'h0002;
       mfetch_words[ 7] = 16'h0000;
       mfetch_words[ 8] = 16'h0000;
       mfetch_words[ 9] = 16'h0000;
@@ -505,7 +505,7 @@
       env.axil_agnt.drv.read_mem[16'(i)] = 16'(i);
     end
 
-    // ---- Expected stores (128 from test vector) ----
+    // ---- Expected stores (64 from test vector) ----
     env.sb.expect_store(16'h0100, 16'h0080);
     env.sb.expect_store(16'h0101, 16'h0102);
     env.sb.expect_store(16'h0102, 16'h0186);
@@ -570,70 +570,6 @@
     env.sb.expect_store(16'h013D, 16'h2DC6);
     env.sb.expect_store(16'h013E, 16'h2EC2);
     env.sb.expect_store(16'h013F, 16'h2FC0);
-    env.sb.expect_store(16'h0140, 16'h30C0);
-    env.sb.expect_store(16'h0141, 16'h31C2);
-    env.sb.expect_store(16'h0142, 16'h32C6);
-    env.sb.expect_store(16'h0143, 16'h33CC);
-    env.sb.expect_store(16'h0144, 16'h34D4);
-    env.sb.expect_store(16'h0145, 16'h35DE);
-    env.sb.expect_store(16'h0146, 16'h36EA);
-    env.sb.expect_store(16'h0147, 16'h37F8);
-    env.sb.expect_store(16'h0148, 16'h3908);
-    env.sb.expect_store(16'h0149, 16'h3A1A);
-    env.sb.expect_store(16'h014A, 16'h3B2E);
-    env.sb.expect_store(16'h014B, 16'h3C44);
-    env.sb.expect_store(16'h014C, 16'h3D5C);
-    env.sb.expect_store(16'h014D, 16'h3E76);
-    env.sb.expect_store(16'h014E, 16'h3F92);
-    env.sb.expect_store(16'h014F, 16'h40B0);
-    env.sb.expect_store(16'h0150, 16'h41D0);
-    env.sb.expect_store(16'h0151, 16'h42F2);
-    env.sb.expect_store(16'h0152, 16'h4416);
-    env.sb.expect_store(16'h0153, 16'h453C);
-    env.sb.expect_store(16'h0154, 16'h4664);
-    env.sb.expect_store(16'h0155, 16'h478E);
-    env.sb.expect_store(16'h0156, 16'h48BA);
-    env.sb.expect_store(16'h0157, 16'h49E8);
-    env.sb.expect_store(16'h0158, 16'h4B18);
-    env.sb.expect_store(16'h0159, 16'h4C4A);
-    env.sb.expect_store(16'h015A, 16'h4D7E);
-    env.sb.expect_store(16'h015B, 16'h4EB4);
-    env.sb.expect_store(16'h015C, 16'h4FEC);
-    env.sb.expect_store(16'h015D, 16'h5126);
-    env.sb.expect_store(16'h015E, 16'h5262);
-    env.sb.expect_store(16'h015F, 16'h53A0);
-    env.sb.expect_store(16'h0160, 16'h54E0);
-    env.sb.expect_store(16'h0161, 16'h5622);
-    env.sb.expect_store(16'h0162, 16'h5766);
-    env.sb.expect_store(16'h0163, 16'h58AC);
-    env.sb.expect_store(16'h0164, 16'h59F4);
-    env.sb.expect_store(16'h0165, 16'h5B3E);
-    env.sb.expect_store(16'h0166, 16'h5C8A);
-    env.sb.expect_store(16'h0167, 16'h5DD8);
-    env.sb.expect_store(16'h0168, 16'h5F28);
-    env.sb.expect_store(16'h0169, 16'h607A);
-    env.sb.expect_store(16'h016A, 16'h61CE);
-    env.sb.expect_store(16'h016B, 16'h6324);
-    env.sb.expect_store(16'h016C, 16'h647C);
-    env.sb.expect_store(16'h016D, 16'h65D6);
-    env.sb.expect_store(16'h016E, 16'h6732);
-    env.sb.expect_store(16'h016F, 16'h6890);
-    env.sb.expect_store(16'h0170, 16'h69F0);
-    env.sb.expect_store(16'h0171, 16'h6B52);
-    env.sb.expect_store(16'h0172, 16'h6CB6);
-    env.sb.expect_store(16'h0173, 16'h6E1C);
-    env.sb.expect_store(16'h0174, 16'h6F84);
-    env.sb.expect_store(16'h0175, 16'h70EE);
-    env.sb.expect_store(16'h0176, 16'h725A);
-    env.sb.expect_store(16'h0177, 16'h73C8);
-    env.sb.expect_store(16'h0178, 16'h7538);
-    env.sb.expect_store(16'h0179, 16'h76AA);
-    env.sb.expect_store(16'h017A, 16'h781E);
-    env.sb.expect_store(16'h017B, 16'h7994);
-    env.sb.expect_store(16'h017C, 16'h7B0C);
-    env.sb.expect_store(16'h017D, 16'h7C86);
-    env.sb.expect_store(16'h017E, 16'h7E02);
-    env.sb.expect_store(16'h017F, 16'h7F80);
 
     // ---- CSRs ----
     env.cta_agnt.drv.vif.csrX[0] = 16'd1;

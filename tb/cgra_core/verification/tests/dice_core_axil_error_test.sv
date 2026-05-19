@@ -1,7 +1,7 @@
 // dice_core_axil_error_test
 // -------------------------
 // full_mul_array_test + SLVERR injection on one read address. Verifies the
-// DUT survives a non-OKAY rresp without deadlocking. All 128 stores still
+// DUT survives a non-OKAY rresp without deadlocking. All 64 stores still
 // match (data is still delivered, only the resp code differs).
 //
 // How to run:
@@ -18,8 +18,8 @@ class dice_core_axil_error_test extends dice_core_full_mul_array_test;
   endfunction
 
   virtual function void setup_thread_inputs_and_expectations();
-    // Canonical 32-thread / 128-store setup (read_mem[i]=i, all 5 bitstreams,
-    // CSRs, 128 expected stores).
+    // Canonical 16-thread / 64-store setup (read_mem[i]=i, all 5 bitstreams,
+    // CSRs, 64 expected stores).
     super.setup_thread_inputs_and_expectations();
 
     // Inject SLVERR on the chosen address. The mem value is still returned;

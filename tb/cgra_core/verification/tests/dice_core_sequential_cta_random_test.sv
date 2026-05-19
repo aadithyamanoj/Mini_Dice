@@ -18,7 +18,7 @@
 class cta_rand_multi_seq extends uvm_sequence #(cta_seq_item);
   `uvm_object_utils(cta_rand_multi_seq)
   cta_seq_item item;
-  int unsigned tcount = 32;
+  int unsigned tcount = 16;
   dice_cta_id_t cta_id_v = '{x: 0, y: 0, z: 0};
   function new(string name = "cta_rand_multi_seq"); super.new(name); endfunction
   task body();
@@ -45,8 +45,8 @@ class dice_core_sequential_cta_random_test extends dice_core_full_mul_array_test
   rand logic [15:0] r_csr0   [2];   // A_base
   rand logic [15:0] r_csr1   [2];   // B_base
   rand logic [15:0] r_csr2   [2];   // C_base
-  rand logic [15:0] r_A      [2][128];
-  rand logic [15:0] r_B      [2][128];
+  rand logic [15:0] r_A      [2][64];
+  rand logic [15:0] r_B      [2][64];
 
   // Each CTA's memory region (A | B | C) occupies 384 bytes (128 each for
   // A, B, C). Place them in disjoint windows of the 0..0x3FF address space:
@@ -54,7 +54,7 @@ class dice_core_sequential_cta_random_test extends dice_core_full_mul_array_test
   //   CTA 1: A_base in [0x0200:0x0240], B = A+128, C = B+128
   constraint c_per_cta {
     foreach (r_kernel[i]) r_kernel[i] inside {OP_MUL, OP_ADD};
-    foreach (r_tcount[i]) r_tcount[i] inside {[1:32]};
+    foreach (r_tcount[i]) r_tcount[i] inside {[1:16]};
     r_csr0[0] inside {[16'h0000 : 16'h0040]};
     r_csr1[0] == r_csr0[0] + 16'd128;
     r_csr2[0] == r_csr1[0] + 16'd128;
@@ -68,14 +68,14 @@ class dice_core_sequential_cta_random_test extends dice_core_full_mul_array_test
     cp_cta0_kernel: coverpoint r_kernel[0] { bins b_mul = {OP_MUL}; bins b_add = {OP_ADD}; }
     cp_cta1_kernel: coverpoint r_kernel[1] { bins b_mul = {OP_MUL}; bins b_add = {OP_ADD}; }
     cp_cta0_tcount: coverpoint r_tcount[0] {
-      bins b_lo  = {[1:8]};
-      bins b_mid = {[9:24]};
-      bins b_hi  = {[25:32]};
+      bins b_lo  = {[1:4]};
+      bins b_mid = {[5:12]};
+      bins b_hi  = {[13:16]};
     }
     cp_cta1_tcount: coverpoint r_tcount[1] {
-      bins b_lo  = {[1:8]};
-      bins b_mid = {[9:24]};
-      bins b_hi  = {[25:32]};
+      bins b_lo  = {[1:4]};
+      bins b_mid = {[5:12]};
+      bins b_hi  = {[13:16]};
     }
     cross_kernel_pair: cross cp_cta0_kernel, cp_cta1_kernel;
     cross_tcount_pair: cross cp_cta0_tcount, cp_cta1_tcount;
@@ -171,7 +171,7 @@ class dice_core_sequential_cta_random_test extends dice_core_full_mul_array_test
   endfunction
 
   virtual function void setup_thread_inputs_and_expectations();
-    super.setup_thread_inputs_and_expectations();   // canonical mfetch/bsfetch + 128 mul expects
+    super.setup_thread_inputs_and_expectations();   // canonical mfetch/bsfetch + 64 mul expects
     env.sb.expected_data.delete();                    // wipe canonical store expects
     env.sb.stores_expected = 0;
 

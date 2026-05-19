@@ -50,14 +50,16 @@ def encode_meta(meta: dict) -> int:
     bm = meta["branch_meta"]
     ld = meta["ld_dest_regs"]
     val = 0
-    val |= (meta["bitstream_addr"]   & 0xFFFF) << 94
-    val |= (meta["bitstream_length"] & 0xFF)   << 86
+    val |= (meta["bitstream_addr"]   & 0xFFFF) << 86
     val |= (meta["unrolling_factor"] & 0x3)    << 84
     val |= (meta["lat"]              & 0xFF)   << 76
     val |= (meta["in_regs_bitmap"]   & ((1 << 18) - 1)) << 58
     val |= (meta["out_regs_bitmap"]  & ((1 << 18) - 1)) << 40
+    # ld_dest_regs is packed MSB-first in the SV struct: JSON ld_regs[0] lands
+    # at struct.ld_dest_regs[3] (the high element), not [0]. This matches
+    # tb/test_vectors/gen_memfile.py and Aadithya's bb058ec convention.
     for i in range(4):
-        val |= (ld[i] & 0x1F) << (20 + 5 * i)
+        val |= (ld[i] & 0x1F) << (20 + 5 * (3 - i))
     val |= (meta["num_stores"]   & 0x7) << 17
     val |= (bm["branch_ena"]     & 0x1) << 16
     val |= (bm["branch_uni"]     & 0x1) << 15

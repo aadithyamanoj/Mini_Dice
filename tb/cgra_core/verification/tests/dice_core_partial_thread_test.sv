@@ -1,11 +1,11 @@
 // dice_core_partial_thread_test
 // -----------------------------
-// full_mul_array_test dispatched with thread_count=17 (a non-power-of-two
-// count that's < 32). Exercises the dispatcher with active_mask=0x0001FFFF
-// — the only test in the suite that uses a partial mask. Expected count:
-// 68 stores (17 threads * 4 lanes).
+// full_mul_array_test dispatched with thread_count=9 (a non-power-of-two
+// count that's < 16). Exercises the dispatcher with active_mask=0x01FF — the
+// only test in the suite that uses a partial mask. Expected count: 36 stores
+// (9 threads * 4 lanes).
 //
-// Subclass and override `tcount` to sweep other counts (1, 16, 24, 31, ...).
+// Subclass and override `tcount` to sweep other counts (1, 5, 11, 15, ...).
 //
 // How to run:
 //   ../simv +UVM_TESTNAME=dice_core_partial_thread_test +UVM_VERBOSITY=UVM_LOW
@@ -13,7 +13,7 @@
 class cta_partial_thread_seq extends uvm_sequence #(cta_seq_item);
   `uvm_object_utils(cta_partial_thread_seq)
   cta_seq_item item;
-  int unsigned tcount = 17;
+  int unsigned tcount = 9;
   function new(string name = "cta_partial_thread_seq"); super.new(name); endfunction
   task body();
     item = cta_seq_item::type_id::create("item");
@@ -31,9 +31,9 @@ endclass
 class dice_core_partial_thread_test extends dice_core_full_mul_array_test;
   `uvm_component_utils(dice_core_partial_thread_test)
 
-  // Number of active threads in the CTA. 17 is the canonical non-power-of-two
-  // probe; subclasses can override for sweeps (1, 5, 16, 17, 24, 31).
-  int unsigned tcount = 17;
+  // Number of active threads in the CTA. 9 is the canonical non-power-of-two
+  // probe; subclasses can override for sweeps (1, 5, 11, 15).
+  int unsigned tcount = 9;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -45,7 +45,7 @@ class dice_core_partial_thread_test extends dice_core_full_mul_array_test;
   virtual function void setup_thread_inputs_and_expectations();
     logic [15:0] a_addr, b_addr, c_addr, a_val, b_val, expected;
 
-    super.setup_thread_inputs_and_expectations();   // 128 canonical expects
+    super.setup_thread_inputs_and_expectations();   // 64 canonical expects
     env.sb.expected_data.delete();                   // wipe
     env.sb.stores_expected = 0;
 
@@ -64,11 +64,11 @@ class dice_core_partial_thread_test extends dice_core_full_mul_array_test;
     end
 
     `uvm_info("PARTIAL",
-      $sformatf("Expecting %0d stores from tids 0..%0d (thread_count=%0d, active_mask=0x%08x)",
-                tcount*4, tcount-1, tcount, (32'h1 << tcount) - 1), UVM_LOW)
+      $sformatf("Expecting %0d stores from tids 0..%0d (thread_count=%0d, active_mask=0x%04x)",
+                tcount*4, tcount-1, tcount, (16'h1 << tcount) - 1), UVM_LOW)
   endfunction
 
-  // Override run_body to dispatch with `tcount` threads instead of 32.
+  // Override run_body to dispatch with `tcount` threads instead of 16.
   virtual task run_body(uvm_phase phase);
     cta_partial_thread_seq seq;
     setup_thread_inputs_and_expectations();

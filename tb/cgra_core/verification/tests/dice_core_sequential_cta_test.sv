@@ -15,8 +15,8 @@
 //     CTA 1 starts → every kernel re-fetches from bsfetch)
 //
 // Memory map (disjoint regions so CTA 1's loads don't see CTA 0's stores):
-//   CTA 0:  A=0x0001..0x0080  B=0x0080..0x00FF  C=0x0100..0x017F  (canonical)
-//   CTA 1:  A=0x0180..0x01FF  B=0x0200..0x027F  C=0x0280..0x02FF
+//   CTA 0:  A=0x0001..0x0040  B=0x0080..0x00BF  C=0x0100..0x013F  (canonical)
+//   CTA 1:  A=0x0180..0x01BF  B=0x0200..0x023F  C=0x0280..0x02BF
 //
 // cta_complete_valid only pulses once (the FE asserts it on CTA 0's retire
 // and the level stays held). We use scoreboard.stores_seen as the completion
@@ -29,7 +29,7 @@
 class cta_second_seq extends uvm_sequence #(cta_seq_item);
   `uvm_object_utils(cta_second_seq)
   cta_seq_item item;
-  int unsigned tcount = 32;
+  int unsigned tcount = 16;
   dice_cta_id_t cta_id_v = '{x: 1, y: 0, z: 0};
   function new(string name = "cta_second_seq"); super.new(name); endfunction
   task body();
@@ -73,7 +73,7 @@ class dice_core_sequential_cta_test extends dice_core_full_mul_array_test;
     end
 
     // Expected stores for CTA 1: data = A * B (mod 2^16) per (tid, lane).
-    for (int t = 0; t < 32; t++) begin
+    for (int t = 0; t < 16; t++) begin
       for (int k = 0; k < 4; k++) begin
         a_addr   = CTA1_CSR0 + 16'(4*t + k);
         b_addr   = CTA1_CSR1 + 16'(4*t + k);
@@ -103,7 +103,7 @@ class dice_core_sequential_cta_test extends dice_core_full_mul_array_test;
     // csrX[3..7] keep parent's values (stride=4, lane_offsets={0,1,2,3})
 
     seq2 = cta_second_seq::type_id::create("seq2");
-    seq2.tcount   = 32;
+    seq2.tcount   = 16;
     seq2.cta_id_v = '{x: 1, y: 0, z: 0};
     t1_start = $time;
     seq2.start(env.cta_agnt.seqr);
@@ -115,12 +115,12 @@ class dice_core_sequential_cta_test extends dice_core_full_mul_array_test;
     // stays held. Use scoreboard.stores_seen to detect CTA 1 completion.
     fork
       begin : w_done
-        // Total expected = 128 (CTA 0, already done) + 128 (CTA 1)
-        while (env.sb.stores_seen < 256) @(posedge env.cta_agnt.mon.vif.clk);
+        // Total expected = 64 (CTA 0, already done) + 64 (CTA 1)
+        while (env.sb.stores_seen < 128) @(posedge env.cta_agnt.mon.vif.clk);
         repeat (50) @(posedge env.cta_agnt.mon.vif.clk);   // tail drain
         t1_end = $time;
         `uvm_info("SEQ_CTA",
-          $sformatf("CTA 1 stores complete (256 total); elapsed=%0t ns",
+          $sformatf("CTA 1 stores complete (128 total); elapsed=%0t ns",
                     (t1_end - t1_start)/1000),
           UVM_NONE)
         disable w_timo;
@@ -128,7 +128,7 @@ class dice_core_sequential_cta_test extends dice_core_full_mul_array_test;
       begin : w_timo
         repeat (CTA1_TIMEOUT_CYCLES) @(posedge env.cta_agnt.mon.vif.clk);
         `uvm_fatal("SEQ_CTA",
-          $sformatf("CTA 1 timeout after %0d cycles (saw %0d/256 stores)",
+          $sformatf("CTA 1 timeout after %0d cycles (saw %0d/128 stores)",
                     CTA1_TIMEOUT_CYCLES, env.sb.stores_seen))
         disable w_done;
       end

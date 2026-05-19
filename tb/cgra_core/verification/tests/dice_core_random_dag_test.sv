@@ -5,7 +5,7 @@
 //   - compute_kernel  (MUL or ADD at eblock 2)
 //   - csrX0..csrX7    (A_base, B_base, C_base, stride, lane_offsets)
 //   - read_mem[A..B]  (random 16-bit values, not the canonical mem[i]=i)
-//   - thread_count    (1..32)
+//   - thread_count    (1..16)
 //   - inject_err / err_addr / fetch_latency
 //
 // Expected stores are recomputed at runtime from (kernel, CSRs, A/B data,
@@ -21,7 +21,7 @@
 class cta_dag_seq extends uvm_sequence #(cta_seq_item);
   `uvm_object_utils(cta_dag_seq)
   cta_seq_item item;
-  int unsigned tcount = 32;
+  int unsigned tcount = 16;
   function new(string name = "cta_dag_seq"); super.new(name); endfunction
   task body();
     item = cta_seq_item::type_id::create("item");
@@ -53,20 +53,20 @@ class dice_core_random_dag_test extends dice_core_full_mul_array_test;
   rand logic [15:0] r_err_addr;
   rand int unsigned r_fetch_latency;
 
-  // Random A/B values per (tid, lane). Sized for max 32 threads * 4 lanes.
-  rand logic [15:0] r_A [128];
-  rand logic [15:0] r_B [128];
+  // Random A/B values per (tid, lane). Sized for max 16 threads * 4 lanes.
+  rand logic [15:0] r_A [64];
+  rand logic [15:0] r_B [64];
 
   // ----------------------------------------------------------------------
   // Constraints
   // ----------------------------------------------------------------------
   constraint c_kernel  { r_kernel inside {OP_MUL, OP_ADD}; }
-  constraint c_tcount  { r_tcount inside {[1:32]}; }
+  constraint c_tcount  { r_tcount inside {[1:16]}; }
 
   // CSR ranges chosen so the three regions {A, B, C} don't overlap and
   // stay in the 0x0000..0x01FF window the slave's read_mem covers.
-  //   stride is 4 words → max addr touched = base + 31*4 + 3 = base + 127
-  //   so we need (base_X + 128) <= base_Y for the next region.
+  //   stride is 4 words → max addr touched = base + 15*4 + 3 = base + 63
+  //   so we need (base_X + 64) <= base_Y for the next region.
   constraint c_csrs    {
     r_csrX3 == 16'd4;
     r_csrX4_7[0] == 16'd0;
@@ -78,7 +78,7 @@ class dice_core_random_dag_test extends dice_core_full_mul_array_test;
     r_csrX1 == r_csrX0 + 16'd128;
     r_csrX2 == r_csrX1 + 16'd128;
     // Keep C_base in the 0x0100..0x01FF area so the AXI-Lite slave map fits
-    r_csrX2 + 16'd127 <= 16'h01FF;
+    r_csrX2 + 16'd63 <= 16'h01FF;
   }
 
   // 50/50 SLVERR injection; if injecting, pick a real load address.
@@ -100,11 +100,11 @@ class dice_core_random_dag_test extends dice_core_full_mul_array_test;
     }
     cp_tcount: coverpoint r_tcount {
       bins b_1     = {1};
-      bins b_2_8   = {[2:8]};
-      bins b_9_16  = {[9:16]};
-      bins b_17_24 = {[17:24]};
-      bins b_25_31 = {[25:31]};
-      bins b_32    = {32};
+      bins b_2_4   = {[2:4]};
+      bins b_5_8   = {[5:8]};
+      bins b_9_12  = {[9:12]};
+      bins b_13_15 = {[13:15]};
+      bins b_16    = {16};
     }
     cp_csr0: coverpoint r_csrX0 {
       bins b_low  = {[0:15]};
