@@ -9,7 +9,7 @@
 //   bsfetch   : CGRA frontend bitstream fetch (slv_req_t from dice_core)
 //
 // One bsg_link pair carries *both* AXI buses by multiplexing on axi_link_tx/rx
-// opcodes (WRITE_REQ / READ_REQ / META_REQ / READ_RESP):
+// opcodes (WRITE / BURST_READ / READ / READ_RESP):
 //
 //   TX (chip → FPGA): fpga_mem AW/W/AR (chip as master) + fpga_mst R/B (chip as slave)
 //   RX (FPGA → chip): fpga_mem R/B (FPGA SRAM responds)  + fpga_mst AW/W/AR (FPGA host)
@@ -32,6 +32,9 @@ module cgra_io_axi4_top
     parameter int DATA_WIDTH = 32,
     parameter int FLIT_WIDTH = 32,
     parameter int CHANNEL_WIDTH = 8,
+    // Unused — the chip-side AR/AW-ID FIFOs are retired; the link carries
+    // a small inline routing-tag ID per packet. Outstanding-write tracking
+    // is bounded by fake_b_max_outstanding_p inside top_level_io.
     parameter int ID_FIFO_DEPTH = 4,
     // bsg_link DDR parameters
     parameter int LG_FIFO_DEPTH = 6,  // bsg_link credit-FIFO depth (log2)
@@ -128,6 +131,7 @@ module cgra_io_axi4_top
   logic      [           7:0] rx_fpga_awlen;
   logic      [           2:0] rx_fpga_awsize;
   logic      [           1:0] rx_fpga_awburst;
+  logic      [           1:0] rx_fpga_awid;
   logic                       rx_fpga_wvalid;
   logic      [DATA_WIDTH-1:0] rx_fpga_wdata;
   logic                       rx_fpga_wlast;
@@ -136,11 +140,19 @@ module cgra_io_axi4_top
   logic      [           7:0] rx_fpga_arlen;
   logic      [           2:0] rx_fpga_arsize;
   logic      [           1:0] rx_fpga_arburst;
-  logic      [13:0]          rx_fpga_aruser;
+  logic                       rx_fpga_ar_is_burst;
+  logic      [           1:0] rx_fpga_arid;
+  logic      [           3:0] rx_fpga_ar_tid;
+  logic      [           2:0] rx_fpga_ar_eblock;
+  logic      [           4:0] rx_fpga_ar_regaddr;
 
   logic                       tx_fpga_bready;
   logic                       tx_fpga_rready;
 
+  // FPGA-host traffic arriving on fpga_mst uses ID=0 internally — the
+  // host-side AXI ID is unused inside the chip. The unpacked tid/eblock/
+  // regaddr fields are CGRA load-metadata semantics that the FPGA host
+  // does not produce, so ar.user is left zero on this path.
   always_comb begin
     fpga_mst_req          = '0;
     fpga_mst_req.aw_valid = rx_fpga_awvalid;
@@ -160,7 +172,7 @@ module cgra_io_axi4_top
     fpga_mst_req.ar.size  = rx_fpga_arsize;
     fpga_mst_req.ar.burst = rx_fpga_arburst;
     fpga_mst_req.ar.id    = '0;
-    fpga_mst_req.ar.user  = axi_user_t'(rx_fpga_aruser);
+    fpga_mst_req.ar.user  = '0;
     fpga_mst_req.r_ready  = tx_fpga_rready;
   end
 
@@ -220,76 +232,141 @@ module cgra_io_axi4_top
   assign bsfetch_resp_o = bsfetch_resp;
 
   // --------------------------------------------------------------------------
-  // ID shim — axi_link_rx carries no IDs; capture crossbar-prepended IDs on
-  // outgoing AR/AW and stamp them onto incoming R/B responses so the crossbar
-  // can route responses back to the correct master port.
+  // Crossbar-side ID translation
   // --------------------------------------------------------------------------
-  logic tx_awready, tx_wready, tx_arready;
-  logic tx_awready_link, tx_arready_link;
-  logic aw_id_q_ready, ar_id_q_ready;
+  // The link carries a small (1- or 2-bit) routing-tag ID inline on every
+  // request and response header. The crossbar still uses its native
+  // MstIdWidth-bit AXI ID, so the wrapper translates between the two:
+  //
+  //   request direction  : compress the crossbar's slave-index portion of
+  //                        ar.id / aw.id into the link's routing tag, plus
+  //                        pick the BURST_READ vs READ class.
+  //   response direction : expand the link's routing tag back into a full
+  //                        master-side ID by inserting the matching
+  //                        slave-index bits. The slave-side id portion is
+  //                        always zero because every producing slave port
+  //                        drives its outgoing id with 0.
+  //
+  // ID layout reminder (matches axi4_full_crossbar.sv):
+  //   MstId[MstIdWidth-1 -: $clog2(NoMasters)] = slave-port index
+  //   MstId[SlvIdWidth-1 : 0]                  = per-slave AXI id (always 0)
+  //
+  // Slave-port index assignments:
+  //   0 = fpga_mst, 1..4 = dfetch[0..3], 5 = mfetch, 6 = bsfetch
+  //
+  // Wire ID encoding:
+  //   BURST_READ : 0 = metadata fetch (mfetch),   1 = bitstream fetch (bsfetch)
+  //   READ       : 0..3 = dfetch[0..3] memory-port index
+  //   WRITE      : 0..3 = dfetch[0..3] memory-port index
+  // --------------------------------------------------------------------------
+  localparam int unsigned XBAR_SLV_IDX_W = $clog2(axi4_xbar_pkg::NoMasters);
+
+  logic [XBAR_SLV_IDX_W-1:0] xbar_ar_slv_idx, xbar_aw_slv_idx;
+  assign xbar_ar_slv_idx = xbar_mem_req.ar.id[MstIdWidth-1 -: XBAR_SLV_IDX_W];
+  assign xbar_aw_slv_idx = xbar_mem_req.aw.id[MstIdWidth-1 -: XBAR_SLV_IDX_W];
+
+  // BURST_READ vs READ class for outgoing AR. Slave indices 5/6 are the
+  // burst-read producers (mfetch, bsfetch). Indices 1..4 are dfetch ports.
+  logic tx_ar_is_burst_li;
+  logic [1:0] tx_arid_li, tx_awid_li;
+
+  always_comb begin
+    case (xbar_ar_slv_idx)
+      XBAR_SLV_IDX_W'(5): begin
+        tx_ar_is_burst_li = 1'b1;
+        tx_arid_li        = 2'd0;  // metadata
+      end
+      XBAR_SLV_IDX_W'(6): begin
+        tx_ar_is_burst_li = 1'b1;
+        tx_arid_li        = 2'd1;  // bitstream
+      end
+      default: begin
+        // dfetch[i] -> slv_idx i+1, link id = i (0..3)
+        tx_ar_is_burst_li = 1'b0;
+        tx_arid_li        = 2'(xbar_ar_slv_idx - XBAR_SLV_IDX_W'(1));
+      end
+    endcase
+  end
+
+  // dfetch is the only producer of writes through fpga_mem (mfetch/bsfetch
+  // are read-only). Link id = dfetch port index.
+  assign tx_awid_li = 2'(xbar_aw_slv_idx - XBAR_SLV_IDX_W'(1));
+
+  // tid / eblock / regaddr come from pack_load_meta in mem_req_fifo:
+  //   ar.user[AxiUserWidth-1]                                      = is_meta
+  //   ar.user[DICE_REG_ADDR_WIDTH+DICE_EBLOCK_ID_WIDTH +: TID_W]   = tid
+  //   ar.user[DICE_REG_ADDR_WIDTH                       +: EBL_W]  = eblock
+  //   ar.user[0                                         +: REG_W]  = regaddr
+  // These fields are only meaningful on the dfetch (single-read) path.
+  localparam int unsigned LINK_TID_W = 4;
+  logic [LINK_TID_W-1:0]            tx_ar_tid_li;
+  logic [DICE_EBLOCK_ID_WIDTH-1:0]  tx_ar_eblock_li;
+  logic [DICE_REG_ADDR_WIDTH-1:0]   tx_ar_regaddr_li;
+
+  assign tx_ar_tid_li     = xbar_mem_req.ar.user[DICE_REG_ADDR_WIDTH+DICE_EBLOCK_ID_WIDTH +: LINK_TID_W];
+  assign tx_ar_eblock_li  = xbar_mem_req.ar.user[DICE_REG_ADDR_WIDTH                       +: DICE_EBLOCK_ID_WIDTH];
+  assign tx_ar_regaddr_li = xbar_mem_req.ar.user[0                                         +: DICE_REG_ADDR_WIDTH];
+
+  // R response decode: recover the slave-port index from the inline routing
+  // tag and is_burst class flag carried in the READ_RESP header.
+  logic                          rx_r_is_burst;
+  logic [1:0]                    rx_rid_link;
+  logic [XBAR_SLV_IDX_W-1:0]     rx_r_slv_idx;
+  logic [MstIdWidth-1:0]         rx_r_id_expanded;
+
+  always_comb begin
+    if (rx_r_is_burst) begin
+      // burst-read response: link_id[0] selects mfetch (5) vs bsfetch (6)
+      rx_r_slv_idx = XBAR_SLV_IDX_W'(5) + {{(XBAR_SLV_IDX_W-1){1'b0}}, rx_rid_link[0]};
+    end
+    else begin
+      // single-read response: link_id 0..3 -> dfetch slave idx 1..4
+      rx_r_slv_idx = XBAR_SLV_IDX_W'(rx_rid_link) + XBAR_SLV_IDX_W'(1);
+    end
+  end
+
+  assign rx_r_id_expanded = {rx_r_slv_idx, {SlvIdWidth{1'b0}}};
+
+  // B response decode: B is locally synthesized in top_level_io and the
+  // inline 2-bit link id is replayed on rx_bid; B traffic only ever comes
+  // from dfetch ports, so the slave-idx is link_id + 1.
+  logic [1:0]                    rx_bid_link;
+  logic [XBAR_SLV_IDX_W-1:0]     rx_b_slv_idx;
+  logic [MstIdWidth-1:0]         rx_b_id_expanded;
+
+  assign rx_b_slv_idx     = XBAR_SLV_IDX_W'(rx_bid_link) + XBAR_SLV_IDX_W'(1);
+  assign rx_b_id_expanded = {rx_b_slv_idx, {SlvIdWidth{1'b0}}};
+
+  // tx_rid_i is the chip→FPGA READ_RESP id (responses to FPGA-host CSR
+  // reads). The fpga_mst slave port stamps the AR id as 0 already; the
+  // crossbar prepends slave-idx 0 -> r.id top bits = 0. Truncate to 2 bits.
+  logic [1:0] tx_rid_li;
+  assign tx_rid_li = fpga_mst_resp.r.id[1:0];
+
+  logic tx_wready, tx_arready_link, tx_awready_link;
   logic rx_rvalid, rx_rlast;
   logic [DATA_WIDTH-1:0] rx_rdata;
   logic [           1:0] rx_rresp;
   logic                  rx_bvalid;
   logic [           1:0] rx_bresp;
 
-  logic [MstIdWidth-1:0] ar_id_q_data, aw_id_q_data;
-  logic ar_id_q_v, aw_id_q_v;
-  logic ar_id_q_yumi, aw_id_q_yumi;
-
-  bsg_fifo_1r1w_small #(
-      .width_p           (MstIdWidth),
-      .els_p             (ID_FIFO_DEPTH),
-      .harden_p          (0),
-      .ready_THEN_valid_p(0)
-  ) ar_id_fifo_i (
-      .clk_i  (clk_i),
-      .reset_i(rst_i),
-      .v_i    (xbar_mem_req.ar_valid && tx_arready),
-      .data_i (xbar_mem_req.ar.id),
-      .ready_o(ar_id_q_ready),
-      .v_o    (ar_id_q_v),
-      .data_o (ar_id_q_data),
-      .yumi_i (ar_id_q_yumi)
-  );
-
-  bsg_fifo_1r1w_small #(
-      .width_p           (MstIdWidth),
-      .els_p             (ID_FIFO_DEPTH),
-      .harden_p          (0),
-      .ready_THEN_valid_p(0)
-  ) aw_id_fifo_i (
-      .clk_i  (clk_i),
-      .reset_i(rst_i),
-      .v_i    (xbar_mem_req.aw_valid && tx_awready),
-      .data_i (xbar_mem_req.aw.id),
-      .ready_o(aw_id_q_ready),
-      .v_o    (aw_id_q_v),
-      .data_o (aw_id_q_data),
-      .yumi_i (aw_id_q_yumi)
-  );
-
-  assign tx_arready = tx_arready_link && ar_id_q_ready;
-  assign tx_awready = tx_awready_link && aw_id_q_ready;
-
-  assign ar_id_q_yumi = rx_rvalid && ar_id_q_v && xbar_mem_req.r_ready && rx_rlast;
-  assign aw_id_q_yumi = rx_bvalid && aw_id_q_v && xbar_mem_req.b_ready;
   always_comb begin
     xbar_mem_resp          = '0;
-    // Ready signals come from axi_link_tx
-    xbar_mem_resp.aw_ready = tx_awready;
+    // Ready signals come from axi_link_tx (via top_level_io's AW gating).
+    xbar_mem_resp.aw_ready = tx_awready_link;  // already gated for aw-id mirror inside top_level_io
     xbar_mem_resp.w_ready  = tx_wready;
-    xbar_mem_resp.ar_ready = tx_arready;
-    // R response from axi_link_rx, ID stamped from shim
-    xbar_mem_resp.r_valid  = rx_rvalid && ar_id_q_v;
+    xbar_mem_resp.ar_ready = tx_arready_link;
+    // R response from axi_link_rx, ID expanded from inline routing tag.
+    xbar_mem_resp.r_valid  = rx_rvalid;
     xbar_mem_resp.r.data   = axi_data_t'(rx_rdata);
     xbar_mem_resp.r.resp   = rx_rresp;
     xbar_mem_resp.r.last   = rx_rlast;
-    xbar_mem_resp.r.id     = ar_id_q_data;
-    // B response from axi_link_rx, ID stamped from shim
-    xbar_mem_resp.b_valid  = rx_bvalid && aw_id_q_v;
+    xbar_mem_resp.r.id     = rx_r_id_expanded;
+    // B response locally synthesized by top_level_io; ID expanded from
+    // its inline mirror.
+    xbar_mem_resp.b_valid  = rx_bvalid;
     xbar_mem_resp.b.resp   = rx_bresp;
-    xbar_mem_resp.b.id     = aw_id_q_data;
+    xbar_mem_resp.b.id     = rx_b_id_expanded;
   end
 
   // --------------------------------------------------------------------------
@@ -336,41 +413,51 @@ module cgra_io_axi4_top
       .link_tx_valid_o           (link_tx_valid_o),
       .link_tx_ready_i           (link_tx_ready_i),
       // TX: chip → FPGA SRAM (AW/W/AR requests)
-      .tx_awvalid_i              (xbar_mem_req.aw_valid && aw_id_q_ready),
+      .tx_awvalid_i              (xbar_mem_req.aw_valid),
       .tx_awready_o              (tx_awready_link),
       .tx_awaddr_i               (xbar_mem_req.aw.addr[ADDR_WIDTH-1:0]),
       .tx_awlen_i                (xbar_mem_req.aw.len),
       .tx_awsize_i               (xbar_mem_req.aw.size),
       .tx_awburst_i              (xbar_mem_req.aw.burst),
+      .tx_awid_i                 (tx_awid_li),
       .tx_wvalid_i               (xbar_mem_req.w_valid),
       .tx_wready_o               (tx_wready),
       .tx_wdata_i                (xbar_mem_req.w.data[DATA_WIDTH-1:0]),
       .tx_wlast_i                (xbar_mem_req.w.last),
-      .tx_arvalid_i              (xbar_mem_req.ar_valid && ar_id_q_ready),
+      .tx_arvalid_i              (xbar_mem_req.ar_valid),
       .tx_arready_o              (tx_arready_link),
       .tx_araddr_i               (xbar_mem_req.ar.addr[ADDR_WIDTH-1:0]),
       .tx_arlen_i                (xbar_mem_req.ar.len),
       .tx_arsize_i               (xbar_mem_req.ar.size),
       .tx_arburst_i              (xbar_mem_req.ar.burst),
-      .tx_aruser_i               (xbar_mem_req.ar.user[13:0]),
+      .tx_ar_is_burst_i          (tx_ar_is_burst_li),
+      .tx_arid_i                 (tx_arid_li),
+      .tx_ar_tid_i               (tx_ar_tid_li),
+      .tx_ar_eblock_i            (tx_ar_eblock_li),
+      .tx_ar_regaddr_i           (tx_ar_regaddr_li),
       // TX: R/B from crossbar fpga_mst slave port → FPGA host
       .tx_rvalid_i               (fpga_mst_resp.r_valid),
       .tx_rready_o               (tx_fpga_rready),
       .tx_rdata_i                (fpga_mst_resp.r.data[DATA_WIDTH-1:0]),
       .tx_rresp_i                (fpga_mst_resp.r.resp),
       .tx_rlast_i                (fpga_mst_resp.r.last),
+      .tx_rid_i                  (tx_rid_li),
       .tx_bvalid_i               (fpga_mst_resp.b_valid),
       .tx_bready_o               (tx_fpga_bready),
       .tx_bresp_i                (fpga_mst_resp.b.resp),
-      // RX: R/B responses FPGA SRAM → crossbar fpga_mem port (ID stamped by shim)
+      // RX: R/B responses FPGA SRAM → crossbar fpga_mem port (ID expanded
+      // from the inline routing tag carried in the response header).
       .rx_rvalid_o               (rx_rvalid),
-      .rx_rready_i               (xbar_mem_req.r_ready && ar_id_q_v),
+      .rx_rready_i               (xbar_mem_req.r_ready),
       .rx_rdata_o                (rx_rdata),
       .rx_rresp_o                (rx_rresp),
       .rx_rlast_o                (rx_rlast),
+      .rx_rid_o                  (rx_rid_link),
+      .rx_r_is_burst_o           (rx_r_is_burst),
       .rx_bvalid_o               (rx_bvalid),
-      .rx_bready_i               (xbar_mem_req.b_ready && aw_id_q_v),
+      .rx_bready_i               (xbar_mem_req.b_ready),
       .rx_bresp_o                (rx_bresp),
+      .rx_bid_o                  (rx_bid_link),
       // RX: AW/W/AR from FPGA host → crossbar fpga_mst slave port
       .rx_awvalid_o              (rx_fpga_awvalid),
       .rx_awready_i              (fpga_mst_resp.aw_ready),
@@ -378,6 +465,7 @@ module cgra_io_axi4_top
       .rx_awlen_o                (rx_fpga_awlen),
       .rx_awsize_o               (rx_fpga_awsize),
       .rx_awburst_o              (rx_fpga_awburst),
+      .rx_awid_o                 (rx_fpga_awid),
       .rx_wvalid_o               (rx_fpga_wvalid),
       .rx_wready_i               (fpga_mst_resp.w_ready),
       .rx_wdata_o                (rx_fpga_wdata),
@@ -388,7 +476,11 @@ module cgra_io_axi4_top
       .rx_arlen_o                (rx_fpga_arlen),
       .rx_arsize_o               (rx_fpga_arsize),
       .rx_arburst_o              (rx_fpga_arburst),
-      .rx_aruser_o               (rx_fpga_aruser)
+      .rx_ar_is_burst_o          (rx_fpga_ar_is_burst),
+      .rx_arid_o                 (rx_fpga_arid),
+      .rx_ar_tid_o               (rx_fpga_ar_tid),
+      .rx_ar_eblock_o            (rx_fpga_ar_eblock),
+      .rx_ar_regaddr_o           (rx_fpga_ar_regaddr)
   );
 
   // --------------------------------------------------------------------------

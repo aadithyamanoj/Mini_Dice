@@ -1,12 +1,12 @@
 {
-  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
+  "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.bin",
   "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b_compile_report.json",
-  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
+  "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_load_mul_array_b.fasm",
   "kernel": "load_mul_array_b",
   "notes": [
     "B-side load stage for the staged mul-array flow.",
     "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
-    "Memory responses load into GPRs 4..7."
+    "Memory responses load into GPRs 4..7 after SV packed-array reversal."
   ],
   "pgraph_meta_t": {
     "barrier": 0,
@@ -24,10 +24,10 @@
     "in_regs_bitmap": 0,
     "lat": 6,
     "ld_dest_regs": [
-      4,
-      5,
+      7,
       6,
-      7
+      5,
+      4
     ],
     "num_stores": 0,
     "out_regs_bitmap": 0,

@@ -1,9 +1,10 @@
 // -----------------------------------------------------------------------
 // chip_top.sv
 //
-// 48-pad TSMC180 wrapper for Mini_Dice. Integrates:
-//   - bsg_link 16-bit DDR upstream + downstream using the zeroscatter pad map
-//   - Mini_Dice core-side AXI/link packetizer
+// 48-pad TSMC180 wrapper for the EE478b zeroscatter SoC. Integrates:
+//   - bsg_link 16-bit DDR upstream + downstream (config writes / status)
+//   - SPI slave (alternate path to write the same config registers)
+//   - BLE waveform generator (PIN_18 modulator output)
 //   - Optional DFT scan chain stitched through PAD[11], PAD[46], PAD[47]
 //
 // Pad map (matches pcb_jumper_layout.md):
@@ -15,12 +16,15 @@
 //          PAD[11]     = scan_en
 //
 //   LEFT   PAD[12]     = token_clk      (input from FPGA RX-side)
-//          PAD[13]     = unused
+//          PAD[13]     = SCLK           (SPI clock)
 //          PAD[14]     = up_valid       (output)
 //          PAD[15]     = up_clk         (output)
 //          PAD[16..23] = up_data[6,7,4,5,2,3,0,1] (TX bus, byte 0, bsg_link grid 3)
 //
-//   BOTTOM PAD[24..27] = unused
+//   BOTTOM PAD[24]     = MOSI
+//          PAD[25]     = MISO           (output)
+//          PAD[26]     = SS_n
+//          PAD[27]     = PIN_18 (BLE modulator output)
 //          PAD[28..35] = up_data[8..15] (TX bus, byte 1, bsg_link grid 4)
 //
 //   RIGHT  PAD[36..43] = dn_data[9,8,11,10,13,12,15,14] (RX byte 1, grid 2)
@@ -76,6 +80,15 @@ module chip_top (
   localparam int TOKEN_CLK_PAD = 12;
   localparam int UP_VALID_PAD = 14;
   localparam int UP_CLK_PAD = 15;
+
+  // SPI
+  localparam int SCLK_PAD = 13;
+  localparam int MOSI_PAD = 24;
+  localparam int MISO_PAD = 25;
+  localparam int SS_N_PAD = 26;
+
+  // BLE modulator output
+  localparam int PIN_18_PAD = 27;
 
   // DFT scan
   localparam int SCAN_EN_PAD = 11;
@@ -138,6 +151,7 @@ module chip_top (
   // ----- Tap nets from C[] / drive nets toward I[] -----
   wire        core_clk;
   wire        hard_reset;
+  wire        hard_reset_sync;  // async-assert / sync-deassert version of hard_reset
 
   wire        dn_clk;
   wire        dn_valid;
@@ -148,6 +162,13 @@ module chip_top (
   wire        up_clk;  // chip output, drives PAD[15]
   wire        up_valid;  // chip output, drives PAD[14]
   wire [15:0] up_data;  // chip outputs
+
+  wire        sclk_in;
+  wire        mosi_in;
+  wire        ss_n_in;
+  wire        miso_out;
+
+  wire        pin_18_out;
 
   // Tie io_master_clk to core_clk to save the PAD that would otherwise
   // carry it. The bsg_link_ddr_upstream's internal CDC degenerates when
@@ -167,28 +188,40 @@ module chip_top (
   // that starts running once hard_reset deasserts.
   reg  [ 5:0] reset_cnt = 6'd0;
   always @(posedge core_clk) begin
-    if (hard_reset) reset_cnt <= 6'd0;
+    if (hard_reset_sync) reset_cnt <= 6'd0;
     else if (reset_cnt < 6'd63) reset_cnt <= reset_cnt + 6'd1;
   end
 
   // async_token_reset: 0 normally, pulsed 1 during counts 2..4 after
-  // hard_reset deasserts. Held 0 during hard_reset (matches bsg ref tb).
-  wire async_token_reset_int = ~hard_reset && (reset_cnt >= 6'd2) && (reset_cnt < 6'd5);
+  // hard_reset_sync deasserts. Held 0 during reset (matches bsg ref tb).
+  wire async_token_reset_int = ~hard_reset_sync && (reset_cnt >= 6'd2) && (reset_cnt < 6'd5);
 
-  // io_link_resets: held high while hard_reset is asserted, then for
+  // io_link_resets: held high while reset is asserted, then for
   // ~16 more core_clk cycles after the async_token_reset pulse.
-  wire io_link_reset_int = hard_reset || (reset_cnt < 6'd16);
+  wire io_link_reset_int = hard_reset_sync || (reset_cnt < 6'd16);
 
-  // core link reset: released last (~32 cycles after hard_reset).
-  wire core_link_reset_int = hard_reset || (reset_cnt < 6'd32);
+  // core link reset: released last (~32 cycles after hard_reset_sync).
+  wire core_link_reset_int = hard_reset_sync || (reset_cnt < 6'd32);
 
   // ----- Tap clocks/inputs from pad ring -----
   assign core_clk   = C[CORE_CLK_PAD];
   assign hard_reset = C[HARD_RESET_PAD];
 
-  assign dn_clk     = C[DN_CLK_PAD];
-  assign dn_valid   = C[DN_VALID_PAD];
-  assign token_clk  = C[TOKEN_CLK_PAD];
+  // Synchronize hard_reset deassert into core_clk domain.
+  // Assert is still combinationally fast (2-FF chain clears asynchronously).
+  async_rst_sync_deassert u_hard_reset_sync (
+      .clk                    (core_clk),
+      .rst                    (hard_reset),
+      .async_rst_sync_deassert(hard_reset_sync)
+  );
+
+  assign dn_clk    = C[DN_CLK_PAD];
+  assign dn_valid  = C[DN_VALID_PAD];
+  assign token_clk = C[TOKEN_CLK_PAD];
+
+  assign sclk_in   = C[SCLK_PAD];
+  assign mosi_in   = C[MOSI_PAD];
+  assign ss_n_in   = C[SS_N_PAD];
 
   // RX data: gather 16 bits from interleaved PAD indices.
   genvar dn_i;
@@ -234,17 +267,24 @@ module chip_top (
     IE[DN_CLK_PAD]     = 1'b1;
     IE[DN_VALID_PAD]   = 1'b1;
     IE[TOKEN_CLK_PAD]  = 1'b1;
+    // IE[SCLK_PAD]       = 1'b1;
+    // IE[MOSI_PAD]       = 1'b1;
+    // IE[SS_N_PAD]       = 1'b1;
     for (k = 0; k < 16; k = k + 1) begin
       IE[dn_data_pad(k)] = 1'b1;
     end
 
     // Outputs (chip drives).
-    OEN[DN_TOKEN_PAD]  = 1'b0;
-    I[DN_TOKEN_PAD]  = dn_token;
-    OEN[UP_CLK_PAD]    = 1'b0;
-    I[UP_CLK_PAD]    = up_clk;
-    OEN[UP_VALID_PAD]  = 1'b0;
-    I[UP_VALID_PAD]  = up_valid;
+    OEN[DN_TOKEN_PAD] = 1'b0;
+    I[DN_TOKEN_PAD]   = dn_token;
+    OEN[UP_CLK_PAD]   = 1'b0;
+    I[UP_CLK_PAD]     = up_clk;
+    OEN[UP_VALID_PAD] = 1'b0;
+    I[UP_VALID_PAD]   = up_valid;
+    // OEN[MISO_PAD]     = 1'b0;
+    // I[MISO_PAD]       = miso_out;
+    // OEN[PIN_18_PAD]   = 1'b0;
+    // I[PIN_18_PAD]     = pin_18_out;
     for (k = 0; k < 16; k = k + 1) begin
       OEN[up_data_pad(k)] = 1'b0;
       I[up_data_pad(k)]   = up_data[k];
@@ -261,7 +301,7 @@ module chip_top (
 `endif
   end
 
-  // ----- bsg_link wrapper: physical DDR pads <-> 32-bit ready/valid -----
+  // ----- bsg_link wrapper: 32-bit ready/valid to top.v -----
   wire [31:0] link_rx_data;
   wire        link_rx_valid;
   wire        link_rx_yumi;
@@ -319,6 +359,30 @@ module chip_top (
       // .csr_bsload_en_o (csr_bsload_en)
   );
 
+endmodule
+
+// -----------------------------------------------------------------------
+// Async assert / sync deassert reset synchronizer.
+// -----------------------------------------------------------------------
+module async_rst_sync_deassert (
+    input  wire clk,
+    input  wire rst,
+    output wire async_rst_sync_deassert
+);
+  reg rst_sync1;
+  reg rst_sync2;
+
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      rst_sync1 <= 1'b1;
+      rst_sync2 <= 1'b1;
+    end else begin
+      rst_sync1 <= 1'b0;
+      rst_sync2 <= rst_sync1;
+    end
+  end
+
+  assign async_rst_sync_deassert = rst_sync2;
 endmodule
 
 // -----------------------------------------------------------------------

@@ -215,28 +215,28 @@ def _stage_spec(kernel: str) -> dict[str, Any]:
         return {
             "in_regs_bitmap": 0,
             "out_regs_bitmap": 0,
-            "ld_dest_regs": [0, 1, 2, 3],
+            "ld_dest_regs": [3, 2, 1, 0],
             "num_stores": 0,
             "unrolling_factor": 0,
             "parameter_load": 0,
             "notes": [
                 "A-side load stage for the staged mul-array flow.",
                 "Computes affine addresses from csrX0, regS_i_0, csrX3, and csrX4..7.",
-                "Memory responses load into GPRs 0..3.",
+                "Memory responses load into GPRs 0..3 after SV packed-array reversal.",
             ],
         }
     if kernel == "load_mul_array_b":
         return {
             "in_regs_bitmap": 0,
             "out_regs_bitmap": 0,
-            "ld_dest_regs": [4, 5, 6, 7],
+            "ld_dest_regs": [7, 6, 5, 4],
             "num_stores": 0,
             "unrolling_factor": 0,
             "parameter_load": 0,
             "notes": [
                 "B-side load stage for the staged mul-array flow.",
                 "Computes affine addresses from csrX1, regS_i_0, csrX3, and csrX4..7.",
-                "Memory responses load into GPRs 4..7.",
+                "Memory responses load into GPRs 4..7 after SV packed-array reversal.",
             ],
         }
     if kernel == "mul_array":

@@ -1,7 +1,7 @@
 {
-  "binary_output_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
+  "binary_output_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.bin",
   "compile_report_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs_compile_report.json",
-  "fasm_path": "/home/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
+  "fasm_path": "/homes/amanoj3/ee478/Mini_Dice/dora/examples/devices/dice-isca/mini_dice/build_nopred/mini_dice_compute_store_addrs.fasm",
   "kernel": "compute_store_addrs",
   "notes": [
     "Materializes C-side affine store addresses into GPRs 4..7.",
