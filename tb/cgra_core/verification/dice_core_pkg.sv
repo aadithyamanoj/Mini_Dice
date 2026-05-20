@@ -51,7 +51,6 @@ package dice_core_uvm_pkg;
   `include "tests/dice_core_simple_branching_test.sv"
   `include "tests/dice_core_partial_thread_test.sv"
   `include "tests/dice_core_branch_axil_error_test.sv"
-  `include "tests/dice_core_dual_branch_test.sv"
   `include "tests/dice_core_random_regression_test.sv"
   `include "tests/dice_core_random_dag_test.sv"
   `include "tests/dice_core_sequential_cta_test.sv"

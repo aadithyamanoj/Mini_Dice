@@ -1,8 +1,25 @@
 # VCS
 simv
+simv_chip
+simv_stress
+simv_chip_stress
 simv.daidir/
+simv_chip.daidir/
+simv_stress.daidir/
+simv_chip_stress.daidir/
+*.vdb/
+cov_report/
+vc_hdrs.h
+ucli.key
 csrc/
 build/
+
+# UVM test sweep output
+run_results/
+
+# VCS auto-generated schematic / FSM dumps
+.fsm.sch.verilog.xml
+*.sch.verilog.xml
 
 # Verilator
 obj_dir/
