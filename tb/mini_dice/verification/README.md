@@ -111,7 +111,7 @@ Common plusargs:
 All tests extend `mini_dice_chip_base_test` (which owns the env and provides
 `load_collateral`, `program_and_launch`, `wait_for_complete`).
 
-### Smoke / canonical
+### canonical
 - `mini_dice_chip_full_mul_array_test` — canonical 5-eblock MUL kernel, 64 stores.
 - `mini_dice_chip_add_array_test` — same shape but with ADD ALU op.
 - `mini_dice_chip_simple_branching_test` — 7-eblock divergent kernel (tid 0 ADD path, others MUL).
@@ -156,10 +156,10 @@ All tests extend `mini_dice_chip_base_test` (which owns the env and provides
 
 | Test                                | Status                                                                                       |
 |-------------------------------------|----------------------------------------------------------------------------------------------|
-| `mini_dice_chip_oor_empirical_test` | Fires UVM_ERROR by design — OOR writes corrupt later CSR reads. Diagnostic, not regression.  |
+| `mini_dice_chip_oor_empirical_test` | Fires UVM_ERROR by design. OOR writes corrupt later CSR reads. |
 | `mini_dice_chip_mid_reset_test`     | FAST passes; CHIP logs-and-exits (a real chip-mode mid-reset would trip cnt_underflow).      |
-| `mini_dice_chip_eblock8_test`       | Passes trivially. Does not actually run an 8-eblock kernel — blocked on a dora-compiled binary. |
-| `mini_dice_chip_out_of_range_test`  | Passes trivially. Placeholder; the real OOR diagnostic is `mini_dice_chip_oor_empirical_test`. |
+| `mini_dice_chip_eblock8_test`       | Does not actually run an 8-eblock kernel — blocked on a dora-compiled binary. |
+| `mini_dice_chip_out_of_range_test`  | Placeholder; the real OOR diagnostic is `mini_dice_chip_oor_empirical_test`. |
 
 Per design, the FPGA host driver is required to never issue OOR writes, so
 `oor_empirical` documents observed behavior rather than a chip bug.
