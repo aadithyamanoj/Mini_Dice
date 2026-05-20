@@ -27,6 +27,7 @@ module dice_frontend
     input logic [(`DICE_PR_NUM*`DICE_NUM_MAX_THREADS_PER_CORE)-1:0] pred_regs_i,
     input logic prog_active_i,
     input logic prog_active_buffer_i,
+    input logic disable_ucd_prefetch_sched_i,
 
     // Block commit table feedback (from backend)
     input logic                       eblock_commit_valid_i,
@@ -78,6 +79,7 @@ module dice_frontend
       .cta_status_data_o       (cta_status_data),
       .brt_info_i              (brt_info_i),
       .brt_info_write_enable_i (brt_info_write_enable_i),
+      .disable_ucd_prefetch_sched_i(disable_ucd_prefetch_sched_i),
       .simt_update_valid_i     (simt_update_valid),
       .simt_update_ready_o     (simt_update_ready),
       .simt_update_stack_data_i(simt_update_stack_data),

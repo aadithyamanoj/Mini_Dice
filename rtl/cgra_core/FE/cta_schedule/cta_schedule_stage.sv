@@ -24,6 +24,7 @@ module cta_schedule_stage
     // BRT
     input block_retire_status_t brt_info_i,
     input logic                 brt_info_write_enable_i,
+    input logic                 disable_ucd_prefetch_sched_i,
 
     // Branch Handler
     input  logic               simt_update_valid_i,
@@ -136,6 +137,7 @@ module cta_schedule_stage
       .clk_i                  (clk_i),
       .rst_i                  (rst_i),
       .enable_i               (1'b1),
+      .disable_ucd_prefetch_sched_i(disable_ucd_prefetch_sched_i),
       .active_cta_entry_i     (active_cta_entry),
       .is_prefetch_i          (cta_status_real.unresolved_control_divergence),
       .predict_pc_i           (cta_status_real.predict_pc),
