@@ -45,6 +45,15 @@ import "DPI-C" context function void dice_core_tb_record_axi_write(
 );
 import "DPI-C" context function int unsigned dice_core_tb_check_done();
 
+// Multi-CTA extensions: per_cta_csr_overrides accessors. Both fall back to
+// the launch-time csr_values when the override table is missing or empty,
+// so single-CTA kernels see byte-identical behavior to the legacy path.
+import "DPI-C" context function int unsigned dice_core_tb_num_ctas();
+import "DPI-C" context function int unsigned dice_core_tb_get_per_cta_csr(
+  input int unsigned cta_idx,
+  input int unsigned csr_idx
+);
+
 `include "dice_define.vh"
 
 module tb_chip_top;
@@ -486,6 +495,20 @@ module tb_chip_top;
   logic           [                    15:0] csr_values          [0:7];
   logic           [                    15:0] start_pc_val;
   dice_cta_desc_t                            launch_desc;
+
+  // Number of CTAs in the grid (= number of per_cta_csr_overrides entries
+  // parsed from runtime.json). Zero from the DPI means single-CTA, which we
+  // coerce to 1 so the launch loop runs exactly once -- byte-identical to the
+  // legacy single-shot path.
+  int unsigned                               num_ctas;
+
+  // cta_complete handshake fires once per CTA completion in mini_dice_top.
+  // We tap it here via the same hierarchical reference style the rest of the
+  // TB already uses for debug prints; the multi-CTA launch loop polls this
+  // signal to know when it's safe to re-program CSRs and re-pulse start.
+  wire                                       cta_done_pulse =
+      u_dut.u_mini_dice_top.u_cta_if.complete_valid &&
+      u_dut.u_mini_dice_top.u_cta_if.complete_ready;
 
   function automatic int unsigned fetch_beat(input logic [1:0] kind, input logic [AW-1:0] base,
                                              input int unsigned beat_idx);
@@ -931,28 +954,78 @@ module tb_chip_top;
     for (int i = 0; i < 8; i++) csr_values[i] = 16'(dice_core_tb_get_csr(i));
     start_pc_val = 16'(launch_desc.kernel_desc.start_pc);
     void'($value$plusargs("START_PC=%h", start_pc_val));
+
+    // Read the per-CTA override count. The DPI returns 0 for single-CTA test
+    // vectors that lack a per_cta_csr_overrides key; coerce to 1 so the
+    // launch loop runs once and behaves identically to the legacy path.
+    num_ctas = dice_core_tb_num_ctas();
+    if (num_ctas == 0) num_ctas = 1;
+
     $display("[TB] Test vector stem      : %s", test_vector_stem);
-    $display("[TB] csrX0..7              : %04x %04x %04x %04x %04x %04x %04x %04x", csr_values[0],
+    $display("[TB] csrX0..7 (launch)     : %04x %04x %04x %04x %04x %04x %04x %04x", csr_values[0],
              csr_values[1], csr_values[2], csr_values[3], csr_values[4], csr_values[5],
              csr_values[6], csr_values[7]);
     $display("[TB] start_pc              : 0x%04x", start_pc_val);
+    $display("[TB] num_ctas              : %0d (1 = no per_cta_csr_overrides in runtime.json)",
+             num_ctas);
   endtask
 
-  task automatic program_csrs_and_launch();
-    $display("[TB] Programming csrX0..7 via bsg_link host path");
-    for (int i = 0; i < 8; i++) csr_write(REG_CSRX0 + AW'(i * 2), csr_values[i]);
-    $display("[TB] Setting start_pc = 0x%04x", start_pc_val);
+  // Program csrX0..7 for one CTA via the host-side bsg_link path. Uses the
+  // DPI getter that transparently falls back to the launch csr_values[] for
+  // any CSR not overridden in this CTA's entry (so single-CTA kernels reduce
+  // to the legacy one-shot programming).
+  task automatic program_csrs_for_cta(input int unsigned cta_idx);
+    logic [15:0] v;
+    $display("[TB] CTA %0d: programming csrX0..7", cta_idx);
+    for (int i = 0; i < 8; i++) begin
+      v = 16'(dice_core_tb_get_per_cta_csr(cta_idx, i));
+      csr_write(REG_CSRX0 + AW'(i * 2), v);
+    end
+  endtask
+
+  // Wait for the per-CTA complete handshake. A separate per-CTA timeout keeps
+  // a hung CTA from looking like a hung whole-grid run.
+  task automatic wait_for_cta_done(input int unsigned cta_idx);
+    int unsigned cyc          = 0;
+    int unsigned timeout_cyc  = 200_000;
+    void'($value$plusargs("PER_CTA_TIMEOUT=%d", timeout_cyc));
+    while (!cta_done_pulse) begin
+      @(posedge clk_i);
+      cyc++;
+      if (cyc >= timeout_cyc) begin
+        $fatal(1, "[TB] CTA %0d timed out after %0d cycles", cta_idx, cyc);
+      end
+    end
+    // Consume the pulse cycle so the next loop iteration's wait starts fresh.
+    @(posedge clk_i);
+    $display("[TB] CTA %0d complete after ~%0d cycles", cta_idx, cyc);
+  endtask
+
+  // Replace the legacy single-shot program_csrs_and_launch() with a grid
+  // loop. start_pc and thread_count are kernel-wide so they're written once;
+  // csrX0..7 are reprogrammed per CTA from the override table.
+  task automatic run_grid();
+    $display("[TB] Programming kernel-wide CSRs via bsg_link");
+    $display("[TB] Setting start_pc      = 0x%04x", start_pc_val);
     csr_write(REG_STARTPC, start_pc_val);
-    $display("[TB] Setting thread_count = %0d", launch_desc.kernel_desc.thread_count);
+    $display("[TB] Setting thread_count  = %0d", launch_desc.kernel_desc.thread_count);
     csr_write(REG_THREAD_COUNT, 16'(launch_desc.kernel_desc.thread_count));
-    $display("[TB] Pulsing CTRL.start");
-    csr_write(REG_CTRL, CTRL_START);
+
+    for (int unsigned c = 0; c < num_ctas; c++) begin
+      program_csrs_for_cta(c);
+      $display("[TB] CTA %0d: pulsing CTRL.start", c);
+      csr_write(REG_CTRL, CTRL_START);
+      wait_for_cta_done(c);
+    end
   endtask
 
+  // Final post-grid drain so any in-flight AXI writes settle before the DPI
+  // diff check. Unchanged from the legacy task body.
   task automatic wait_for_complete();
     int unsigned settle_cycles = 500000;
     void'($value$plusargs("SETTLE=%d", settle_cycles));
-    $display("[TB] Running for up to %0d cycles, then checking DPI", settle_cycles);
+    $display("[TB] Post-grid drain: up to %0d cycles, then checking DPI",
+             settle_cycles);
     repeat (settle_cycles) @(posedge clk_i);
   endtask
 
@@ -968,19 +1041,18 @@ module tb_chip_top;
     init_paths();
     bsg_link_bringup();
     load_collateral();
-    program_csrs_and_launch();
+    run_grid();             // was: program_csrs_and_launch()
     wait_for_complete();
 
     ok = dice_core_tb_check_done();
 
     if (ok != 0) begin
-      $display("[TB] PASS: chip_top DPI checks clean");
-      $display("hello?");
+      $display("[TB] PASS: chip_top DPI checks clean (num_ctas=%0d)", num_ctas);
       $display("TID W: %0d", DICE_TID_WIDTH);
       $display("REG W: %0d", DICE_REG_ADDR_WIDTH);
       $finish;
     end
-    $display("[TB] FAIL: DPI reported AXI write mismatch");
+    $display("[TB] FAIL: DPI reported AXI write mismatch (num_ctas=%0d)", num_ctas);
     $fatal(1, "FAIL");
   end
 

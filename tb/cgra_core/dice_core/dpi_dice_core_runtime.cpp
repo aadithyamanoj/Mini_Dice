@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -20,6 +21,10 @@ constexpr std::uint32_t kMetaWordBytes = 256;
 constexpr std::uint32_t kFetchBeatBytes16 = 2;
 constexpr std::uint32_t kFetchBeatBytes32 = 4;
 
+// Hard cap on the per-CTA override table (avoids an unbounded runtime.json
+// blowing memory). Plenty for any planned 1D grid.
+constexpr std::size_t kMaxCTAs = 4096;
+
 struct ExpectedWrite {
   std::uint32_t addr;
   std::uint32_t data;
@@ -30,6 +35,21 @@ std::string g_cta_hex;
 std::unordered_map<std::uint32_t, std::string> g_meta_words;
 std::unordered_map<std::uint32_t, std::string> g_bitstream_words;
 std::uint32_t g_csr_values[8] = {};
+
+// Per-CTA CSR override table parsed from runtime.per_cta_csr_overrides.
+// Multi-CTA kernels list which CSRs change per dispatch (typically array
+// bases that shift by +stride per CTA); strides/scalars are absent from
+// each entry and fall back to the launch g_csr_values[].
+//
+//   g_per_cta_csr[c][i]     = override value for csrX{i} on CTA c
+//   g_per_cta_present[c][i] = true if that entry was explicitly given
+//                             (false = caller should fall back to launch CSR)
+//
+// Empty when the runtime.json has no per_cta_csr_overrides key; single-CTA
+// kernels see size()==0 and the TB's grid loop collapses to one iteration.
+std::vector<std::array<std::uint32_t, 8>> g_per_cta_csr;
+std::vector<std::array<bool, 8>>          g_per_cta_present;
+
 std::vector<ExpectedWrite> g_expected_writes;
 std::vector<bool> g_expected_matched;
 std::vector<ExpectedWrite> g_actual_writes;  // all observed AXI writes
@@ -228,6 +248,86 @@ void load_cta_desc_hex(const std::string& path) {
   }
 }
 
+// Parse runtime.per_cta_csr_overrides[] into g_per_cta_csr / g_per_cta_present.
+// Each entry has the shape:
+//   { "cta_id": {"x": N, "y": 0, "z": 0},
+//     "csr_values": { "csrXk": V, ... }  (any subset of csrX0..7) }
+// CTAs not listed get no entry; CSRs missing from a listed CTA stay 'absent'.
+// The runtime.axi.expected_writes regex above also matches the inner csr
+// digits, but we restrict here by first slicing the substring between the
+// outer "per_cta_csr_overrides" "[" and its matching "]".
+void parse_per_cta_overrides(const std::string& text) {
+  g_per_cta_csr.clear();
+  g_per_cta_present.clear();
+
+  const std::regex header_re("\"per_cta_csr_overrides\"\\s*:\\s*\\[");
+  std::smatch hm;
+  if (!std::regex_search(text, hm, header_re)) {
+    return;  // single-CTA kernels: no override table, leave vectors empty
+  }
+  std::size_t cursor = static_cast<std::size_t>(hm.position()) + hm.length();
+
+  // Walk balanced brackets to find the array's matching ']'.
+  std::size_t depth = 1;
+  std::size_t array_end = cursor;
+  while (array_end < text.size() && depth > 0) {
+    const char c = text[array_end];
+    if      (c == '[') ++depth;
+    else if (c == ']') --depth;
+    if (depth > 0) ++array_end;
+  }
+  if (depth != 0) return;
+  const std::string array_text = text.substr(cursor, array_end - cursor);
+
+  // Iterate per-CTA objects { ... } at top level of the array.
+  std::size_t i = 0;
+  while (i < array_text.size()) {
+    while (i < array_text.size() && array_text[i] != '{') ++i;
+    if (i >= array_text.size()) break;
+    const std::size_t obj_start = i;
+    std::size_t obj_depth = 1;
+    ++i;
+    while (i < array_text.size() && obj_depth > 0) {
+      const char c = array_text[i];
+      if      (c == '{') ++obj_depth;
+      else if (c == '}') --obj_depth;
+      if (obj_depth > 0) ++i;
+    }
+    if (obj_depth != 0) break;
+    const std::size_t obj_end = i;
+    ++i;
+    const std::string entry = array_text.substr(obj_start, obj_end - obj_start + 1);
+
+    // cta_id.x — match within a "cta_id" : { ... } subobject.
+    std::uint32_t cta_x = 0;
+    {
+      const std::regex cta_re(
+          "\"cta_id\"\\s*:\\s*\\{[^\\}]*\"x\"\\s*:\\s*([0-9]+)");
+      std::smatch m;
+      if (!std::regex_search(entry, m, cta_re)) continue;
+      cta_x = parse_u32(m[1].str());
+    }
+    if (cta_x >= kMaxCTAs) continue;
+
+    // Grow tables sparsely (intermediate CTAs may have no overrides at all).
+    while (g_per_cta_csr.size() <= cta_x) {
+      g_per_cta_csr.push_back({0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u});
+      g_per_cta_present.push_back({false, false, false, false,
+                                   false, false, false, false});
+    }
+
+    for (std::uint32_t k = 0; k < 8; ++k) {
+      const std::regex csr_re(
+          "\"csrX" + std::to_string(k) + "\"\\s*:\\s*([0-9]+)");
+      std::smatch m;
+      if (std::regex_search(entry, m, csr_re)) {
+        g_per_cta_csr[cta_x][k]     = parse_u32(m[1].str());
+        g_per_cta_present[cta_x][k] = true;
+      }
+    }
+  }
+}
+
 void load_runtime_json(const std::string& path) {
   const std::string text = read_text_file(resolve_input_path(path));
 
@@ -262,6 +362,8 @@ void load_runtime_json(const std::string& path) {
     g_expected_writes.push_back(expected);
   }
   g_expected_matched.assign(g_expected_writes.size(), false);
+
+  parse_per_cta_overrides(text);
 }
 
 std::uint32_t meta_read16(std::uint32_t byte_addr) {
@@ -317,6 +419,8 @@ void dice_core_tb_init(
   g_meta_words.clear();
   g_bitstream_words.clear();
   std::fill(std::begin(g_csr_values), std::end(g_csr_values), 0u);
+  g_per_cta_csr.clear();
+  g_per_cta_present.clear();
   g_expected_writes.clear();
   g_expected_matched.clear();
   g_actual_writes.clear();
@@ -355,6 +459,30 @@ unsigned int dice_core_tb_get_cta_desc_word(unsigned int word_idx) {
 unsigned int dice_core_tb_get_csr(unsigned int csr_idx) {
   if (csr_idx >= 8) {
     throw std::runtime_error("dice_core_tb_get_csr: csr_idx out of range");
+  }
+  return g_csr_values[csr_idx];
+}
+
+// Number of CTAs in the per-CTA CSR override table (0 if the runtime.json
+// has no per_cta_csr_overrides key, i.e. single-CTA kernels).
+unsigned int dice_core_tb_num_ctas() {
+  return static_cast<unsigned int>(g_per_cta_csr.size());
+}
+
+// Effective csrX{csr_idx} for CTA cta_idx. Falls back to the launch-time
+// g_csr_values[csr_idx] whenever the override is absent (override table
+// missing, cta_idx out of range, or this specific CSR not listed in the
+// entry). This is what makes the loop transparent for single-CTA kernels:
+// dice_core_tb_get_per_cta_csr(0, i) == dice_core_tb_get_csr(i) when no
+// overrides were parsed.
+unsigned int dice_core_tb_get_per_cta_csr(unsigned int cta_idx,
+                                          unsigned int csr_idx) {
+  if (csr_idx >= 8) {
+    throw std::runtime_error(
+        "dice_core_tb_get_per_cta_csr: csr_idx out of range");
+  }
+  if (cta_idx < g_per_cta_csr.size() && g_per_cta_present[cta_idx][csr_idx]) {
+    return g_per_cta_csr[cta_idx][csr_idx];
   }
   return g_csr_values[csr_idx];
 }
