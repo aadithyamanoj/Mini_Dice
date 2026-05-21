@@ -68,7 +68,7 @@ module tb_chip_top;
   localparam int FW = 32;
   localparam int CW = 16;
   localparam int CLK_HALF_NS = 10;  // 100 MHz
-  localparam int TIMEOUT_CYC = 70000;
+  localparam int TIMEOUT_CYC = 700000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
   localparam logic [1:0] BURST_INCR = 2'b01;
@@ -84,8 +84,8 @@ module tb_chip_top;
   localparam logic [15:0] CTRL_CGRA_RESET = 16'h0002;
   localparam logic [15:0] CTRL_BSLOAD_EN = 16'h0004;
 
-  localparam string DEFAULT_TEST_VECTOR = "simple_branching_test_vector";
-  localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors";
+  localparam string DEFAULT_TEST_VECTOR = "gemm";
+  localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors/gemm";
 
   // --------------------------------------------------------------------------
   // Clock / reset drivers (TB-side logic, mapped to PAD below)
@@ -484,23 +484,23 @@ module tb_chip_top;
     RD_WAIT,
     RD_ACTIVE
   } rd_state_e;
-  rd_state_e                                 rd_state_q;
-  logic           [                  AW-1:0] rd_base_addr_q;
-  logic           [                     7:0] rd_arlen_q;
-  logic           [                     7:0] rd_beat_idx_q;
-  logic           [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
-  logic           [                     1:0] rd_kind_q;
-  logic                                      rd_aruser_is_meta_q;
-  logic           [                    12:0] rd_aruser_q;
-  logic           [                    15:0] csr_values          [0:7];
-  logic           [                    15:0] start_pc_val;
-  dice_cta_desc_t                            launch_desc;
+  rd_state_e rd_state_q;
+  logic [AW-1:0] rd_base_addr_q;
+  logic [7:0] rd_arlen_q;
+  logic [7:0] rd_beat_idx_q;
+  logic [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
+  logic [1:0] rd_kind_q;
+  logic rd_aruser_is_meta_q;
+  logic [12:0] rd_aruser_q;
+  logic [15:0] csr_values[0:7];
+  logic [15:0] start_pc_val;
+  dice_cta_desc_t launch_desc;
 
   // Number of CTAs in the grid (= number of per_cta_csr_overrides entries
   // parsed from runtime.json). Zero from the DPI means single-CTA, which we
   // coerce to 1 so the launch loop runs exactly once -- byte-identical to the
   // legacy single-shot path.
-  int unsigned                               num_ctas;
+  int unsigned num_ctas;
 
   // cta_complete handshake fires once per CTA completion in mini_dice_top.
   // We tap it here via the same hierarchical reference style the rest of the
@@ -664,14 +664,12 @@ module tb_chip_top;
       // Count each per-CTA completion handshake. `cta_done_pulse` is the
       // same wire run_grid's wait_for_cta_done() uses, so we're consistent
       // with the main launch loop.
-      if (cta_done_pulse)
-        ctas_done_count <= ctas_done_count + 1;
+      if (cta_done_pulse) ctas_done_count <= ctas_done_count + 1;
 
       // Arm the post-grid drain timer only when ALL ctas have completed.
       // Guard with `complete_seen_cycle == 0` so we latch on the first cycle
       // the condition holds and don't re-arm later.
-      if ((ctas_done_count >= (num_ctas == 0 ? 1 : num_ctas))
-          && complete_seen_cycle == 0)
+      if ((ctas_done_count >= (num_ctas == 0 ? 1 : num_ctas)) && complete_seen_cycle == 0)
         complete_seen_cycle <= cyc_count;
 
       if ((complete_seen_cycle != 0)
@@ -685,8 +683,8 @@ module tb_chip_top;
         $fatal(1, "all %0d CTAs complete but DPI write diff failed after drain", num_ctas);
       end
       if (cyc_count >= TIMEOUT_CYC) begin
-        $display("[TB] TIMEOUT at %0d cycles (ctas_done=%0d/%0d)",
-                 cyc_count, ctas_done_count, num_ctas);
+        $display("[TB] TIMEOUT at %0d cycles (ctas_done=%0d/%0d)", cyc_count, ctas_done_count,
+                 num_ctas);
         if (dice_core_tb_check_done() != 0)
           $display("[TB] (timeout) PASS-at-timeout: DPI write diff clean");
         $fatal(1, "timeout");
@@ -1015,8 +1013,8 @@ module tb_chip_top;
   // Wait for the per-CTA complete handshake. A separate per-CTA timeout keeps
   // a hung CTA from looking like a hung whole-grid run.
   task automatic wait_for_cta_done(input int unsigned cta_idx);
-    int unsigned cyc          = 0;
-    int unsigned timeout_cyc  = 200_000;
+    int unsigned cyc = 0;
+    int unsigned timeout_cyc = 200_000;
     void'($value$plusargs("PER_CTA_TIMEOUT=%d", timeout_cyc));
     while (!cta_done_pulse) begin
       @(posedge clk_i);
@@ -1053,8 +1051,7 @@ module tb_chip_top;
   task automatic wait_for_complete();
     int unsigned settle_cycles = 500000;
     void'($value$plusargs("SETTLE=%d", settle_cycles));
-    $display("[TB] Post-grid drain: up to %0d cycles, then checking DPI",
-             settle_cycles);
+    $display("[TB] Post-grid drain: up to %0d cycles, then checking DPI", settle_cycles);
     repeat (settle_cycles) @(posedge clk_i);
   endtask
 
@@ -1070,7 +1067,7 @@ module tb_chip_top;
     init_paths();
     bsg_link_bringup();
     load_collateral();
-    run_grid();             // was: program_csrs_and_launch()
+    run_grid();  // was: program_csrs_and_launch()
     wait_for_complete();
 
     ok = dice_core_tb_check_done();
