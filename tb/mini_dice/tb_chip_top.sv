@@ -502,13 +502,19 @@ module tb_chip_top;
   // legacy single-shot path.
   int unsigned num_ctas;
 
-  // cta_complete handshake fires once per CTA completion in mini_dice_top.
-  // We tap it here via the same hierarchical reference style the rest of the
-  // TB already uses for debug prints; the multi-CTA launch loop polls this
-  // signal to know when it's safe to re-program CSRs and re-pulse start.
-  wire                                       cta_done_pulse =
-      u_dut.u_mini_dice_top.u_cta_if.complete_valid &&
-      u_dut.u_mini_dice_top.u_cta_if.complete_ready;
+  // Per-CTA completion is sensed by polling REG_STATUS[0] (sticky `complete`
+  // bit defined in rtl/cgra_core/internal_memory/cgra_io_csr.sv). The chip
+  // clears that bit on the next CTRL.START write, so each CTA's wait sees a
+  // fresh edge. This is the same handshake the post-tapeout host driver will
+  // use -- only the chip's public CSR/AXI interface, no internal XMRs --
+  // which keeps the multi-CTA launch loop working under post-syn / PnR sims
+  // where instance names get mangled. See `wait_for_cta_done` below.
+  //
+  // Flag the run_grid loop raises after the last CTA's status-poll succeeds.
+  // Declared at module scope so the (gated) TB_RTL_HIER_DEBUG fast-exit
+  // monitor can watch it without an XMR. Always defined so the initial
+  // block can set it unconditionally.
+  logic all_ctas_done_q = 1'b0;
 
   function automatic int unsigned fetch_beat(input logic [1:0] kind, input logic [AW-1:0] base,
                                              input int unsigned beat_idx);
@@ -636,40 +642,34 @@ module tb_chip_top;
     $display("REG W: %0d", DICE_REG_ADDR_WIDTH);
   endtask
 
-  // Multi-CTA aware completion / drain monitor.
+  // Fast-exit completion / drain monitor (gated by TB_RTL_HIER_DEBUG above).
   //
-  // The CGRA fires `complete_valid && complete_ready` once per CTA (one per
-  // grid iteration in run_grid). We count those handshake pulses and only
-  // arm the diff check after the LAST CTA finishes. The earlier version
-  // armed the check on the very first `complete_sticky_r` -- which fires
-  // on CTA 0 -- so multi-CTA runs always exited mid-CTA-1 with a confusing
-  // partial-grid mismatch.
+  // After the run_grid initial block has dispatched and waited on every
+  // CTA's STATUS bit, it sets `all_ctas_done_q` (a normal SV variable, no
+  // XMRs). This monitor then arms a short drain timer and runs the DPI
+  // diff -- giving devs in RTL sim a fast-exit path vs. the initial
+  // block's longer 500 000-cycle settle. The TIMEOUT_CYC watchdog stays
+  // as a final safety net.
   //
-  // num_ctas is the value the run_grid task uses (parsed from the DPI:
-  // axi.expected_writes / per_cta_csr_overrides count). Default 1 when the
-  // initial block hasn't populated it yet, so legacy single-CTA tests
-  // behave identically.
+  // Removed in this revision: the cta_done_pulse handshake counter that
+  // tapped `u_dut.u_mini_dice_top.u_cta_if.complete_*` directly. Driving
+  // completion off `run_grid`'s loop variable keeps this block compatible
+  // with gate-level / PnR sims that mangle internal instance names.
   int unsigned cyc_count;
   int unsigned complete_seen_cycle;
-  int unsigned ctas_done_count;
+  // `all_ctas_done_q` lives at module scope (see declaration above) so
+  // run_grid can set it whether or not TB_RTL_HIER_DEBUG is defined.
   localparam int unsigned POST_COMPLETE_DRAIN_CYC = 1024;
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
       cyc_count           <= 0;
       complete_seen_cycle <= 0;
-      ctas_done_count     <= 0;
     end else begin
       cyc_count <= cyc_count + 1;
 
-      // Count each per-CTA completion handshake. `cta_done_pulse` is the
-      // same wire run_grid's wait_for_cta_done() uses, so we're consistent
-      // with the main launch loop.
-      if (cta_done_pulse) ctas_done_count <= ctas_done_count + 1;
-
-      // Arm the post-grid drain timer only when ALL ctas have completed.
-      // Guard with `complete_seen_cycle == 0` so we latch on the first cycle
-      // the condition holds and don't re-arm later.
-      if ((ctas_done_count >= (num_ctas == 0 ? 1 : num_ctas)) && complete_seen_cycle == 0)
+      // Arm the post-grid drain timer the cycle run_grid finishes the
+      // last CTA. `complete_seen_cycle == 0` guard latches on first rise.
+      if (all_ctas_done_q && complete_seen_cycle == 0)
         complete_seen_cycle <= cyc_count;
 
       if ((complete_seen_cycle != 0)
@@ -683,8 +683,8 @@ module tb_chip_top;
         $fatal(1, "all %0d CTAs complete but DPI write diff failed after drain", num_ctas);
       end
       if (cyc_count >= TIMEOUT_CYC) begin
-        $display("[TB] TIMEOUT at %0d cycles (ctas_done=%0d/%0d)", cyc_count, ctas_done_count,
-                 num_ctas);
+        $display("[TB] TIMEOUT at %0d cycles (all_ctas_done_q=%0b)",
+                 cyc_count, all_ctas_done_q);
         if (dice_core_tb_check_done() != 0)
           $display("[TB] (timeout) PASS-at-timeout: DPI write diff clean");
         $fatal(1, "timeout");
@@ -886,6 +886,48 @@ module tb_chip_top;
     axi_write(reg_offset, DW'(data16), 4'b0011);
   endtask
 
+  // AXI-Lite single-beat read. Mirrors axi_write: drives AR on the EP_TX
+  // side, waits for the chip's R response on EP_RX. Used to poll the chip's
+  // CSR space (e.g. REG_STATUS for the sticky-complete bit).
+  task automatic axi_read(input  logic [AW-1:0] addr,
+                          output logic [DW-1:0] data);
+    begin
+      @(posedge clk_i);
+      #1;
+      ep_tx_araddr  = addr;
+      ep_tx_arlen   = '0;
+      ep_tx_arsize  = 3'b010;
+      ep_tx_arburst = BURST_INCR;
+      ep_tx_arid    = '0;
+      ep_tx_arvalid = 1'b1;
+      do @(posedge clk_i); while (!ep_tx_arready);
+      #1;
+      ep_tx_arvalid = 1'b0;
+
+      ep_rx_rready = 1'b1;
+      begin : r_hs
+        int unsigned rwait = 0;
+        do begin
+          @(posedge clk_i);
+          rwait++;
+          if (rwait == 200)
+            $display("[AXI_RD] t=%0t R STUCK addr=0x%04x", $time, addr);
+        end while (!ep_rx_rvalid);
+        data = ep_rx_rdata;
+      end
+      @(posedge clk_i);
+      #1;
+      ep_rx_rready = 1'b0;
+    end
+  endtask
+
+  task automatic csr_read(input  logic [AW-1:0] reg_offset,
+                          output logic [15:0]   data16);
+    logic [DW-1:0] dw;
+    axi_read(reg_offset, dw);
+    data16 = dw[15:0];
+  endtask
+
   // --------------------------------------------------------------------------
   // bsg_link bringup (drives PAD signals via the logic variables above)
   // --------------------------------------------------------------------------
@@ -1010,22 +1052,38 @@ module tb_chip_top;
     end
   endtask
 
-  // Wait for the per-CTA complete handshake. A separate per-CTA timeout keeps
-  // a hung CTA from looking like a hung whole-grid run.
+  // Wait for the per-CTA complete handshake via REG_STATUS polling.
+  //
+  // This is the same handshake the post-tapeout host driver will use: read
+  // the chip's public STATUS CSR and wait for bit [0] (sticky `complete`)
+  // to go high. The chip clears it on the next CTRL.START, so each CTA's
+  // wait sees a fresh edge with no XMRs into chip internals.
+  //
+  // We poll on a coarse cadence (every POLL_INTERVAL_CYC) so the bsg_link
+  // bandwidth stays mostly available for the chip's own mfetch / bsfetch /
+  // dfetch traffic. Each csr_read traverses the link AR+R roundtrip once,
+  // which is fine at this cadence.
   task automatic wait_for_cta_done(input int unsigned cta_idx);
-    int unsigned cyc = 0;
-    int unsigned timeout_cyc = 200_000;
+    localparam int unsigned POLL_INTERVAL_CYC = 256;
+    int unsigned cyc          = 0;
+    int unsigned timeout_cyc  = 200_000;
+    logic [15:0] status;
     void'($value$plusargs("PER_CTA_TIMEOUT=%d", timeout_cyc));
-    while (!cta_done_pulse) begin
-      @(posedge clk_i);
-      cyc++;
+
+    forever begin
+      repeat (POLL_INTERVAL_CYC) @(posedge clk_i);
+      cyc += POLL_INTERVAL_CYC;
+      csr_read(REG_STATUS, status);
+      if (status[0]) begin
+        $display("[TB] CTA %0d complete: STATUS=0x%04x after ~%0d cycles",
+                 cta_idx, status, cyc);
+        return;
+      end
       if (cyc >= timeout_cyc) begin
-        $fatal(1, "[TB] CTA %0d timed out after %0d cycles", cta_idx, cyc);
+        $fatal(1, "[TB] CTA %0d timed out after %0d cycles (last STATUS=0x%04x)",
+               cta_idx, cyc, status);
       end
     end
-    // Consume the pulse cycle so the next loop iteration's wait starts fresh.
-    @(posedge clk_i);
-    $display("[TB] CTA %0d complete after ~%0d cycles", cta_idx, cyc);
   endtask
 
   // Replace the legacy single-shot program_csrs_and_launch() with a grid
@@ -1044,6 +1102,11 @@ module tb_chip_top;
       csr_write(REG_CTRL, CTRL_START);
       wait_for_cta_done(c);
     end
+    // Signal to the (gated) TB_RTL_HIER_DEBUG monitor that the whole grid
+    // is done -- it can then arm its short drain check. The post-tapeout
+    // path doesn't care about this flag; the main `initial` block below
+    // will continue into wait_for_complete() and dice_core_tb_check_done().
+    all_ctas_done_q <= 1'b1;
   endtask
 
   // Final post-grid drain so any in-flight AXI writes settle before the DPI
