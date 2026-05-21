@@ -398,8 +398,12 @@ module tb_chip_top;
       .r_is_burst_o (ep_rx_r_is_burst)
   );
 
-  localparam logic [1:0] EP_OP_WRITE = 2'b00;
+  localparam logic [1:0] EP_OP_WRITE     = 2'b00;
   localparam logic [1:0] EP_OP_READ_RESP = 2'b01;
+  // Matches the chip-side OP_READ opcode in rtl/IO/axi_link_rx.sv. Header-
+  // only packet (no W-beat follow-up); the chip responds asynchronously
+  // with an OP_READ_RESP back to the FPGA via axi_link_tx.
+  localparam logic [1:0] EP_OP_READ      = 2'b11;
 
   typedef enum logic [1:0] {
     EP_TX_IDLE,
@@ -409,6 +413,30 @@ module tb_chip_top;
 
   ep_tx_state_e ep_tx_state_q, ep_tx_state_n;
 
+  // EP TX state machine -- FPGA-side packet serializer onto ep_link_tx.
+  //
+  // Handles four flows in priority order:
+  //   1. EP_TX_R_DATA   -- TB sends read-response (OP_READ_RESP) back to the
+  //                         chip for a chip-initiated read (mfetch/bsfetch/
+  //                         dfetch). Priority-1 so we don't starve the chip.
+  //   2. EP_TX_WR_DATA  -- TB-initiated writes (csr_write/axi_write):
+  //                         OP_WRITE header followed by 1 W beat.
+  //   3. (idle-emit)    -- TB-initiated reads (csr_read/axi_read):
+  //                         OP_READ header only. The chip's CSR slave
+  //                         responds asynchronously with OP_READ_RESP back
+  //                         over the chip->FPGA link, which u_fpga_ep_rx
+  //                         deserializes onto `ep_rx_r*`. This matches the
+  //                         post-tapeout host-driver pattern -- host issues
+  //                         AXI reads at the chip's public CSR space (e.g.,
+  //                         REG_STATUS) and waits for the R reply.
+  //
+  // OP_READ packet layout (must match rtl/IO/axi_link_rx.sv lines 315-324):
+  //   [31:30] = opcode (= OP_READ = 2'b11)
+  //   [29:28] = id     (2-bit AXI ID; we use arid)
+  //   [27:24] = tid    (4 bits, chip-internal: set 0 for TB-initiated)
+  //   [23:21] = eblock (3 bits, chip-internal: set 0)
+  //   [20:16] = regaddr(5 bits, chip-internal: set 0)
+  //   [15:0]  = addr   (chip CSR address)
   always_comb begin
     ep_link_tx_valid = 1'b0;
     ep_link_tx_data  = '0;
@@ -430,6 +458,15 @@ module tb_chip_top;
           ep_link_tx_data  = {EP_OP_WRITE, ep_tx_awid, 12'b0, ep_tx_awaddr};
           ep_tx_awready    = ep_link_tx_ready;
           if (ep_link_tx_ready) ep_tx_state_n = EP_TX_WR_DATA;
+        end else if (ep_tx_arvalid) begin
+          // TB-initiated read. Header-only packet -- no W-beat to follow,
+          // so we accept arvalid and stay in IDLE. The chip's read response
+          // arrives later on the upstream link via u_fpga_ep_rx -> ep_rx_r*.
+          ep_link_tx_valid = 1'b1;
+          ep_link_tx_data  = {EP_OP_READ, ep_tx_arid,
+                              4'b0 /*tid*/, 3'b0 /*eblock*/, 5'b0 /*regaddr*/,
+                              ep_tx_araddr};
+          ep_tx_arready    = ep_link_tx_ready;
         end
       end
 
@@ -505,9 +542,9 @@ module tb_chip_top;
   // Per-CTA completion is sensed by polling REG_STATUS[0] (sticky `complete`
   // bit defined in rtl/cgra_core/internal_memory/cgra_io_csr.sv). The chip
   // clears that bit on the next CTRL.START write, so each CTA's wait sees a
-  // fresh edge. This is the same handshake the post-tapeout host driver will
-  // use -- only the chip's public CSR/AXI interface, no internal XMRs --
-  // which keeps the multi-CTA launch loop working under post-syn / PnR sims
+  // fresh edge. This is exactly the handshake the post-tapeout host driver
+  // uses -- only the chip's public CSR/AXI interface, no internal XMRs --
+  // so the multi-CTA launch loop keeps working under post-syn / PnR sims
   // where instance names get mangled. See `wait_for_cta_done` below.
   //
   // Flag the run_grid loop raises after the last CTA's status-poll succeeds.
@@ -887,8 +924,11 @@ module tb_chip_top;
   endtask
 
   // AXI-Lite single-beat read. Mirrors axi_write: drives AR on the EP_TX
-  // side, waits for the chip's R response on EP_RX. Used to poll the chip's
-  // CSR space (e.g. REG_STATUS for the sticky-complete bit).
+  // side (serialized as an OP_READ packet onto ep_link_tx by the EP TX
+  // state machine), waits for the chip's R reply on EP_RX (deserialized
+  // from OP_READ_RESP by u_fpga_ep_rx into ep_rx_r*). Used by
+  // wait_for_cta_done to poll REG_STATUS -- the same handshake the
+  // post-tapeout host driver will use.
   task automatic axi_read(input  logic [AW-1:0] addr,
                           output logic [DW-1:0] data);
     begin
@@ -1052,21 +1092,21 @@ module tb_chip_top;
     end
   endtask
 
-  // Wait for the per-CTA complete handshake via REG_STATUS polling.
+  // Wait for the per-CTA complete event by polling REG_STATUS[0] via the
+  // chip's public AXI/CSR interface -- the same handshake the post-tapeout
+  // host driver will use. The chip's cgra_io_csr clears bit [0] on each
+  // new CTRL.START write, so every CTA's wait sees a fresh edge with no
+  // XMRs and no DPI-side bookkeeping.
   //
-  // This is the same handshake the post-tapeout host driver will use: read
-  // the chip's public STATUS CSR and wait for bit [0] (sticky `complete`)
-  // to go high. The chip clears it on the next CTRL.START, so each CTA's
-  // wait sees a fresh edge with no XMRs into chip internals.
-  //
-  // We poll on a coarse cadence (every POLL_INTERVAL_CYC) so the bsg_link
-  // bandwidth stays mostly available for the chip's own mfetch / bsfetch /
-  // dfetch traffic. Each csr_read traverses the link AR+R roundtrip once,
-  // which is fine at this cadence.
+  // We poll on a coarse cadence (POLL_INTERVAL_CYC) so the bsg_link
+  // bandwidth stays available for the chip's own mfetch / bsfetch / dfetch
+  // traffic. Each csr_read costs one AR + one R round-trip over the link;
+  // 256 idle cycles between polls keeps that overhead well under 1% of
+  // link bandwidth.
   task automatic wait_for_cta_done(input int unsigned cta_idx);
     localparam int unsigned POLL_INTERVAL_CYC = 256;
-    int unsigned cyc          = 0;
-    int unsigned timeout_cyc  = 200_000;
+    int unsigned cyc         = 0;
+    int unsigned timeout_cyc = 200_000;
     logic [15:0] status;
     void'($value$plusargs("PER_CTA_TIMEOUT=%d", timeout_cyc));
 
