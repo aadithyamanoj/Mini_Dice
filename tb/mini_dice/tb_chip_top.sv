@@ -636,28 +636,57 @@ module tb_chip_top;
     $display("REG W: %0d", DICE_REG_ADDR_WIDTH);
   endtask
 
+  // Multi-CTA aware completion / drain monitor.
+  //
+  // The CGRA fires `complete_valid && complete_ready` once per CTA (one per
+  // grid iteration in run_grid). We count those handshake pulses and only
+  // arm the diff check after the LAST CTA finishes. The earlier version
+  // armed the check on the very first `complete_sticky_r` -- which fires
+  // on CTA 0 -- so multi-CTA runs always exited mid-CTA-1 with a confusing
+  // partial-grid mismatch.
+  //
+  // num_ctas is the value the run_grid task uses (parsed from the DPI:
+  // axi.expected_writes / per_cta_csr_overrides count). Default 1 when the
+  // initial block hasn't populated it yet, so legacy single-CTA tests
+  // behave identically.
   int unsigned cyc_count;
   int unsigned complete_seen_cycle;
+  int unsigned ctas_done_count;
   localparam int unsigned POST_COMPLETE_DRAIN_CYC = 1024;
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
       cyc_count           <= 0;
       complete_seen_cycle <= 0;
+      ctas_done_count     <= 0;
     end else begin
       cyc_count <= cyc_count + 1;
-      if (u_dut.u_mini_dice_top.u_csr.complete_sticky_r && complete_seen_cycle == 0)
+
+      // Count each per-CTA completion handshake. `cta_done_pulse` is the
+      // same wire run_grid's wait_for_cta_done() uses, so we're consistent
+      // with the main launch loop.
+      if (cta_done_pulse)
+        ctas_done_count <= ctas_done_count + 1;
+
+      // Arm the post-grid drain timer only when ALL ctas have completed.
+      // Guard with `complete_seen_cycle == 0` so we latch on the first cycle
+      // the condition holds and don't re-arm later.
+      if ((ctas_done_count >= (num_ctas == 0 ? 1 : num_ctas))
+          && complete_seen_cycle == 0)
         complete_seen_cycle <= cyc_count;
+
       if ((complete_seen_cycle != 0)
           && ((cyc_count - complete_seen_cycle) >= POST_COMPLETE_DRAIN_CYC)) begin
         if (dice_core_tb_check_done() != 0) begin
-          $display("[TB] PASS: CSR complete observed and DPI write diff clean after drain");
+          $display("[TB] PASS: all %0d CTAs complete and DPI write diff clean after drain",
+                   num_ctas);
           print_param_debug();
           $finish;
         end
-        $fatal(1, "CSR complete observed but DPI write diff failed after drain");
+        $fatal(1, "all %0d CTAs complete but DPI write diff failed after drain", num_ctas);
       end
       if (cyc_count >= TIMEOUT_CYC) begin
-        $display("[TB] TIMEOUT at %0d cycles", cyc_count);
+        $display("[TB] TIMEOUT at %0d cycles (ctas_done=%0d/%0d)",
+                 cyc_count, ctas_done_count, num_ctas);
         if (dice_core_tb_check_done() != 0)
           $display("[TB] (timeout) PASS-at-timeout: DPI write diff clean");
         $fatal(1, "timeout");
