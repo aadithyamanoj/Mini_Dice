@@ -1,8 +1,10 @@
 // mini_dice_chip_random_seed_test
 // --------------------------------
-// Runs the canonical full_mul_array with randomized mem_responder
+// Runs the full_mul_array with randomized mem_responder
 // response delay (1..32) and settle window (200k..1M cycles). Complements
 // the directed fetch_latency test by exercising a spread of delay values.
+//
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
 //
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_random_seed_test +ntb_random_seed=42
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_random_seed_test +ntb_random_seed=42

@@ -4,6 +4,8 @@
 // takes the ADD path, tids 1..15 take MUL). Exercises the FE SIMT stack,
 // branch_handler, and active-mask propagation.
 //
+// Kernel: simple_branching (single-CTA, 7 eblocks, MUL + ADD via divergence)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_simple_branching_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_simple_branching_test
 

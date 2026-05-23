@@ -3,6 +3,8 @@
 // Runs simple_branching with SLVERR injected on tid 0's A-load. Exercises
 // rresp routing through the SIMT divergence + reconvergence machinery.
 //
+// Kernel: simple_branching (single-CTA, 7 eblocks, MUL + ADD via divergence)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_branch_axil_error_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_branch_axil_error_test
 

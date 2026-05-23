@@ -4,6 +4,8 @@
 // fetch burst. Verifies the chip does not deadlock on a non-OKAY rresp
 // from the kind=2 (bitstream) fetch path.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_bs_error_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_bs_error_test
 

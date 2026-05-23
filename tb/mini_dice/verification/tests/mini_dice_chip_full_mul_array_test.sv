@@ -3,6 +3,8 @@
 // Canonical end-to-end smoke test: runs the full_mul_array 5-eblock kernel
 // (16 threads * 4 mem ports = 64 stores) through the chip-level env.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_full_mul_array_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_full_mul_array_test
 

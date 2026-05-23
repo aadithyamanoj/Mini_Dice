@@ -3,6 +3,8 @@
 // Runs full_mul_array with mem_responder.response_delay_cyc = 32 to stress
 // metadata, bitstream, and data fetch paths against slow read responses.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_fetch_latency_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_fetch_latency_test
 

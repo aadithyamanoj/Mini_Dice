@@ -35,6 +35,11 @@ package mini_dice_chip_pkg;
     input int unsigned word_idx
   );
   import "DPI-C" context function int unsigned dice_core_tb_get_csr(input int unsigned csr_idx);
+  import "DPI-C" context function int unsigned dice_core_tb_num_ctas();
+  import "DPI-C" context function int unsigned dice_core_tb_get_per_cta_csr(
+    input int unsigned cta_idx,
+    input int unsigned csr_idx
+  );
   import "DPI-C" context function int unsigned dice_core_tb_meta_read16(input int unsigned byte_addr);
   import "DPI-C" context function int unsigned dice_core_tb_meta_read32(input int unsigned byte_addr);
   import "DPI-C" context function int unsigned dice_core_tb_bitstream_read16(
@@ -513,13 +518,11 @@ package mini_dice_chip_pkg;
   // ---------------------------------------------------------------------------
   `include "tests/mini_dice_chip_base_test.sv"
   `include "tests/mini_dice_chip_full_mul_array_test.sv"
-  `include "tests/mini_dice_chip_add_array_test.sv"
   `include "tests/mini_dice_chip_simple_branching_test.sv"
   `include "tests/mini_dice_chip_partial_thread_test.sv"
   `include "tests/mini_dice_chip_fetch_latency_test.sv"
   `include "tests/mini_dice_chip_axil_error_test.sv"
   `include "tests/mini_dice_chip_mul_random_data_test.sv"
-  `include "tests/mini_dice_chip_sequential_cta_test.sv"
   `include "tests/mini_dice_chip_csr_smoke_test.sv"
   `include "tests/mini_dice_chip_link_backpressure_test.sv"
   `include "tests/mini_dice_chip_random_seed_test.sv"
@@ -531,13 +534,18 @@ package mini_dice_chip_pkg;
   `include "tests/mini_dice_chip_csr_readback_test.sv"
   `include "tests/mini_dice_chip_decerr_test.sv"
   `include "tests/mini_dice_chip_multi_error_test.sv"
-  `include "tests/mini_dice_chip_out_of_range_test.sv"
   `include "tests/mini_dice_chip_port_contention_test.sv"
   `include "tests/mini_dice_chip_cgra_reset_test.sv"
   `include "tests/mini_dice_chip_endurance_test.sv"
-  `include "tests/mini_dice_chip_oor_empirical_test.sv"
   `include "tests/mini_dice_chip_meta_error_test.sv"
   `include "tests/mini_dice_chip_bs_error_test.sv"
-  `include "tests/mini_dice_chip_eblock8_test.sv"
+  `include "tests/mini_dice_chip_gemm_smoke_test.sv"
+  `include "tests/mini_dice_chip_nn_cuda_smoke_test.sv"
+  `include "tests/mini_dice_chip_nn_cuda_axil_error_test.sv"
+  `include "tests/mini_dice_chip_nn_cuda_fetch_latency_test.sv"
+  `include "tests/mini_dice_chip_gemm_axil_error_test.sv"
+  `include "tests/mini_dice_chip_gemm_fetch_latency_test.sv"
+  `include "tests/mini_dice_chip_gemm_endurance_test.sv"
+  `include "tests/mini_dice_chip_gemm_cgra_reset_test.sv"
 
 endpackage

@@ -2,11 +2,12 @@
 // ------------------------------
 // In FAST mode: asserts reset mid-kernel via the vif force hooks, then
 // re-launches full_mul_array and checks recovery.
-// In CHIP mode: skipped - a runtime hard_reset PAD pulse does not fully
-// reset the bsg_link credit counters, and the test cannot replay the
-// full bsg_link bringup sequence from inside run_phase.
+// In CHIP mode: logs-and-exits — a runtime hard_reset PAD pulse alone
+// does not fully reset the bsg_link credit counters, and the test cannot
+// replay the multi-step bsg_link bringup from inside run_phase. Would
+// need that bringup factored out into a reusable task in tb_chip.sv.
 //
-// (currently not working, haven't figured out the reset logic yet)
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) — FAST only
 //
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_mid_reset_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_mid_reset_test  (skips)

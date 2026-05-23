@@ -4,6 +4,8 @@
 // tid 0 simultaneously. Checks the chip handles concurrent error rresps
 // across all four mem ports without deadlock.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_multi_error_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_multi_error_test
 

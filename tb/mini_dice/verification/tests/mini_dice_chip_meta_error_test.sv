@@ -1,8 +1,10 @@
 // mini_dice_chip_meta_error_test
 // -------------------------------
 // Runs full_mul_array with SLVERR injected on the eblock-0 metadata fetch
-// burst (kind=0). Exercises the mfetch unit's rresp path, which is a
-// different code branch from the data-load rresp path.
+// burst. Exercises the mfetch unit's rresp path, which is a different
+// code branch from the data-load rresp path.
+//
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
 //
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_meta_error_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_meta_error_test

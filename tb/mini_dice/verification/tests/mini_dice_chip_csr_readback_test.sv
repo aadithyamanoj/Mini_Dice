@@ -4,6 +4,8 @@
 // flits and checks the readback values. Exercises the FPGA->chip READ
 // flit path and the chip->FPGA READ_RESP flit path end-to-end.
 //
+// Kernel: none (CSR-only, no CTA dispatch)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_csr_readback_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_csr_readback_test
 

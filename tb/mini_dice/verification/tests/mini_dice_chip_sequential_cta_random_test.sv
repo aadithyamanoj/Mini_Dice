@@ -1,13 +1,14 @@
 // mini_dice_chip_sequential_cta_random_test
 // ------------------------------------------
-// Dispatches two CTAs back-to-back through the single-CTA slot, with
-// independent random per-CTA config (thread_count, kernel op, A/B/C
-// bases, A/B values). CTA0's address region is in 0x000..0x1FF; CTA1's
-// is in 0x200..0x3FF (disjoint). Builds a combined expected_data map
-// across both CTAs and compares against observed writes.
+// Dispatches two CTAs back-to-back through the single-CTA slot with
+// random per-CTA config (thread_count, A/B/C base addresses, A/B input
+// values). Both CTAs run full_mul_array — that matches how software
+// actually uses the chip: a grid of N CTAs all share one kernel binary.
+// CTA0's address region is in 0x000..0x1FF; CTA1's is in 0x200..0x3FF
+// (disjoint). Builds a combined expected_data map across both CTAs and
+// compares against observed writes.
 //
-// (mixed-op pairs bail after CTA0; kernel-switch case not exercised)
-// (currently working on this)
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) — dispatched twice
 //
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_sequential_cta_random_test +ntb_random_seed=42
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_sequential_cta_random_test +ntb_random_seed=42
@@ -15,10 +16,7 @@
 class mini_dice_chip_sequential_cta_random_test extends mini_dice_chip_full_mul_array_test;
   `uvm_component_utils(mini_dice_chip_sequential_cta_random_test)
 
-  typedef enum bit { OP_MUL = 1'b0, OP_ADD = 1'b1 } op_e;
-
   // Per-CTA randomized knobs; index 0 = CTA0, index 1 = CTA1.
-  rand op_e         r_kernel [2];
   rand int unsigned r_tcount [2];
   rand logic [15:0] r_csr0   [2];   // A_base
   rand logic [15:0] r_csr1   [2];   // B_base
@@ -29,7 +27,6 @@ class mini_dice_chip_sequential_cta_random_test extends mini_dice_chip_full_mul_
   logic [15:0] expected_data [logic [15:0]];
 
   constraint c_per_cta {
-    foreach (r_kernel[i]) r_kernel[i] inside {OP_MUL, OP_ADD};
     foreach (r_tcount[i]) r_tcount[i] inside {[1:16]};
 
     r_csr0[0] inside {[16'h0000 : 16'h0040]};
@@ -42,15 +39,12 @@ class mini_dice_chip_sequential_cta_random_test extends mini_dice_chip_full_mul_
   }
 
   covergroup cg_seq_cta;
-    cp_cta0_kernel: coverpoint r_kernel[0] { bins b_mul = {OP_MUL}; bins b_add = {OP_ADD}; }
-    cp_cta1_kernel: coverpoint r_kernel[1] { bins b_mul = {OP_MUL}; bins b_add = {OP_ADD}; }
     cp_cta0_tcount: coverpoint r_tcount[0] {
       bins b_lo  = {[1:4]}; bins b_mid = {[5:12]}; bins b_hi = {[13:16]};
     }
     cp_cta1_tcount: coverpoint r_tcount[1] {
       bins b_lo  = {[1:4]}; bins b_mid = {[5:12]}; bins b_hi = {[13:16]};
     }
-    cross_kernel_pair: cross cp_cta0_kernel, cp_cta1_kernel;
     cross_tcount_pair: cross cp_cta0_tcount, cp_cta1_tcount;
   endgroup
 
@@ -71,7 +65,7 @@ class mini_dice_chip_sequential_cta_random_test extends mini_dice_chip_full_mul_
         b_val  = r_B[i][t*4 + k];
         env.mem_resp.override_data[a_addr] = a_val;
         env.mem_resp.override_data[b_addr] = b_val;
-        expected = (r_kernel[i] == OP_MUL) ? (a_val * b_val) : (a_val + b_val);
+        expected = a_val * b_val;  // full_mul_array does A*B
         expected_data[c_addr] = expected;
       end
     end
@@ -141,16 +135,13 @@ class mini_dice_chip_sequential_cta_random_test extends mini_dice_chip_full_mul_
     if (!this.randomize()) `uvm_fatal("SEQ_CTA_RAND", "randomize() failed");
     cg_seq_cta.sample();
 
-    // Load .mem files for CTA0's kernel choice. If CTA1 picks a different
-    // op we'll skip the second dispatch below.
-    test_vector_name = (r_kernel[0] == OP_MUL) ?
-        "full_mul_array_test_vector" : "add_array_test_vector";
+    test_vector_name = "full_mul_array_test_vector";
     load_collateral();
 
     `uvm_info("SEQ_CTA_RAND",
-      $sformatf("CTA0: op=%s tcount=%0d csr0=%04x → %0d stores | CTA1: op=%s tcount=%0d csr0=%04x → %0d stores",
-                (r_kernel[0]==OP_MUL)?"MUL":"ADD", r_tcount[0], r_csr0[0], r_tcount[0]*4,
-                (r_kernel[1]==OP_MUL)?"MUL":"ADD", r_tcount[1], r_csr0[1], r_tcount[1]*4),
+      $sformatf("CTA0: tcount=%0d csr0=%04x → %0d stores | CTA1: tcount=%0d csr0=%04x → %0d stores",
+                r_tcount[0], r_csr0[0], r_tcount[0]*4,
+                r_tcount[1], r_csr0[1], r_tcount[1]*4),
       UVM_LOW)
 
     // Dispatch CTA 0.
@@ -166,16 +157,6 @@ class mini_dice_chip_sequential_cta_random_test extends mini_dice_chip_full_mul_
     `uvm_info("SEQ_CTA_RAND",
       $sformatf("CTA 0 drained (writes=%0d/%0d)",
                 env.mem_resp.writes_observed, cta0_target), UVM_LOW)
-
-    // Mid-test re-load of a different kernel's .mem files is not supported,
-    // so skip CTA1 when its op differs from CTA0's.
-    if (r_kernel[0] != r_kernel[1]) begin
-      `uvm_info("SEQ_CTA_RAND",
-        "PASS (CTA0 only): mixed kernel-op pair not supported without re-loading .mem mid-test",
-        UVM_NONE)
-      phase.drop_objection(this);
-      return;
-    end
 
     // Dispatch CTA 1.
     install_cta(1);

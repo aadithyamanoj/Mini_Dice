@@ -3,6 +3,8 @@
 // Pulses CTRL.CGRA_RESET (bit 1 of REG_CTRL) to soft-reset the CGRA
 // fabric only, then launches full_mul_array and checks it completes.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_cgra_reset_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_cgra_reset_test
 

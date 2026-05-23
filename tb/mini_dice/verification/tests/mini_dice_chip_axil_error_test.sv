@@ -4,6 +4,8 @@
 // address. Verifies the chip does not deadlock and the remaining lanes
 // still deliver correct store data.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_axil_error_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_axil_error_test
 

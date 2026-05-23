@@ -10,6 +10,8 @@
 //   csrX3=0x0004 (stride), csrX4..7={0,1,2,3} (lane offsets).
 // Address map: A=0x01..0x40, B=0x80..0xBF, C=0x100..0x13F.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) with random A/B values
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_mul_random_data_test +ntb_random_seed=42
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_mul_random_data_test +ntb_random_seed=42
 

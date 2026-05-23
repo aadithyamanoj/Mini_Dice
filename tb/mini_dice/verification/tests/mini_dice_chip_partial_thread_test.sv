@@ -4,6 +4,8 @@
 // exercise the dispatcher's partial active mask. Expected store count
 // is tcount * 4 = 36.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) with tcount=9
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_partial_thread_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_partial_thread_test
 

@@ -5,6 +5,8 @@
 // its address, and the mem_responder fetch_latency. Samples cg_random
 // covergroup. Designed to be re-run across many seeds with urg merge.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_random_regression_test +ntb_random_seed=42
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_random_regression_test +ntb_random_seed=42
 

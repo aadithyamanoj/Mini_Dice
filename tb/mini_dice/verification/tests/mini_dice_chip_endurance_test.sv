@@ -5,6 +5,8 @@
 // each iteration retires its 64 stores. Catches FIFO leaks, counter
 // rollover, and slot-reuse state-machine bugs.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) — dispatched N times
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_endurance_test +ITERS=50
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_endurance_test +ITERS=50
 

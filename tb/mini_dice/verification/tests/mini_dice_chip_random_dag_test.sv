@@ -1,14 +1,16 @@
 // mini_dice_chip_random_dag_test
 // -------------------------------
-// Constrained-random kernel + data + dispatch test. Per run randomizes:
-//   - kernel op (MUL or ADD, picks the matching .mem files)
+// Constrained-random data + dispatch test on full_mul_array. Per run
+// randomizes:
 //   - thread_count 1..16
 //   - disjoint A/B/C base addresses
 //   - per-(tid,lane) A and B values
 //   - mem_responder fetch latency
 //   - optional SLVERR injection on one A or B load address
-// Builds a local expected_data map (A op B mod 2^16) and compares against
+// Builds a local expected_data map (A * B mod 2^16) and compares against
 // mem_responder.local_writes. Samples cg_dag covergroup.
+//
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
 //
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_random_dag_test +ntb_random_seed=42
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_random_dag_test +ntb_random_seed=42
@@ -16,9 +18,6 @@
 class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
   `uvm_component_utils(mini_dice_chip_random_dag_test)
 
-  typedef enum bit { OP_MUL = 1'b0, OP_ADD = 1'b1 } op_e;
-
-  rand op_e         r_kernel;
   rand int unsigned r_tcount;
   rand logic [15:0] r_csrX0;       // A_base
   rand logic [15:0] r_csrX1;       // B_base
@@ -32,7 +31,6 @@ class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
   // Expected local map populated after randomize().
   logic [15:0] expected_data [logic [15:0]];
 
-  constraint c_kernel  { r_kernel inside {OP_MUL, OP_ADD}; }
   constraint c_tcount  { r_tcount inside {[1:16]}; }
 
   // Disjoint A/B/C regions in the slave's 0x0000..0x01FF window.
@@ -53,10 +51,6 @@ class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
   constraint c_latency { r_fetch_latency inside {0, 1, 2, 4, 8, 16}; }
 
   covergroup cg_dag;
-    cp_kernel: coverpoint r_kernel {
-      bins b_mul = {OP_MUL};
-      bins b_add = {OP_ADD};
-    }
     cp_tcount: coverpoint r_tcount {
       bins b_1     = {1};
       bins b_2_4   = {[2:4]};
@@ -74,8 +68,8 @@ class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
       bins b_no  = {0};
       bins b_yes = {1};
     }
-    cross_kernel_tcount: cross cp_kernel, cp_tcount;
-    cross_kernel_err:    cross cp_kernel, cp_err;
+    cross_tcount_err:  cross cp_tcount, cp_err;
+    cross_tcount_csr0: cross cp_tcount, cp_csr0;
   endgroup
 
   function new(string name = "mini_dice_chip_random_dag_test", uvm_component parent = null);
@@ -99,7 +93,7 @@ class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
         b_val  = r_B[t*4 + k];
         env.mem_resp.override_data[a_addr] = a_val;
         env.mem_resp.override_data[b_addr] = b_val;
-        expected = (r_kernel == OP_MUL) ? (a_val * b_val) : (a_val + b_val);
+        expected = a_val * b_val;  // MUL only — add_array kernel was removed
         expected_data[c_addr] = expected;
       end
     end
@@ -126,9 +120,8 @@ class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
       if (!expected_data.exists(addr)) extra++;
     if (n_match == expected_data.size() && miss == 0 && mismatch == 0 && extra == 0)
       `uvm_info("RAND_DAG",
-        $sformatf("PASS: %0d/%0d %s stores match; cov=%.1f%%",
-                  n_match, expected_data.size(),
-                  (r_kernel==OP_MUL)?"MUL":"ADD", cg_dag.get_coverage()), UVM_NONE)
+        $sformatf("PASS: %0d/%0d MUL stores match; cov=%.1f%%",
+                  n_match, expected_data.size(), cg_dag.get_coverage()), UVM_NONE)
     else
       `uvm_error("RAND_DAG",
         $sformatf("FAIL: match=%0d miss=%0d mismatch=%0d extra=%0d",
@@ -142,13 +135,9 @@ class mini_dice_chip_random_dag_test extends mini_dice_chip_full_mul_array_test;
     if (!this.randomize()) `uvm_fatal("RAND_DAG", "randomize() failed");
     cg_dag.sample();
 
-    // load_collateral() reads the .mem files named by test_vector_name,
-    // so the kernel must be selected before that call.
-    test_vector_name = (r_kernel == OP_MUL) ?
-        "full_mul_array_test_vector" : "add_array_test_vector";
+    test_vector_name = "full_mul_array_test_vector";
     `uvm_info("RAND_DAG",
-      $sformatf("op=%s tcount=%0d csrX0..2={%04x %04x %04x} err=%0b lat=%0d → %0d stores",
-                (r_kernel==OP_MUL)?"MUL":"ADD",
+      $sformatf("op=MUL tcount=%0d csrX0..2={%04x %04x %04x} err=%0b lat=%0d → %0d stores",
                 r_tcount, r_csrX0, r_csrX1, r_csrX2,
                 r_inject_err, r_fetch_latency, r_tcount*4), UVM_LOW)
 

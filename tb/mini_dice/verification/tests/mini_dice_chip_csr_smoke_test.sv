@@ -3,6 +3,8 @@
 // CSR-only sanity check: writes 8 CSRs plus start_pc / thread_count and
 // confirms the link traffic completes without errors. Does not launch a CTA.
 //
+// Kernel: none (CSR-only, no CTA dispatch)
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_csr_smoke_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_csr_smoke_test
 

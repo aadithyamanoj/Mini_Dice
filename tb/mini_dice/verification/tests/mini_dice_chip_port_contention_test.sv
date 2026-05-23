@@ -5,6 +5,8 @@
 // arbitration with 4-way same-address store contention. Expects 64
 // store ops total but only 16 unique addresses.
 //
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) with csrX4..7=0
+//
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_port_contention_test
 // Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_port_contention_test
 
