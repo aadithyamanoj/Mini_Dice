@@ -45,6 +45,15 @@ import "DPI-C" context function void dice_core_tb_record_axi_write(
 );
 import "DPI-C" context function int unsigned dice_core_tb_check_done();
 
+// Multi-CTA extensions: per_cta_csr_overrides accessors. Both fall back to
+// the launch-time csr_values when the override table is missing or empty,
+// so single-CTA kernels see byte-identical behavior to the legacy path.
+import "DPI-C" context function int unsigned dice_core_tb_num_ctas();
+import "DPI-C" context function int unsigned dice_core_tb_get_per_cta_csr(
+  input int unsigned cta_idx,
+  input int unsigned csr_idx
+);
+
 `include "dice_define.vh"
 
 module tb_chip_top;
@@ -59,7 +68,7 @@ module tb_chip_top;
   localparam int FW = 32;
   localparam int CW = 16;
   localparam int CLK_HALF_NS = 10;  // 100 MHz
-  localparam int TIMEOUT_CYC = 70000;
+  localparam int TIMEOUT_CYC = 700000;
   localparam int CTA_DESC_BITS = $bits(dice_cta_desc_t);
   localparam int CTA_DESC_WORDS = (CTA_DESC_BITS + 31) / 32;
   localparam logic [1:0] BURST_INCR = 2'b01;
@@ -75,8 +84,8 @@ module tb_chip_top;
   localparam logic [15:0] CTRL_CGRA_RESET = 16'h0002;
   localparam logic [15:0] CTRL_BSLOAD_EN = 16'h0004;
 
-  localparam string DEFAULT_TEST_VECTOR = "simple_branching_test_vector";
-  localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors";
+  localparam string DEFAULT_TEST_VECTOR = "gemm";
+  localparam string DEFAULT_TEST_VECTOR_DIR = "tb/test_vectors/gemm";
 
   // --------------------------------------------------------------------------
   // Clock / reset drivers (TB-side logic, mapped to PAD below)
@@ -389,8 +398,12 @@ module tb_chip_top;
       .r_is_burst_o (ep_rx_r_is_burst)
   );
 
-  localparam logic [1:0] EP_OP_WRITE = 2'b00;
+  localparam logic [1:0] EP_OP_WRITE     = 2'b00;
   localparam logic [1:0] EP_OP_READ_RESP = 2'b01;
+  // Matches the chip-side OP_READ opcode in rtl/IO/axi_link_rx.sv. Header-
+  // only packet (no W-beat follow-up); the chip responds asynchronously
+  // with an OP_READ_RESP back to the FPGA via axi_link_tx.
+  localparam logic [1:0] EP_OP_READ      = 2'b11;
 
   typedef enum logic [1:0] {
     EP_TX_IDLE,
@@ -400,6 +413,30 @@ module tb_chip_top;
 
   ep_tx_state_e ep_tx_state_q, ep_tx_state_n;
 
+  // EP TX state machine -- FPGA-side packet serializer onto ep_link_tx.
+  //
+  // Handles four flows in priority order:
+  //   1. EP_TX_R_DATA   -- TB sends read-response (OP_READ_RESP) back to the
+  //                         chip for a chip-initiated read (mfetch/bsfetch/
+  //                         dfetch). Priority-1 so we don't starve the chip.
+  //   2. EP_TX_WR_DATA  -- TB-initiated writes (csr_write/axi_write):
+  //                         OP_WRITE header followed by 1 W beat.
+  //   3. (idle-emit)    -- TB-initiated reads (csr_read/axi_read):
+  //                         OP_READ header only. The chip's CSR slave
+  //                         responds asynchronously with OP_READ_RESP back
+  //                         over the chip->FPGA link, which u_fpga_ep_rx
+  //                         deserializes onto `ep_rx_r*`. This matches the
+  //                         post-tapeout host-driver pattern -- host issues
+  //                         AXI reads at the chip's public CSR space (e.g.,
+  //                         REG_STATUS) and waits for the R reply.
+  //
+  // OP_READ packet layout (must match rtl/IO/axi_link_rx.sv lines 315-324):
+  //   [31:30] = opcode (= OP_READ = 2'b11)
+  //   [29:28] = id     (2-bit AXI ID; we use arid)
+  //   [27:24] = tid    (4 bits, chip-internal: set 0 for TB-initiated)
+  //   [23:21] = eblock (3 bits, chip-internal: set 0)
+  //   [20:16] = regaddr(5 bits, chip-internal: set 0)
+  //   [15:0]  = addr   (chip CSR address)
   always_comb begin
     ep_link_tx_valid = 1'b0;
     ep_link_tx_data  = '0;
@@ -421,6 +458,15 @@ module tb_chip_top;
           ep_link_tx_data  = {EP_OP_WRITE, ep_tx_awid, 12'b0, ep_tx_awaddr};
           ep_tx_awready    = ep_link_tx_ready;
           if (ep_link_tx_ready) ep_tx_state_n = EP_TX_WR_DATA;
+        end else if (ep_tx_arvalid) begin
+          // TB-initiated read. Header-only packet -- no W-beat to follow,
+          // so we accept arvalid and stay in IDLE. The chip's read response
+          // arrives later on the upstream link via u_fpga_ep_rx -> ep_rx_r*.
+          ep_link_tx_valid = 1'b1;
+          ep_link_tx_data  = {EP_OP_READ, ep_tx_arid,
+                              4'b0 /*tid*/, 3'b0 /*eblock*/, 5'b0 /*regaddr*/,
+                              ep_tx_araddr};
+          ep_tx_arready    = ep_link_tx_ready;
         end
       end
 
@@ -475,17 +521,37 @@ module tb_chip_top;
     RD_WAIT,
     RD_ACTIVE
   } rd_state_e;
-  rd_state_e                                 rd_state_q;
-  logic           [                  AW-1:0] rd_base_addr_q;
-  logic           [                     7:0] rd_arlen_q;
-  logic           [                     7:0] rd_beat_idx_q;
-  logic           [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
-  logic           [                     1:0] rd_kind_q;
-  logic                                      rd_aruser_is_meta_q;
-  logic           [                    12:0] rd_aruser_q;
-  logic           [                    15:0] csr_values          [0:7];
-  logic           [                    15:0] start_pc_val;
-  dice_cta_desc_t                            launch_desc;
+  rd_state_e rd_state_q;
+  logic [AW-1:0] rd_base_addr_q;
+  logic [7:0] rd_arlen_q;
+  logic [7:0] rd_beat_idx_q;
+  logic [TB_READ_RESP_DELAY_W-1:0] rd_delay_q;
+  logic [1:0] rd_kind_q;
+  logic rd_aruser_is_meta_q;
+  logic [12:0] rd_aruser_q;
+  logic [15:0] csr_values[0:7];
+  logic [15:0] start_pc_val;
+  dice_cta_desc_t launch_desc;
+
+  // Number of CTAs in the grid (= number of per_cta_csr_overrides entries
+  // parsed from runtime.json). Zero from the DPI means single-CTA, which we
+  // coerce to 1 so the launch loop runs exactly once -- byte-identical to the
+  // legacy single-shot path.
+  int unsigned num_ctas;
+
+  // Per-CTA completion is sensed by polling REG_STATUS[0] (sticky `complete`
+  // bit defined in rtl/cgra_core/internal_memory/cgra_io_csr.sv). The chip
+  // clears that bit on the next CTRL.START write, so each CTA's wait sees a
+  // fresh edge. This is exactly the handshake the post-tapeout host driver
+  // uses -- only the chip's public CSR/AXI interface, no internal XMRs --
+  // so the multi-CTA launch loop keeps working under post-syn / PnR sims
+  // where instance names get mangled. See `wait_for_cta_done` below.
+  //
+  // Flag the run_grid loop raises after the last CTA's status-poll succeeds.
+  // Declared at module scope so the (gated) TB_RTL_HIER_DEBUG fast-exit
+  // monitor can watch it without an XMR. Always defined so the initial
+  // block can set it unconditionally.
+  logic all_ctas_done_q = 1'b0;
 
   function automatic int unsigned fetch_beat(input logic [1:0] kind, input logic [AW-1:0] base,
                                              input int unsigned beat_idx);
@@ -613,8 +679,23 @@ module tb_chip_top;
     $display("REG W: %0d", DICE_REG_ADDR_WIDTH);
   endtask
 
+  // Fast-exit completion / drain monitor (gated by TB_RTL_HIER_DEBUG above).
+  //
+  // After the run_grid initial block has dispatched and waited on every
+  // CTA's STATUS bit, it sets `all_ctas_done_q` (a normal SV variable, no
+  // XMRs). This monitor then arms a short drain timer and runs the DPI
+  // diff -- giving devs in RTL sim a fast-exit path vs. the initial
+  // block's longer 500 000-cycle settle. The TIMEOUT_CYC watchdog stays
+  // as a final safety net.
+  //
+  // Removed in this revision: the cta_done_pulse handshake counter that
+  // tapped `u_dut.u_mini_dice_top.u_cta_if.complete_*` directly. Driving
+  // completion off `run_grid`'s loop variable keeps this block compatible
+  // with gate-level / PnR sims that mangle internal instance names.
   int unsigned cyc_count;
   int unsigned complete_seen_cycle;
+  // `all_ctas_done_q` lives at module scope (see declaration above) so
+  // run_grid can set it whether or not TB_RTL_HIER_DEBUG is defined.
   localparam int unsigned POST_COMPLETE_DRAIN_CYC = 1024;
   always_ff @(posedge clk_i) begin
     if (rst_i) begin
@@ -622,19 +703,25 @@ module tb_chip_top;
       complete_seen_cycle <= 0;
     end else begin
       cyc_count <= cyc_count + 1;
-      if (u_dut.u_mini_dice_top.u_csr.complete_sticky_r && complete_seen_cycle == 0)
+
+      // Arm the post-grid drain timer the cycle run_grid finishes the
+      // last CTA. `complete_seen_cycle == 0` guard latches on first rise.
+      if (all_ctas_done_q && complete_seen_cycle == 0)
         complete_seen_cycle <= cyc_count;
+
       if ((complete_seen_cycle != 0)
           && ((cyc_count - complete_seen_cycle) >= POST_COMPLETE_DRAIN_CYC)) begin
         if (dice_core_tb_check_done() != 0) begin
-          $display("[TB] PASS: CSR complete observed and DPI write diff clean after drain");
+          $display("[TB] PASS: all %0d CTAs complete and DPI write diff clean after drain",
+                   num_ctas);
           print_param_debug();
           $finish;
         end
-        $fatal(1, "CSR complete observed but DPI write diff failed after drain");
+        $fatal(1, "all %0d CTAs complete but DPI write diff failed after drain", num_ctas);
       end
       if (cyc_count >= TIMEOUT_CYC) begin
-        $display("[TB] TIMEOUT at %0d cycles", cyc_count);
+        $display("[TB] TIMEOUT at %0d cycles (all_ctas_done_q=%0b)",
+                 cyc_count, all_ctas_done_q);
         if (dice_core_tb_check_done() != 0)
           $display("[TB] (timeout) PASS-at-timeout: DPI write diff clean");
         $fatal(1, "timeout");
@@ -836,6 +923,51 @@ module tb_chip_top;
     axi_write(reg_offset, DW'(data16), 4'b0011);
   endtask
 
+  // AXI-Lite single-beat read. Mirrors axi_write: drives AR on the EP_TX
+  // side (serialized as an OP_READ packet onto ep_link_tx by the EP TX
+  // state machine), waits for the chip's R reply on EP_RX (deserialized
+  // from OP_READ_RESP by u_fpga_ep_rx into ep_rx_r*). Used by
+  // wait_for_cta_done to poll REG_STATUS -- the same handshake the
+  // post-tapeout host driver will use.
+  task automatic axi_read(input  logic [AW-1:0] addr,
+                          output logic [DW-1:0] data);
+    begin
+      @(posedge clk_i);
+      #1;
+      ep_tx_araddr  = addr;
+      ep_tx_arlen   = '0;
+      ep_tx_arsize  = 3'b010;
+      ep_tx_arburst = BURST_INCR;
+      ep_tx_arid    = '0;
+      ep_tx_arvalid = 1'b1;
+      do @(posedge clk_i); while (!ep_tx_arready);
+      #1;
+      ep_tx_arvalid = 1'b0;
+
+      ep_rx_rready = 1'b1;
+      begin : r_hs
+        int unsigned rwait = 0;
+        do begin
+          @(posedge clk_i);
+          rwait++;
+          if (rwait == 200)
+            $display("[AXI_RD] t=%0t R STUCK addr=0x%04x", $time, addr);
+        end while (!ep_rx_rvalid);
+        data = ep_rx_rdata;
+      end
+      @(posedge clk_i);
+      #1;
+      ep_rx_rready = 1'b0;
+    end
+  endtask
+
+  task automatic csr_read(input  logic [AW-1:0] reg_offset,
+                          output logic [15:0]   data16);
+    logic [DW-1:0] dw;
+    axi_read(reg_offset, dw);
+    data16 = dw[15:0];
+  endtask
+
   // --------------------------------------------------------------------------
   // bsg_link bringup (drives PAD signals via the logic variables above)
   // --------------------------------------------------------------------------
@@ -931,28 +1063,98 @@ module tb_chip_top;
     for (int i = 0; i < 8; i++) csr_values[i] = 16'(dice_core_tb_get_csr(i));
     start_pc_val = 16'(launch_desc.kernel_desc.start_pc);
     void'($value$plusargs("START_PC=%h", start_pc_val));
+
+    // Read the per-CTA override count. The DPI returns 0 for single-CTA test
+    // vectors that lack a per_cta_csr_overrides key; coerce to 1 so the
+    // launch loop runs once and behaves identically to the legacy path.
+    num_ctas = dice_core_tb_num_ctas();
+    if (num_ctas == 0) num_ctas = 1;
+
     $display("[TB] Test vector stem      : %s", test_vector_stem);
-    $display("[TB] csrX0..7              : %04x %04x %04x %04x %04x %04x %04x %04x", csr_values[0],
+    $display("[TB] csrX0..7 (launch)     : %04x %04x %04x %04x %04x %04x %04x %04x", csr_values[0],
              csr_values[1], csr_values[2], csr_values[3], csr_values[4], csr_values[5],
              csr_values[6], csr_values[7]);
     $display("[TB] start_pc              : 0x%04x", start_pc_val);
+    $display("[TB] num_ctas              : %0d (1 = no per_cta_csr_overrides in runtime.json)",
+             num_ctas);
   endtask
 
-  task automatic program_csrs_and_launch();
-    $display("[TB] Programming csrX0..7 via bsg_link host path");
-    for (int i = 0; i < 8; i++) csr_write(REG_CSRX0 + AW'(i * 2), csr_values[i]);
-    $display("[TB] Setting start_pc = 0x%04x", start_pc_val);
+  // Program csrX0..7 for one CTA via the host-side bsg_link path. Uses the
+  // DPI getter that transparently falls back to the launch csr_values[] for
+  // any CSR not overridden in this CTA's entry (so single-CTA kernels reduce
+  // to the legacy one-shot programming).
+  task automatic program_csrs_for_cta(input int unsigned cta_idx);
+    logic [15:0] v;
+    $display("[TB] CTA %0d: programming csrX0..7", cta_idx);
+    for (int i = 0; i < 8; i++) begin
+      v = 16'(dice_core_tb_get_per_cta_csr(cta_idx, i));
+      csr_write(REG_CSRX0 + AW'(i * 2), v);
+    end
+  endtask
+
+  // Wait for the per-CTA complete event by polling REG_STATUS[0] via the
+  // chip's public AXI/CSR interface -- the same handshake the post-tapeout
+  // host driver will use. The chip's cgra_io_csr clears bit [0] on each
+  // new CTRL.START write, so every CTA's wait sees a fresh edge with no
+  // XMRs and no DPI-side bookkeeping.
+  //
+  // We poll on a coarse cadence (POLL_INTERVAL_CYC) so the bsg_link
+  // bandwidth stays available for the chip's own mfetch / bsfetch / dfetch
+  // traffic. Each csr_read costs one AR + one R round-trip over the link;
+  // 256 idle cycles between polls keeps that overhead well under 1% of
+  // link bandwidth.
+  task automatic wait_for_cta_done(input int unsigned cta_idx);
+    localparam int unsigned POLL_INTERVAL_CYC = 256;
+    int unsigned cyc         = 0;
+    int unsigned timeout_cyc = 200_000;
+    logic [15:0] status;
+    void'($value$plusargs("PER_CTA_TIMEOUT=%d", timeout_cyc));
+
+    forever begin
+      repeat (POLL_INTERVAL_CYC) @(posedge clk_i);
+      cyc += POLL_INTERVAL_CYC;
+      csr_read(REG_STATUS, status);
+      if (status[0]) begin
+        $display("[TB] CTA %0d complete: STATUS=0x%04x after ~%0d cycles",
+                 cta_idx, status, cyc);
+        return;
+      end
+      if (cyc >= timeout_cyc) begin
+        $fatal(1, "[TB] CTA %0d timed out after %0d cycles (last STATUS=0x%04x)",
+               cta_idx, cyc, status);
+      end
+    end
+  endtask
+
+  // Replace the legacy single-shot program_csrs_and_launch() with a grid
+  // loop. start_pc and thread_count are kernel-wide so they're written once;
+  // csrX0..7 are reprogrammed per CTA from the override table.
+  task automatic run_grid();
+    $display("[TB] Programming kernel-wide CSRs via bsg_link");
+    $display("[TB] Setting start_pc      = 0x%04x", start_pc_val);
     csr_write(REG_STARTPC, start_pc_val);
-    $display("[TB] Setting thread_count = %0d", launch_desc.kernel_desc.thread_count);
+    $display("[TB] Setting thread_count  = %0d", launch_desc.kernel_desc.thread_count);
     csr_write(REG_THREAD_COUNT, 16'(launch_desc.kernel_desc.thread_count));
-    $display("[TB] Pulsing CTRL.start");
-    csr_write(REG_CTRL, CTRL_START);
+
+    for (int unsigned c = 0; c < num_ctas; c++) begin
+      program_csrs_for_cta(c);
+      $display("[TB] CTA %0d: pulsing CTRL.start", c);
+      csr_write(REG_CTRL, CTRL_START);
+      wait_for_cta_done(c);
+    end
+    // Signal to the (gated) TB_RTL_HIER_DEBUG monitor that the whole grid
+    // is done -- it can then arm its short drain check. The post-tapeout
+    // path doesn't care about this flag; the main `initial` block below
+    // will continue into wait_for_complete() and dice_core_tb_check_done().
+    all_ctas_done_q <= 1'b1;
   endtask
 
+  // Final post-grid drain so any in-flight AXI writes settle before the DPI
+  // diff check. Unchanged from the legacy task body.
   task automatic wait_for_complete();
     int unsigned settle_cycles = 500000;
     void'($value$plusargs("SETTLE=%d", settle_cycles));
-    $display("[TB] Running for up to %0d cycles, then checking DPI", settle_cycles);
+    $display("[TB] Post-grid drain: up to %0d cycles, then checking DPI", settle_cycles);
     repeat (settle_cycles) @(posedge clk_i);
   endtask
 
@@ -968,19 +1170,18 @@ module tb_chip_top;
     init_paths();
     bsg_link_bringup();
     load_collateral();
-    program_csrs_and_launch();
+    run_grid();  // was: program_csrs_and_launch()
     wait_for_complete();
 
     ok = dice_core_tb_check_done();
 
     if (ok != 0) begin
-      $display("[TB] PASS: chip_top DPI checks clean");
-      $display("hello?");
+      $display("[TB] PASS: chip_top DPI checks clean (num_ctas=%0d)", num_ctas);
       $display("TID W: %0d", DICE_TID_WIDTH);
       $display("REG W: %0d", DICE_REG_ADDR_WIDTH);
       $finish;
     end
-    $display("[TB] FAIL: DPI reported AXI write mismatch");
+    $display("[TB] FAIL: DPI reported AXI write mismatch (num_ctas=%0d)", num_ctas);
     $fatal(1, "FAIL");
   end
 
