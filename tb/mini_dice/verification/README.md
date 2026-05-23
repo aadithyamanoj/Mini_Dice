@@ -152,7 +152,7 @@ default `run_phase` dispatches the right flow based on `num_ctas`.
 
 ### Reset
 - `mini_dice_chip_cgra_reset_test` — pulses `CTRL.CGRA_RESET`, then launches.
-- `mini_dice_chip_mid_reset_test` — asserts reset mid-kernel (FAST only; CHIP skips — see Pass status section for the TB-side bringup-task gap).
+- `mini_dice_chip_mid_reset_test` — asserts reset mid-kernel and re-launches. FAST uses the vif `force_rst_*` hooks; CHIP pulses `vif.force_bringup`, which triggers `tb_chip.bsg_link_bringup()` to re-handshake both sides of the link.
 
 ### Performance / latency
 - `mini_dice_chip_fetch_latency_test` — `response_delay_cyc = 32`.
@@ -166,20 +166,13 @@ default `run_phase` dispatches the right flow based on `num_ctas`.
 
 ## Pass status
 
-All tests pass cleanly in both FAST and CHIP modes, except for one:
+**All 30 tests pass cleanly in both FAST and CHIP modes** (60/60).
 
-- `mini_dice_chip_mid_reset_test` — passes in FAST mode; in CHIP mode
-  it logs-and-exits without actually exercising mid-kernel reset.
-  This is a testbench limitation; the chip's reset logic is correct.
-
-  `tb_chip.sv` does the
-  matching FPGA-side bsg_link bringup once at t=0 from an `initial`
-  block, and doesn't expose it as a task a UVM `run_phase` can call.
-  So a mid-run `hard_reset` resets the chip side correctly, but the
-  FPGA-side credit counters in our TB don't get the matching
-  re-handshake, and the two sides drift out of sync.
-
- (I am currently working on this)
-
-
-
+`mid_reset_test` previously logged-and-exited in CHIP mode; it now
+actually exercises mid-kernel reset in both modes. The chip's own staged
+reset sequencer (chip_top.sv lines 178-204) handles the chip half of
+the bsg_link automatically off every `hard_reset` pulse; the TB-side
+fix factors the FPGA-side bringup into a reusable `bsg_link_bringup()`
+task in `tb_chip.sv` that a UVM test can trigger via the
+`vif.force_bringup` flag. tb_chip's watcher calls the task and clears
+the flag when done, so tests block on `wait(!vif.force_bringup)`.

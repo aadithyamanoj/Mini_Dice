@@ -1,16 +1,17 @@
 // mini_dice_chip_mid_reset_test
 // ------------------------------
-// In FAST mode: asserts reset mid-kernel via the vif force hooks, then
-// re-launches full_mul_array and checks recovery.
-// In CHIP mode: logs-and-exits — a runtime hard_reset PAD pulse alone
-// does not fully reset the bsg_link credit counters, and the test cannot
-// replay the multi-step bsg_link bringup from inside run_phase. Would
-// need that bringup factored out into a reusable task in tb_chip.sv.
+// Asserts reset mid-kernel, then re-launches full_mul_array and checks
+// the chip recovers.
+//   FAST: drives rst_i via the vif's force_rst_* hooks.
+//   CHIP: pulses vif.force_bringup; tb_chip's watcher calls
+//         bsg_link_bringup() which pulses hard_reset PAD (re-triggering
+//         chip_top's internal reset_cnt staging) AND re-handshakes the
+//         FPGA-side link counters, so both sides come out in sync.
 //
-// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL) — FAST only
+// Kernel: full_mul_array (single-CTA, 5 eblocks, MUL)
 //
 // Run (fast): cd tb/mini_dice/verification && ./simv +UVM_TESTNAME=mini_dice_chip_mid_reset_test
-// Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_mid_reset_test  (skips)
+// Run (chip): cd tb/mini_dice/verification && ../simv_chip +UVM_TESTNAME=mini_dice_chip_mid_reset_test
 
 class mini_dice_chip_mid_reset_test extends mini_dice_chip_base_test;
   `uvm_component_utils(mini_dice_chip_mid_reset_test)
@@ -21,22 +22,12 @@ class mini_dice_chip_mid_reset_test extends mini_dice_chip_base_test;
   endfunction
 
   task run_phase(uvm_phase phase);
-    csr_one_shot_seq sub;
     int unsigned cyc;
     bit chip_mode;
     phase.raise_objection(this);
 
-    // tb_chip.sv sets CHIP_MODE; tb_top.sv leaves it unset.
     chip_mode = 0;
     void'(uvm_config_db #(int)::get(null, "*", "CHIP_MODE", chip_mode));
-
-    if (chip_mode) begin
-      `uvm_info("MID_RST",
-        "Skipped in CHIP mode (bsg_link credit counters require full bringup).",
-        UVM_NONE)
-      phase.drop_objection(this);
-      return;
-    end
 
     load_collateral();
     program_and_launch();
@@ -46,13 +37,22 @@ class mini_dice_chip_mid_reset_test extends mini_dice_chip_base_test;
 
     `uvm_info("MID_RST", $sformatf("Asserting reset (writes_so_far=%0d)",
               env.mem_resp.writes_observed), UVM_LOW)
-    // Drive rst_i via the vif force hooks (only available in FAST mode).
-    env.csr_agnt.drv.vif.force_rst_val = 1'b1;
-    env.csr_agnt.drv.vif.force_rst_en  = 1'b1;
-    repeat (50) @(posedge env.csr_agnt.drv.vif.clk_i);
-    env.csr_agnt.drv.vif.force_rst_val = 1'b0;
-    repeat (200) @(posedge env.csr_agnt.drv.vif.clk_i);
-    env.csr_agnt.drv.vif.force_rst_en = 1'b0;
+
+    if (chip_mode) begin
+      // Pulse the vif trigger; tb_chip's watcher runs bsg_link_bringup
+      // (asserts hard_reset + all FPGA-side link resets, then walks the
+      // staged release). Watcher clears force_bringup when done.
+      env.csr_agnt.drv.vif.force_bringup = 1'b1;
+      wait(env.csr_agnt.drv.vif.force_bringup == 1'b0);
+    end else begin
+      // FAST-mode: drive rst_i directly via the vif force hook.
+      env.csr_agnt.drv.vif.force_rst_val = 1'b1;
+      env.csr_agnt.drv.vif.force_rst_en  = 1'b1;
+      repeat (50) @(posedge env.csr_agnt.drv.vif.clk_i);
+      env.csr_agnt.drv.vif.force_rst_val = 1'b0;
+      repeat (200) @(posedge env.csr_agnt.drv.vif.clk_i);
+      env.csr_agnt.drv.vif.force_rst_en  = 1'b0;
+    end
     `uvm_info("MID_RST", "Reset deasserted", UVM_LOW)
     repeat (200) @(posedge env.csr_agnt.drv.vif.clk_i);
 

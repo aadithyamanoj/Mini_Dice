@@ -422,19 +422,25 @@ module tb_chip;
 
   // --------------------------------------------------------------------------
   // bsg_link bringup sequence (mirrors tb_chip_top.sv:bsg_link_bringup).
-  // Runs once at time 0 and holds rst_i deasserted only after the chip's
-  // internal reset sequencer has crossed all four reset domains.
+  //
+  // Asserts every reset, then releases them in the staged order the
+  // bsg_link DDR requires. The chip's own staged reset sequencer (counter
+  // in chip_top.sv lines 178-204) handles the chip half of the link
+  // automatically off hard_reset; this task handles the FPGA half plus
+  // drives the chip's hard_reset PAD.
+  //
+  // Callable at t=0 (initial bringup, see initial block below) AND mid-run
+  // from a UVM test that needs to recover from a mid-kernel reset
+  // (e.g. mini_dice_chip_mid_reset_test). The task re-asserts all resets
+  // before walking the staged release, so it's safe to invoke regardless
+  // of the FPGA-side link's prior state.
   // --------------------------------------------------------------------------
-  initial begin
+  task automatic bsg_link_bringup();
     hard_reset                  = 1'b1;
     rst_i                       = 1'b1;
     ep_upstream_io_link_reset   = 1'b1;
     ep_downstream_io_link_reset = 1'b1;
     ep_async_token_reset        = 1'b0;
-    tb_pad_drive_en             = 1'b0;
-
-    #(1ns);
-    tb_pad_drive_en = 1'b1;
 
     // 1) Pulse FPGA TX async_token_reset while the FPGA TX I/O link is in reset.
     repeat (8) @(posedge clk);
@@ -462,7 +468,34 @@ module tb_chip;
     #1;
     rst_i = 1'b0;
     repeat (4) @(posedge clk);
+  endtask
+
+  // Initial bringup at t=0.
+  initial begin
+    hard_reset                  = 1'b1;
+    rst_i                       = 1'b1;
+    ep_upstream_io_link_reset   = 1'b1;
+    ep_downstream_io_link_reset = 1'b1;
+    ep_async_token_reset        = 1'b0;
+    tb_pad_drive_en             = 1'b0;
+    vif.force_bringup           = 1'b0;
+
+    #(1ns);
+    tb_pad_drive_en = 1'b1;
+
+    bsg_link_bringup();
     `uvm_info("TB_CHIP", "bsg_link bringup complete; rst_i deasserted", UVM_LOW)
+  end
+
+  // Mid-run bringup trigger. UVM tests pulse vif.force_bringup to request
+  // a re-bringup (e.g. mid_reset_test). The watcher runs the full task
+  // and clears the flag when done; tests block on `wait(!vif.force_bringup)`.
+  initial forever begin
+    @(posedge vif.force_bringup);
+    `uvm_info("TB_CHIP", "vif.force_bringup pulsed; re-running bsg_link_bringup()", UVM_LOW)
+    bsg_link_bringup();
+    vif.force_bringup = 1'b0;
+    `uvm_info("TB_CHIP", "mid-run bsg_link bringup complete", UVM_LOW)
   end
 
   // --------------------------------------------------------------------------

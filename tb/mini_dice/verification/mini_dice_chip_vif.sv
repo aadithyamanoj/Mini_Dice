@@ -18,6 +18,12 @@ interface mini_dice_chip_vif (input logic clk);
   // tb_top's initial sequencer owns rst_i and force_rst_val is ignored.
   logic        force_rst_en;
   logic        force_rst_val;
+
+  // CHIP-mode bringup trigger: test sets force_bringup to 1; tb_chip's
+  // watcher calls bsg_link_bringup() and clears the flag when done. Tests
+  // can `wait(!vif.force_bringup)` to block until the bringup finishes.
+  // tb_top (FAST) leaves this signal unused.
+  logic        force_bringup;
   assign clk_i = clk;
 
   // Link RX (FPGA → chip): packed by TB axi_link_tx
