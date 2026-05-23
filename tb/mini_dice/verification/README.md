@@ -166,13 +166,4 @@ default `run_phase` dispatches the right flow based on `num_ctas`.
 
 ## Pass status
 
-**All 30 tests pass cleanly in both FAST and CHIP modes** (60/60).
-
-`mid_reset_test` previously logged-and-exited in CHIP mode; it now
-actually exercises mid-kernel reset in both modes. The chip's own staged
-reset sequencer (chip_top.sv lines 178-204) handles the chip half of
-the bsg_link automatically off every `hard_reset` pulse; the TB-side
-fix factors the FPGA-side bringup into a reusable `bsg_link_bringup()`
-task in `tb_chip.sv` that a UVM test can trigger via the
-`vif.force_bringup` flag. tb_chip's watcher calls the task and clears
-the flag when done, so tests block on `wait(!vif.force_bringup)`.
+**All 30 tests pass cleanly in both FAST and CHIP modes**
