@@ -200,6 +200,17 @@ module chip_top (
   // ~16 more core_clk cycles after the async_token_reset pulse.
   wire io_link_reset_int = hard_reset_sync || (reset_cnt < 6'd16);
 
+  // RX fifo side reset
+  wire downstream_io_link_reset_int = hard_reset_sync || (reset_cnt < 6'd24);
+
+  wire downstream_io_link_reset_sync;
+  async_rst_sync_deassert u_dn_reset_sync (
+      .clk                    (dn_clk),
+      .rst                    (downstream_io_link_reset_int),
+      .async_rst_sync_deassert(downstream_io_link_reset_sync)
+  );
+
+
   // core link reset: released last (~32 cycles after hard_reset_sync).
   wire core_link_reset_int = hard_reset_sync || (reset_cnt < 6'd32);
 
@@ -319,7 +330,7 @@ module chip_top (
       .upstream_io_link_reset_i  (io_link_reset_int),
       .async_token_reset_i       (async_token_reset_int),
       .token_clk_i               (token_clk),
-      .downstream_io_link_reset_i(io_link_reset_int),
+      .downstream_io_link_reset_i(downstream_io_link_reset_sync),
       .downstream_io_clk_i       (dn_clk),
       .downstream_io_data_i      (dn_data),
       .downstream_io_valid_i     (dn_valid),
