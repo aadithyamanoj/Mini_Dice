@@ -398,12 +398,12 @@ module tb_chip_top;
       .r_is_burst_o (ep_rx_r_is_burst)
   );
 
-  localparam logic [1:0] EP_OP_WRITE     = 2'b00;
+  localparam logic [1:0] EP_OP_WRITE = 2'b00;
   localparam logic [1:0] EP_OP_READ_RESP = 2'b01;
   // Matches the chip-side OP_READ opcode in rtl/IO/axi_link_rx.sv. Header-
   // only packet (no W-beat follow-up); the chip responds asynchronously
   // with an OP_READ_RESP back to the FPGA via axi_link_tx.
-  localparam logic [1:0] EP_OP_READ      = 2'b11;
+  localparam logic [1:0] EP_OP_READ = 2'b11;
 
   typedef enum logic [1:0] {
     EP_TX_IDLE,
@@ -463,10 +463,10 @@ module tb_chip_top;
           // so we accept arvalid and stay in IDLE. The chip's read response
           // arrives later on the upstream link via u_fpga_ep_rx -> ep_rx_r*.
           ep_link_tx_valid = 1'b1;
-          ep_link_tx_data  = {EP_OP_READ, ep_tx_arid,
-                              4'b0 /*tid*/, 3'b0 /*eblock*/, 5'b0 /*regaddr*/,
-                              ep_tx_araddr};
-          ep_tx_arready    = ep_link_tx_ready;
+          ep_link_tx_data = {
+            EP_OP_READ, ep_tx_arid, 4'b0  /*tid*/, 3'b0  /*eblock*/, 5'b0  /*regaddr*/, ep_tx_araddr
+          };
+          ep_tx_arready = ep_link_tx_ready;
         end
       end
 
@@ -706,8 +706,7 @@ module tb_chip_top;
 
       // Arm the post-grid drain timer the cycle run_grid finishes the
       // last CTA. `complete_seen_cycle == 0` guard latches on first rise.
-      if (all_ctas_done_q && complete_seen_cycle == 0)
-        complete_seen_cycle <= cyc_count;
+      if (all_ctas_done_q && complete_seen_cycle == 0) complete_seen_cycle <= cyc_count;
 
       if ((complete_seen_cycle != 0)
           && ((cyc_count - complete_seen_cycle) >= POST_COMPLETE_DRAIN_CYC)) begin
@@ -720,8 +719,7 @@ module tb_chip_top;
         $fatal(1, "all %0d CTAs complete but DPI write diff failed after drain", num_ctas);
       end
       if (cyc_count >= TIMEOUT_CYC) begin
-        $display("[TB] TIMEOUT at %0d cycles (all_ctas_done_q=%0b)",
-                 cyc_count, all_ctas_done_q);
+        $display("[TB] TIMEOUT at %0d cycles (all_ctas_done_q=%0b)", cyc_count, all_ctas_done_q);
         if (dice_core_tb_check_done() != 0)
           $display("[TB] (timeout) PASS-at-timeout: DPI write diff clean");
         $fatal(1, "timeout");
@@ -929,8 +927,7 @@ module tb_chip_top;
   // from OP_READ_RESP by u_fpga_ep_rx into ep_rx_r*). Used by
   // wait_for_cta_done to poll REG_STATUS -- the same handshake the
   // post-tapeout host driver will use.
-  task automatic axi_read(input  logic [AW-1:0] addr,
-                          output logic [DW-1:0] data);
+  task automatic axi_read(input logic [AW-1:0] addr, output logic [DW-1:0] data);
     begin
       @(posedge clk_i);
       #1;
@@ -944,14 +941,13 @@ module tb_chip_top;
       #1;
       ep_tx_arvalid = 1'b0;
 
-      ep_rx_rready = 1'b1;
+      ep_rx_rready  = 1'b1;
       begin : r_hs
         int unsigned rwait = 0;
         do begin
           @(posedge clk_i);
           rwait++;
-          if (rwait == 200)
-            $display("[AXI_RD] t=%0t R STUCK addr=0x%04x", $time, addr);
+          if (rwait == 200) $display("[AXI_RD] t=%0t R STUCK addr=0x%04x", $time, addr);
         end while (!ep_rx_rvalid);
         data = ep_rx_rdata;
       end
@@ -961,8 +957,7 @@ module tb_chip_top;
     end
   endtask
 
-  task automatic csr_read(input  logic [AW-1:0] reg_offset,
-                          output logic [15:0]   data16);
+  task automatic csr_read(input logic [AW-1:0] reg_offset, output logic [15:0] data16);
     logic [DW-1:0] dw;
     axi_read(reg_offset, dw);
     data16 = dw[15:0];
@@ -1105,9 +1100,9 @@ module tb_chip_top;
   // link bandwidth.
   task automatic wait_for_cta_done(input int unsigned cta_idx);
     localparam int unsigned POLL_INTERVAL_CYC = 256;
-    int unsigned cyc         = 0;
-    int unsigned timeout_cyc = 200_000;
-    logic [15:0] status;
+    int unsigned        cyc = 0;
+    int unsigned        timeout_cyc = 200_000;
+    logic        [15:0] status;
     void'($value$plusargs("PER_CTA_TIMEOUT=%d", timeout_cyc));
 
     forever begin
@@ -1115,13 +1110,12 @@ module tb_chip_top;
       cyc += POLL_INTERVAL_CYC;
       csr_read(REG_STATUS, status);
       if (status[0]) begin
-        $display("[TB] CTA %0d complete: STATUS=0x%04x after ~%0d cycles",
-                 cta_idx, status, cyc);
+        $display("[TB] CTA %0d complete: STATUS=0x%04x after ~%0d cycles", cta_idx, status, cyc);
         return;
       end
       if (cyc >= timeout_cyc) begin
-        $fatal(1, "[TB] CTA %0d timed out after %0d cycles (last STATUS=0x%04x)",
-               cta_idx, cyc, status);
+        $fatal(1, "[TB] CTA %0d timed out after %0d cycles (last STATUS=0x%04x)", cta_idx, cyc,
+               status);
       end
     end
   endtask
@@ -1161,6 +1155,30 @@ module tb_chip_top;
   // --------------------------------------------------------------------------
   // Main
   // --------------------------------------------------------------------------
+  bit saif_enabled = 1'b0;
+  bit saif_active = 1'b0;
+  string saif_file = "chip_top.saif";
+
+  task automatic start_saif();
+    void'($value$plusargs("SAIF_FILE=%s", saif_file));
+    saif_enabled = 1'b1;
+    $display("[TB] SAIF: capturing u_dut activity to %s", saif_file);
+    $set_toggle_region(u_dut);
+    $toggle_start();
+    saif_active = 1'b1;
+  endtask
+
+  task automatic finish_saif();
+    if (saif_enabled) begin
+      if (saif_active) begin
+        $toggle_stop();
+        saif_active = 1'b0;
+      end
+      $toggle_report(saif_file, 1.0e-9, u_dut);
+      $display("[TB] SAIF: wrote %s", saif_file);
+    end
+  endtask
+
   initial begin
     int unsigned ok;
 
@@ -1170,6 +1188,7 @@ module tb_chip_top;
     init_paths();
     bsg_link_bringup();
     load_collateral();
+    start_saif();
     run_grid();  // was: program_csrs_and_launch()
     wait_for_complete();
 
@@ -1183,6 +1202,10 @@ module tb_chip_top;
     end
     $display("[TB] FAIL: DPI reported AXI write mismatch (num_ctas=%0d)", num_ctas);
     $fatal(1, "FAIL");
+  end
+
+  final begin
+    finish_saif();
   end
 
 endmodule
