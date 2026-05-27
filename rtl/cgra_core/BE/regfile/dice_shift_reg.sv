@@ -9,7 +9,7 @@ module shift_reg
     parameter int MAX_PIPE_STAGE = 128              // must be a power of 2
 ) (
     input  logic                              clk_i,
-    input  logic                              reset_i,  // asynchronous reset (active low)
+    input  logic                              reset_i,  // synchronous reset (active high)
     input  logic                              clear_i,  // zero all entries (eblock transition)
     input  logic [$clog2(MAX_PIPE_STAGE)-1:0] latency,
     input  logic [                 WIDTH-1:0] in_data,

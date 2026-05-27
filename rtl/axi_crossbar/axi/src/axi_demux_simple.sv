@@ -54,7 +54,7 @@ module axi_demux_simple #(
   parameter type         select_t       = logic [SelectWidth-1:0]
 ) (
   input  logic                          clk_i,
-  input  logic                          rst_ni,
+  input  logic                          rst_i,
   input  logic                          test_i,
   // Slave Port
   input  axi_req_t                      slv_req_i,
@@ -195,7 +195,7 @@ module axi_demux_simple #(
 
     // lock the valid signal, as the selection gets pushed into the W FIFO on first assertion,
     // prevent further pushing
-    `FFLARN(lock_aw_valid_q, lock_aw_valid_d, load_aw_lock, '0, clk_i, rst_ni)
+    `FFLSR(lock_aw_valid_q, lock_aw_valid_d, load_aw_lock, '0, clk_i, rst_i)
 
     if (UniqueIds) begin : gen_unique_ids_aw
       // If the `UniqueIds` parameter is set, each write transaction has an ID that is unique among
@@ -213,7 +213,7 @@ module axi_demux_simple #(
         .mst_port_select_t ( select_t       )
       ) i_aw_id_counter (
         .clk_i                        ( clk_i                          ),
-        .rst_ni                       ( rst_ni                         ),
+        .rst_i                       ( rst_i                         ),
         .lookup_axi_id_i              ( slv_req_i.aw.id[0+:AxiLookBits] ),
         .lookup_mst_select_o          ( lookup_aw_select               ),
         .lookup_mst_select_occupied_o ( aw_select_occupied             ),
@@ -239,7 +239,7 @@ module axi_demux_simple #(
       .STICKY_OVERFLOW ( 1'b0           )
     ) i_counter_open_w (
       .clk_i,
-      .rst_ni,
+      .rst_i,
       .clear_i    ( 1'b0                  ),
       .en_i       ( w_cnt_up ^ w_cnt_down ),
       .load_i     ( 1'b0                  ),
@@ -249,7 +249,7 @@ module axi_demux_simple #(
       .overflow_o ( /*not used*/          )
     );
 
-    `FFLARN(w_select_q, slv_aw_select_i, w_cnt_up, select_t'(0), clk_i, rst_ni)
+    `FFLSR(w_select_q, slv_aw_select_i, w_cnt_up, select_t'(0), clk_i, rst_i)
     assign w_select       = (|w_open) ? w_select_q : slv_aw_select_i;
     assign w_select_valid = w_cnt_up | (|w_open);
 
@@ -270,7 +270,7 @@ module axi_demux_simple #(
       .LockIn   ( 1'b1       )
     ) i_b_mux (
       .clk_i  ( clk_i         ),
-      .rst_ni ( rst_ni        ),
+      .rst_i ( rst_i        ),
       .flush_i( 1'b0          ),
       .rr_i   ( '0            ),
       .req_i  ( mst_b_valids  ),
@@ -341,7 +341,7 @@ module axi_demux_simple #(
     end
 
     // this ff is needed so that ar does not get de-asserted if an atop gets injected
-    `FFLARN(lock_ar_valid_q, lock_ar_valid_d, load_ar_lock, '0, clk_i, rst_ni)
+    `FFLSR(lock_ar_valid_q, lock_ar_valid_d, load_ar_lock, '0, clk_i, rst_i)
 
     if (UniqueIds) begin : gen_unique_ids_ar
       // If the `UniqueIds` parameter is set, each read transaction has an ID that is unique among
@@ -359,7 +359,7 @@ module axi_demux_simple #(
         .mst_port_select_t ( select_t       )
       ) i_ar_id_counter (
         .clk_i                        ( clk_i                                       ),
-        .rst_ni                       ( rst_ni                                      ),
+        .rst_i                       ( rst_i                                      ),
         .lookup_axi_id_i              ( slv_req_i.ar.id[0+:AxiLookBits]             ),
         .lookup_mst_select_o          ( lookup_ar_select                            ),
         .lookup_mst_select_occupied_o ( ar_select_occupied                          ),
@@ -389,7 +389,7 @@ module axi_demux_simple #(
       .LockIn   ( 1'b1       )
     ) i_r_mux (
       .clk_i  ( clk_i         ),
-      .rst_ni ( rst_ni        ),
+      .rst_i ( rst_i        ),
       .flush_i( 1'b0          ),
       .rr_i   ( '0            ),
       .req_i  ( mst_r_valids  ),
@@ -469,7 +469,7 @@ module axi_demux_simple #(
         $fatal(1, "AxiIdBits has to be equal or smaller than AxiIdWidth.");
     end
 `ifndef XSIM
-    default disable iff (!rst_ni);
+    default disable iff (rst_i);
     aw_select: assume property( @(posedge clk_i) (slv_req_i.aw_valid |->
                                                  (slv_aw_select_i < NoMstPorts))) else
       $fatal(1, "slv_aw_select_i is %d: AW has selected a slave that is not defined.\

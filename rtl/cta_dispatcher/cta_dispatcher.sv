@@ -4,7 +4,7 @@ module cta_dispatcher #(
   parameter int unsigned N_CORES = `DICE_NUM_CGRA_CORES
 )(
   input  logic                        clk,
-  input  logic                        rst_n,
+  input  logic                        rst_i,
 
   // ---------------- Host Launch ----------------
   input  logic                        launch_valid,
@@ -168,8 +168,8 @@ module cta_dispatcher #(
   // --------------------------------------------------------------------
   // State update
   // --------------------------------------------------------------------
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
+  always_ff @(posedge clk) begin
+    if (rst_i) begin
       kernel_active   <= 1'b0;
       kdesc_q         <= '0;
       cta_x_q         <= '0;

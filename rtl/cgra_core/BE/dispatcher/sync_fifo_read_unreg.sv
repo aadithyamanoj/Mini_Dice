@@ -6,7 +6,7 @@ module sync_fifo_read_unreg #(
     parameter int ADDR_WIDTH = $clog2(DEPTH) // Address width (automatically calculated)
 )(
     input logic clk_i,                        // Clock
-    input logic rst,                      // Active-low reset
+    input logic rst,                      // Active-high reset
     
     // Write interface
     input logic push,                       // Push enable
@@ -90,22 +90,22 @@ module sync_fifo_read_unreg #(
     // Assertions for debugging (synthesis will ignore these)
     //`ifdef SIMULATION
     //    // Check for overflow
-    //    assert property (@(posedge clk_i) disable iff (!rst_n)
+    //    assert property (@(posedge clk_i) disable iff (rst_i)
     //        push |-> !full)
     //    else $error("FIFO overflow: push asserted when FIFO is full");
     //    
     //    // Check for underflow  
-    //    assert property (@(posedge clk_i) disable iff (!rst_n)
+    //    assert property (@(posedge clk_i) disable iff (rst_i)
     //        pop |-> !empty)
     //    else $error("FIFO underflow: pop asserted when FIFO is empty");
     //    
     //    // Check pointer consistency
-    //    assert property (@(posedge clk_i) disable iff (!rst_n)
+    //    assert property (@(posedge clk_i) disable iff (rst_i)
     //        count <= DEPTH)
     //    else $error("FIFO count exceeds depth");
     //    
     //    // Check pop_data_valid timing
-    //    assert property (@(posedge clk_i) disable iff (!rst_n)
+    //    assert property (@(posedge clk_i) disable iff (rst_i)
     //        $rose(pop_data_valid) |-> $past(pop_enable))
     //    else $error("pop_data_valid asserted without previous pop_enable");
     //`endif

@@ -53,8 +53,8 @@ module axi_xbar_unmuxed
 ) (
   /// Clock, positive edge triggered.
   input  logic                                                          clk_i,
-  /// Asynchronous reset, active low.
-  input  logic                                                          rst_ni,
+  /// Synchronous reset, active high.
+  input  logic                                                          rst_i,
   /// Testmode enable, active high.
   input  logic                                                          test_i,
   /// AXI4+ATOP requests to the slave ports.
@@ -136,7 +136,7 @@ module axi_xbar_unmuxed
     // pragma translate_off
     `ifndef VERILATOR
     `ifndef XSIM
-    default disable iff (~rst_ni);
+    default disable iff (rst_i);
     default_aw_mst_port_en: assert property(
       @(posedge clk_i) (slv_ports_req_i[i].aw_valid && !slv_ports_resp_o[i].aw_ready)
           |=> $stable(en_default_mst_port_i[i]))
@@ -181,7 +181,7 @@ module axi_xbar_unmuxed
       .SpillR         ( Cfg.LatencyMode[5]     )
     ) i_axi_demux (
       .clk_i,   // Clock
-      .rst_ni,  // Asynchronous reset active low
+      .rst_i,  // Synchronous reset active high
       .test_i,  // Testmode enable
       .slv_req_i       ( slv_ports_req_i[i]  ),
       .slv_aw_select_i ( slv_aw_select       ),
@@ -202,7 +202,7 @@ module axi_xbar_unmuxed
                                                 // transactions at a time.
     ) i_axi_err_slv (
       .clk_i,   // Clock
-      .rst_ni,  // Asynchronous reset active low
+      .rst_i,  // Synchronous reset active high
       .test_i,  // Testmode enable
       // slave port
       .slv_req_i  ( slv_reqs[i][Cfg.NoMstPorts]   ),
@@ -225,7 +225,7 @@ module axi_xbar_unmuxed
           .axi_resp_t ( resp_t             )
         ) i_axi_multicut_xbar_pipeline (
           .clk_i,
-          .rst_ni,
+          .rst_i,
           .slv_req_i  ( slv_reqs[i][j]         ),
           .slv_resp_o ( slv_resps[i][j]        ),
           .mst_req_o  ( mst_ports_req_o[j][i]  ),
@@ -243,7 +243,7 @@ module axi_xbar_unmuxed
           .MaxTrans   ( 1                       )
         ) i_axi_err_slv (
           .clk_i,
-          .rst_ni,
+          .rst_i,
           .test_i,
           .slv_req_i  ( slv_reqs[i][j]  ),
           .slv_resp_o ( slv_resps[i][j] )

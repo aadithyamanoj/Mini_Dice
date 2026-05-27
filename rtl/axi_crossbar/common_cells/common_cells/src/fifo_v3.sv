@@ -21,7 +21,7 @@ module fifo_v3 #(
     parameter int unsigned ADDR_DEPTH   = (DEPTH > 1) ? $clog2(DEPTH) : 1
 )(
     input  logic  clk_i,            // Clock
-    input  logic  rst_ni,           // Asynchronous reset active low
+    input  logic  rst_i,           // Synchronous reset active high
     input  logic  flush_i,          // flush the queue
     input  logic  testmode_i,       // test_mode to bypass clock gating
     // status flags
@@ -113,8 +113,8 @@ module fifo_v3 #(
     end
 
     // sequential process
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-        if(~rst_ni) begin
+    always_ff @(posedge clk_i) begin
+        if(rst_i) begin
             read_pointer_q  <= '0;
             write_pointer_q <= '0;
             status_cnt_q    <= '0;
@@ -131,8 +131,8 @@ module fifo_v3 #(
         end
     end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-        if(~rst_ni) begin
+    always_ff @(posedge clk_i) begin
+        if(rst_i) begin
             mem_q <= {FifoDepth{dtype'('0)}};
         end else if (!gate_clock) begin
             mem_q <= mem_n;
@@ -142,10 +142,10 @@ module fifo_v3 #(
 `ifndef COMMON_CELLS_ASSERTS_OFF
     `ASSERT_INIT(depth_0, DEPTH > 0, "DEPTH must be greater than 0.")
 
-    `ASSERT(full_write, full_o |-> ~push_i, clk_i, !rst_ni,
+    `ASSERT(full_write, full_o |-> ~push_i, clk_i, rst_i,
             "Trying to push new data although the FIFO is full.")
 
-    `ASSERT(empty_read, empty_o |-> ~pop_i, clk_i, !rst_ni,
+    `ASSERT(empty_read, empty_o |-> ~pop_i, clk_i, rst_i,
             "Trying to pop data although the FIFO is empty.")
 `endif
 

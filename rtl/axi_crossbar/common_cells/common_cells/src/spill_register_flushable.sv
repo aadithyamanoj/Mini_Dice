@@ -20,7 +20,7 @@ module spill_register_flushable #(
   parameter bit  Bypass      = 1'b0   // make this spill register transparent
 ) (
   input  logic clk_i   ,
-  input  logic rst_ni  ,
+  input  logic rst_i  ,
   input  logic valid_i ,
   input  logic flush_i ,
   output logic ready_o ,
@@ -40,15 +40,15 @@ module spill_register_flushable #(
     logic a_full_q;
     logic a_fill, a_drain;
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin : ps_a_data
-      if (!rst_ni)
+    always_ff @(posedge clk_i) begin : ps_a_data
+      if (rst_i)
         a_data_q <= T'('0);
       else if (a_fill)
         a_data_q <= data_i;
     end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin : ps_a_full
-      if (!rst_ni)
+    always_ff @(posedge clk_i) begin : ps_a_full
+      if (rst_i)
         a_full_q <= 0;
       else if (a_fill || a_drain)
         a_full_q <= a_fill;
@@ -59,15 +59,15 @@ module spill_register_flushable #(
     logic b_full_q;
     logic b_fill, b_drain;
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin : ps_b_data
-      if (!rst_ni)
+    always_ff @(posedge clk_i) begin : ps_b_data
+      if (rst_i)
         b_data_q <= T'('0);
       else if (b_fill)
         b_data_q <= a_data_q;
     end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin : ps_b_full
-      if (!rst_ni)
+    always_ff @(posedge clk_i) begin : ps_b_full
+      if (rst_i)
         b_full_q <= 0;
       else if (b_fill || b_drain)
         b_full_q <= b_fill;
@@ -96,7 +96,7 @@ module spill_register_flushable #(
     assign data_o = b_full_q ? b_data_q : a_data_q;
 
     `ifndef COMMON_CELLS_ASSERTS_OFF
-    `ASSERT(flush_valid, flush_i |-> ~valid_i, clk_i, !rst_ni,
+    `ASSERT(flush_valid, flush_i |-> ~valid_i, clk_i, rst_i,
            "Trying to flush and feed the spill register simultaneously. You will lose data!")
    `endif
   end

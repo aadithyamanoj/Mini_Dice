@@ -23,7 +23,7 @@ module axi_demux_id_counters #(
   parameter type         mst_port_select_t = logic
 ) (
   input  logic                 clk_i,   // Clock
-  input  logic                 rst_ni,  // Asynchronous reset active low
+  input  logic                 rst_i,  // Synchronous reset active high
   // lookup
   input  logic [AxiIdBits-1:0] lookup_axi_id_i,
   output mst_port_select_t     lookup_mst_select_o,
@@ -114,7 +114,7 @@ module axi_demux_id_counters #(
       .STICKY_OVERFLOW ( 1'b0         )
     ) i_in_flight_cnt (
       .clk_i      ( clk_i     ),
-      .rst_ni     ( rst_ni    ),
+      .rst_i     ( rst_i    ),
       .clear_i    ( 1'b0      ),
       .en_i       ( cnt_en    ),
       .load_i     ( 1'b0      ),
@@ -128,14 +128,14 @@ module axi_demux_id_counters #(
     assign cnt_full[i] = overflow | (&in_flight);
 
     // holds the selection signal for this id
-    `FFLARN(mst_select_q[i], push_mst_select_i, push_en[i], '0, clk_i, rst_ni)
+    `FFLSR(mst_select_q[i], push_mst_select_i, push_en[i], '0, clk_i, rst_i)
 
 // pragma translate_off
 `ifndef VERILATOR
 `ifndef XSIM
     // Validate parameters.
     cnt_underflow: assert property(
-      @(posedge clk_i) disable iff (~rst_ni) (pop_en[i] |=> !overflow)) else
+      @(posedge clk_i) disable iff (rst_i) (pop_en[i] |=> !overflow)) else
         $fatal(1, "axi_demux_id_counters > Counter: %0d underflowed.\
                    The reason is probably a faulty AXI response.", i);
 `endif

@@ -196,10 +196,6 @@ module axi4_full_crossbar
     input  mst_resp_t cgra_csr_resp_i
 );
 
-  // Active-low reset required by pulp-platform AXI IP
-  logic rst_n;
-  assign rst_n = ~rst_i;
-
   // --------------------------------------------------------------------------
   // Pack master requests/responses into arrays for axi_xbar
   // --------------------------------------------------------------------------
@@ -270,7 +266,7 @@ module axi4_full_crossbar
       .rule_t       (xbar_rule_16_t)
   ) i_xbar (
       .clk_i                (clk_i),
-      .rst_ni               (rst_n),
+      .rst_i               (rst_i),
       .test_i               (test_i),
       .slv_ports_req_i      (slv_ports_req),
       .slv_ports_resp_o     (slv_ports_resp),

@@ -44,7 +44,7 @@ module axi_lite_demux #(
   parameter type         select_t       = logic [$clog2(NoMstPorts)-1:0]
 ) (
   input  logic                        clk_i,
-  input  logic                        rst_ni,
+  input  logic                        rst_i,
   input  logic                        test_i,
   // slave port (AXI4-Lite input), connect master module here
   input  axi_req_t                    slv_req_i,
@@ -75,7 +75,7 @@ module axi_lite_demux #(
       .Bypass  ( ~SpillAw   )
     ) i_aw_spill_reg (
       .clk_i   ( clk_i                    ),
-      .rst_ni  ( rst_ni                   ),
+      .rst_i  ( rst_i                   ),
       .valid_i ( slv_req_i.aw_valid       ),
       .ready_o ( slv_resp_o.aw_ready      ),
       .data_i  ( slv_req_i.aw             ),
@@ -88,7 +88,7 @@ module axi_lite_demux #(
       .Bypass  ( ~SpillW   )
     ) i_w_spill_reg (
       .clk_i   ( clk_i                   ),
-      .rst_ni  ( rst_ni                  ),
+      .rst_i  ( rst_i                  ),
       .valid_i ( slv_req_i.w_valid       ),
       .ready_o ( slv_resp_o.w_ready      ),
       .data_i  ( slv_req_i.w             ),
@@ -101,7 +101,7 @@ module axi_lite_demux #(
       .Bypass  ( ~SpillB      )
     ) i_b_spill_reg (
       .clk_i   ( clk_i                  ),
-      .rst_ni  ( rst_ni                 ),
+      .rst_i  ( rst_i                 ),
       .valid_i ( mst_resps_i[0].b_valid ),
       .ready_o ( mst_reqs_o[0].b_ready  ),
       .data_i  ( mst_resps_i[0].b       ),
@@ -114,7 +114,7 @@ module axi_lite_demux #(
       .Bypass  ( ~SpillAr   )
     ) i_ar_spill_reg (
       .clk_i   ( clk_i                    ),
-      .rst_ni  ( rst_ni                   ),
+      .rst_i  ( rst_i                   ),
       .valid_i ( slv_req_i.ar_valid       ),
       .ready_o ( slv_resp_o.ar_ready      ),
       .data_i  ( slv_req_i.ar             ),
@@ -127,7 +127,7 @@ module axi_lite_demux #(
       .Bypass  ( ~SpillR      )
     ) i_r_spill_reg (
       .clk_i   ( clk_i                  ),
-      .rst_ni  ( rst_ni                 ),
+      .rst_i  ( rst_i                 ),
       .valid_i ( mst_resps_i[0].r_valid ),
       .ready_o ( mst_reqs_o[0].r_ready  ),
       .data_i  ( mst_resps_i[0].r       ),
@@ -209,7 +209,7 @@ module axi_lite_demux #(
       .Bypass ( ~SpillAw                      )
     ) i_aw_spill_reg (
       .clk_i   ( clk_i                        ),
-      .rst_ni  ( rst_ni                       ),
+      .rst_i  ( rst_i                       ),
       .valid_i ( slv_req_i.aw_valid           ),
       .ready_o ( slv_resp_o.aw_ready          ),
       .data_i  ( slv_aw_chan_select_in_flat   ),
@@ -265,7 +265,7 @@ module axi_lite_demux #(
 
     // lock the valid signal, as the selection gets pushed into the W FIFO on first assertion,
     // prevent further pushing
-    `FFLARN(lock_aw_valid_q, lock_aw_valid_d, load_aw_lock, '0, clk_i, rst_ni)
+    `FFLSR(lock_aw_valid_q, lock_aw_valid_d, load_aw_lock, '0, clk_i, rst_i)
 
     fifo_v3 #(
       .FALL_THROUGH( FallThrough ),
@@ -273,7 +273,7 @@ module axi_lite_demux #(
       .dtype       ( select_t    )
     ) i_w_fifo (
       .clk_i      ( clk_i              ),
-      .rst_ni     ( rst_ni             ),
+      .rst_i     ( rst_i             ),
       .flush_i    ( 1'b0               ), // not used, because AXI4-Lite no preemtion rule
       .testmode_i ( test_i             ),
       .full_o     ( w_fifo_full        ),
@@ -293,7 +293,7 @@ module axi_lite_demux #(
       .Bypass ( ~SpillW  )
     ) i_w_spill_reg (
       .clk_i   ( clk_i              ),
-      .rst_ni  ( rst_ni             ),
+      .rst_i  ( rst_i             ),
       .valid_i ( slv_req_i.w_valid  ),
       .ready_o ( slv_resp_o.w_ready ),
       .data_i  ( slv_req_i.w        ),
@@ -317,7 +317,7 @@ module axi_lite_demux #(
       .dtype       ( select_t    )
     ) i_b_fifo (
       .clk_i      ( clk_i        ),
-      .rst_ni     ( rst_ni       ),
+      .rst_i     ( rst_i       ),
       .flush_i    ( 1'b0         ), // not used, because AXI4-Lite no preemption
       .testmode_i ( test_i       ),
       .full_o     ( b_fifo_full  ),
@@ -337,7 +337,7 @@ module axi_lite_demux #(
       .Bypass ( ~SpillB  )
     ) i_b_spill_reg (
       .clk_i   ( clk_i              ),
-      .rst_ni  ( rst_ni             ),
+      .rst_i  ( rst_i             ),
       .valid_i ( slv_b_valid        ),
       .ready_o ( slv_b_ready        ),
       .data_i  ( slv_b_chan         ),
@@ -371,7 +371,7 @@ module axi_lite_demux #(
       .Bypass ( ~SpillAr                      )
     ) i_ar_spill_reg (
       .clk_i   ( clk_i                        ),
-      .rst_ni  ( rst_ni                       ),
+      .rst_i  ( rst_i                       ),
       .valid_i ( slv_req_i.ar_valid           ),
       .ready_o ( slv_resp_o.ar_ready          ),
       .data_i  ( slv_ar_chan_select_in_flat   ),
@@ -396,7 +396,7 @@ module axi_lite_demux #(
       .dtype       ( select_t    )
     ) i_r_fifo (
       .clk_i      ( clk_i              ),
-      .rst_ni     ( rst_ni             ),
+      .rst_i     ( rst_i             ),
       .flush_i    ( 1'b0               ), // not used, because AXI4-Lite no preemption rule
       .testmode_i ( test_i             ),
       .full_o     ( r_fifo_full        ),
@@ -416,7 +416,7 @@ module axi_lite_demux #(
       .Bypass ( ~SpillR  )
     ) i_r_spill_reg (
       .clk_i   ( clk_i              ),
-      .rst_ni  ( rst_ni             ),
+      .rst_i  ( rst_i             ),
       .valid_i ( slv_r_valid        ),
       .ready_o ( slv_r_ready        ),
       .data_i  ( slv_r_chan         ),
@@ -443,7 +443,7 @@ module axi_lite_demux #(
     // pragma translate_off
     `ifndef VERILATOR
     `ifndef XSIM
-    default disable iff (!rst_ni);
+    default disable iff (rst_i);
     aw_select: assume property( @(posedge clk_i) (slv_req_i.aw_valid |->
                                                  (slv_aw_select_i < NoMstPorts))) else
       $fatal(1, "slv_aw_select_i is %d: AW has selected a slave that is not defined.\
@@ -497,7 +497,7 @@ module axi_lite_demux_intf #(
   parameter type         select_t     = logic [$clog2(NoMstPorts)-1:0]
 ) (
   input  logic     clk_i,               // Clock
-  input  logic     rst_ni,              // Asynchronous reset active low
+  input  logic     rst_i,              // Synchronous reset active high
   input  logic     test_i,              // Testmode enable
   input  select_t  slv_aw_select_i,     // has to be stable, when aw_valid
   input  select_t  slv_ar_select_i,     // has to be stable, when ar_valid
@@ -546,7 +546,7 @@ module axi_lite_demux_intf #(
     .SpillR      ( SpillR      )
   ) i_axi_demux (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .test_i,
     // slave Port
     .slv_req_i       ( slv_req         ),

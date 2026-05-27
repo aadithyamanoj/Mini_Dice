@@ -31,7 +31,7 @@ module axi_multicut #(
   parameter type axi_resp_t = logic
 ) (
   input  logic      clk_i,   // Clock
-  input  logic      rst_ni,  // Asynchronous reset active low
+  input  logic      rst_i,  // Synchronous reset active high
   // slave port
   input  axi_req_t  slv_req_i,
   output axi_resp_t slv_resp_o,
@@ -66,7 +66,7 @@ module axi_multicut #(
         .axi_resp_t ( axi_resp_t )
       ) i_cut (
         .clk_i,
-        .rst_ni,
+        .rst_i,
         .slv_req_i  ( cut_req[i]    ),
         .slv_resp_o ( cut_resp[i]   ),
         .mst_req_o  ( cut_req[i+1]  ),
@@ -101,7 +101,7 @@ module axi_multicut_intf #(
   parameter int unsigned NUM_CUTS   = 0  // The number of cuts.
 ) (
   input logic    clk_i,
-  input logic    rst_ni,
+  input logic    rst_i,
   AXI_BUS.Slave  in,
   AXI_BUS.Master out
 );
@@ -140,7 +140,7 @@ module axi_multicut_intf #(
     .axi_resp_t ( axi_resp_t )
   ) i_axi_multicut (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .slv_req_i  ( slv_req  ),
     .slv_resp_o ( slv_resp ),
     .mst_req_o  ( mst_req  ),
@@ -177,7 +177,7 @@ module axi_lite_multicut_intf #(
   parameter int unsigned NUM_CUTS   = 0
 ) (
   input logic     clk_i  ,
-  input logic     rst_ni ,
+  input logic     rst_i ,
   AXI_LITE.Slave  in     ,
   AXI_LITE.Master out
 );
@@ -214,7 +214,7 @@ module axi_lite_multicut_intf #(
     .axi_resp_t ( axi_resp_t )
   ) i_axi_multicut (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .slv_req_i  ( slv_req  ),
     .slv_resp_o ( slv_resp ),
     .mst_req_o  ( mst_req  ),

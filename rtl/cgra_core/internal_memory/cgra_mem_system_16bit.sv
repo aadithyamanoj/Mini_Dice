@@ -113,7 +113,7 @@ module cgra_mem_system_16bit #(
         .rule_t ( xbar_rule_16_t )
     ) i_xbar (
         .clk_i                 ( clk_i        ),
-        .rst_ni                ( ~rst_i       ),
+        .rst_i                ( rst_i        ),
         .test_i                ( 1'b0         ),
         .slv_ports             ( master_ifs   ),
         .mst_ports             ( slave_ifs    ),

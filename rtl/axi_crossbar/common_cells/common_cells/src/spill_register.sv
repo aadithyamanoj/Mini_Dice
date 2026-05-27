@@ -19,7 +19,7 @@ module spill_register #(
   parameter bit  Bypass = 1'b0     // make this spill register transparent
 ) (
   input  logic clk_i   ,
-  input  logic rst_ni  ,
+  input  logic rst_i  ,
   input  logic valid_i ,
   output logic ready_o ,
   input  T     data_i  ,
@@ -33,7 +33,7 @@ module spill_register #(
     .Bypass(Bypass)
   ) spill_register_flushable_i (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i,
     .flush_i(1'b0),
     .ready_o,

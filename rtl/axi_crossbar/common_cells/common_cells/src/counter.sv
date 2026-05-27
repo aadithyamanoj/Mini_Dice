@@ -16,7 +16,7 @@ module counter #(
     parameter bit STICKY_OVERFLOW = 1'b0
 )(
     input  logic             clk_i,
-    input  logic             rst_ni,
+    input  logic             rst_i,
     input  logic             clear_i, // synchronous clear
     input  logic             en_i,    // enable the counter
     input  logic             load_i,  // load a new value
@@ -30,7 +30,7 @@ module counter #(
         .STICKY_OVERFLOW (STICKY_OVERFLOW)
     ) i_counter (
         .clk_i,
-        .rst_ni,
+        .rst_i,
         .clear_i,
         .en_i,
         .load_i,

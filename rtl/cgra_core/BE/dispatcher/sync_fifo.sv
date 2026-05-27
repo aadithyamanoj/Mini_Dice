@@ -4,7 +4,7 @@ module sync_fifo #(
     parameter int ADDR_WIDTH = $clog2(DEPTH) // Address width (automatically calculated)
 )(
     input logic clk,                        // Clock
-    input logic rst,                      // Active-low reset
+    input logic rst,                      // Active-high reset
     
     // Write interface
     input logic push,                       // Push enable

@@ -59,7 +59,7 @@
 
 // Default clk and reset signals used by assertion macros below.
 `define ASSERT_DEFAULT_CLK clk_i
-`define ASSERT_DEFAULT_RST !rst_ni
+`define ASSERT_DEFAULT_RST rst_i
 
 // Immediate assertion
 // Note that immediate assertions are sensitive to simulation glitches.

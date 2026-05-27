@@ -87,8 +87,8 @@ module rr_arb_tree #(
 ) (
   /// Clock, positive edge triggered.
   input  logic                clk_i,
-  /// Asynchronous reset, active low.
-  input  logic                rst_ni,
+  /// Synchronous reset, active high.
+  input  logic                rst_i,
   /// Clears the arbiter state. Only used if `ExtPrio` is `1'b0` or `LockIn` is `1'b1`.
   input  logic                flush_i,
   /// External round-robin priority. Only used if `ExtPrio` is `1'b1.`
@@ -151,8 +151,8 @@ module rr_arb_tree #(
         assign lock_d     = req_o & ~gnt_i;
         assign req_d      = (lock_q) ? req_q : req_i;
 
-        always_ff @(posedge clk_i or negedge rst_ni) begin : p_lock_reg
-          if (!rst_ni) begin
+        always_ff @(posedge clk_i) begin : p_lock_reg
+          if (rst_i) begin
             lock_q <= '0;
           end else begin
             if (flush_i) begin
@@ -165,17 +165,17 @@ module rr_arb_tree #(
 
         `ifndef COMMON_CELLS_ASSERTS_OFF
           `ASSERT(lock, req_o && (!gnt_i && !flush_i) |=> idx_o == $past(idx_o),
-                  clk_i, !rst_ni || flush_i,
+                  clk_i, rst_i || flush_i,
                   "Lock implies same arbiter decision in next cycle if output is not ready.")
 
           logic [NumIn-1:0] req_tmp;
           assign req_tmp = req_q & req_i;
-          `ASSUME(lock_req, lock_d |=> req_tmp == req_q, clk_i, !rst_ni || flush_i,
+          `ASSUME(lock_req, lock_d |=> req_tmp == req_q, clk_i, rst_i || flush_i,
                   "It is disallowed to deassert unserved request signals when LockIn is enabled.")
         `endif
 
-        always_ff @(posedge clk_i or negedge rst_ni) begin : p_req_regs
-          if (!rst_ni) begin
+        always_ff @(posedge clk_i) begin : p_req_regs
+          if (rst_i) begin
             req_q  <= '0;
           end else begin
             if (flush_i) begin
@@ -225,8 +225,8 @@ module rr_arb_tree #(
       end
 
       // this holds the highest priority
-      always_ff @(posedge clk_i or negedge rst_ni) begin : p_rr_regs
-        if (!rst_ni) begin
+      always_ff @(posedge clk_i) begin : p_rr_regs
+        if (rst_i) begin
           rr_q   <= '0;
         end else begin
           if (flush_i) begin
@@ -301,20 +301,20 @@ module rr_arb_tree #(
     `ASSERT_INIT(lockin_and_extprio, !(LockIn && ExtPrio),
                  "Cannot use LockIn feature together with external ExtPrio.")
 
-    `ASSERT(hot_one, $onehot0(gnt_o), clk_i, !rst_ni || flush_i,
+    `ASSERT(hot_one, $onehot0(gnt_o), clk_i, rst_i || flush_i,
             "Grant signal must be hot1 or zero.")
 
-    `ASSERT(gnt0, |gnt_o |-> gnt_i, clk_i, !rst_ni || flush_i, "Grant out implies grant in.")
+    `ASSERT(gnt0, |gnt_o |-> gnt_i, clk_i, rst_i || flush_i, "Grant out implies grant in.")
 
-    `ASSERT(gnt1, req_o |-> gnt_i |-> |gnt_o, clk_i, !rst_ni || flush_i,
+    `ASSERT(gnt1, req_o |-> gnt_i |-> |gnt_o, clk_i, rst_i || flush_i,
             "Req out and grant in implies grant out.")
 
-    `ASSERT(gnt_idx, req_o |->  gnt_i |-> gnt_o[idx_o], clk_i, !rst_ni || flush_i,
+    `ASSERT(gnt_idx, req_o |->  gnt_i |-> gnt_o[idx_o], clk_i, rst_i || flush_i,
             "Idx_o / gnt_o do not match.")
 
-    `ASSERT(req0, |req_i |-> req_o, clk_i, !rst_ni || flush_i, "Req in implies req out.")
+    `ASSERT(req0, |req_i |-> req_o, clk_i, rst_i || flush_i, "Req in implies req out.")
 
-    `ASSERT(req1, req_o |-> |req_i, clk_i, !rst_ni || flush_i, "Req out implies req in.")
+    `ASSERT(req1, req_o |-> |req_i, clk_i, rst_i || flush_i, "Req out implies req in.")
     `endif
   end
 

@@ -1945,7 +1945,7 @@ package axi_test;
   /// axi_scoreboard_t axi_scoreboard = new(monitor_dv);
   /// initial begin
   ///   axi_scoreboard.enable_all_checks();
-  ///   wait (rst_n);
+  ///   wait (!rst_i);
   ///   axi_scoreboard.monitor();
   /// end
   class axi_scoreboard #(
@@ -2616,7 +2616,7 @@ module axi_chan_logger #(
   parameter type  r_chan_t    = logic         // axi  R type
 ) (
   input logic     clk_i,     // Clock
-  input logic     rst_ni,    // Asynchronous reset active low, when `1'b0` no sampling
+  input logic     rst_i,    // Synchronous reset active high, when `1'b1` no sampling
   input logic     end_sim_i, // end of simulation
   // AW channel
   input aw_chan_t aw_chan_i,
@@ -2656,8 +2656,8 @@ module axi_chan_logger #(
     automatic int       fd;
     automatic string    log_file;
     automatic string    log_str;
-    // only execute when reset is high
-    if (rst_ni) begin
+    // only execute when out of reset
+    if (!rst_i) begin
       // AW channel
       if (aw_valid_i && aw_ready_i) begin
         aw_queue.push_back(aw_chan_i);
@@ -2781,7 +2781,7 @@ module axi_chan_logger #(
     end
 
     // on each clock cycle update the logs if there is something in the queues
-    wait (rst_ni);
+    wait (!rst_i);
     while (!end_sim_i) begin
       @(posedge clk_i);
 

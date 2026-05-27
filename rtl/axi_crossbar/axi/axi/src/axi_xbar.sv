@@ -65,8 +65,8 @@ module axi_xbar
 ) (
   /// Clock, positive edge triggered.
   input  logic                                                          clk_i,
-  /// Asynchronous reset, active low.
-  input  logic                                                          rst_ni,
+  /// Synchronous reset, active high.
+  input  logic                                                          rst_i,
   /// Testmode enable, active high.
   input  logic                                                          test_i,
   /// AXI4+ATOP requests to the slave ports.
@@ -107,7 +107,7 @@ module axi_xbar
     .rule_t       (rule_t)
   ) i_xbar_unmuxed (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .test_i,
     .slv_ports_req_i,
     .slv_ports_resp_o,
@@ -144,7 +144,7 @@ module axi_xbar
       .SpillR        ( Cfg.LatencyMode[0]     )
     ) i_axi_mux (
       .clk_i,   // Clock
-      .rst_ni,  // Asynchronous reset active low
+      .rst_i,  // Synchronous reset active high
       .test_i,  // Test Mode enable
       .slv_reqs_i  ( mst_reqs[i]         ),
       .slv_resps_o ( mst_resps[i]        ),

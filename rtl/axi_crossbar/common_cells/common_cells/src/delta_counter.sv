@@ -15,7 +15,7 @@ module delta_counter #(
     parameter bit STICKY_OVERFLOW = 1'b0
 )(
     input  logic             clk_i,
-    input  logic             rst_ni,
+    input  logic             rst_i,
     input  logic             clear_i, // synchronous clear
     input  logic             en_i,    // enable the counter
     input  logic             load_i,  // load a new value
@@ -29,9 +29,9 @@ module delta_counter #(
     if (STICKY_OVERFLOW) begin : gen_sticky_overflow
         logic overflow_d, overflow_q;
 
-        always_ff @(posedge clk_i or negedge rst_ni)
+        always_ff @(posedge clk_i)
         begin
-            if(!rst_ni) begin
+            if(rst_i) begin
                 overflow_q <= 1'b0;
             end else begin
                 overflow_q <= overflow_d;
@@ -73,8 +73,8 @@ module delta_counter #(
         end
     end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-        if (!rst_ni) begin
+    always_ff @(posedge clk_i) begin
+        if (rst_i) begin
            counter_q <= '0;
         end else begin
            counter_q <= counter_d;

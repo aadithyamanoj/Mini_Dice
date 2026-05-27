@@ -36,7 +36,7 @@
 `endif
 
 `define REG_DFLT_CLK clk_i
-`define REG_DFLT_RST rst_ni
+`define REG_DFLT_RST rst_i
 
 // Flip-Flop with asynchronous active-low reset
 // __q: Q output of FF

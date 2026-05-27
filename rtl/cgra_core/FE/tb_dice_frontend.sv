@@ -18,7 +18,7 @@ module tb_dice_frontend;
   always  #(ClkPeriod / 2) clk_i = ~clk_i;
 
   int cycle_count;
-  always_ff @(posedge clk_i or posedge rst_i) begin
+  always_ff @(posedge clk_i) begin
     if (rst_i) cycle_count <= 0;
     else begin
       cycle_count <= cycle_count + 1;
@@ -111,7 +111,7 @@ module tb_dice_frontend;
   assign mfetch_resp.r.id     = mfetch_rid;
   assign mfetch_resp.r.user   = '0;
 
-  always_ff @(posedge clk_i or posedge rst_i) begin
+  always_ff @(posedge clk_i) begin
     if (rst_i) begin
       mfetch_st    <= AXI_IDLE;
       mfetch_beats <= '0;
@@ -146,7 +146,7 @@ module tb_dice_frontend;
   assign bsfetch_resp.r.id     = bsfetch_rid;
   assign bsfetch_resp.r.user   = '0;
 
-  always_ff @(posedge clk_i or posedge rst_i) begin
+  always_ff @(posedge clk_i) begin
     if (rst_i) begin
       bsfetch_st    <= AXI_IDLE;
       bsfetch_beats <= '0;

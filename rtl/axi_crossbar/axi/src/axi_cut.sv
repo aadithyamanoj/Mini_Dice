@@ -36,7 +36,7 @@ module axi_cut #(
   parameter type axi_resp_t = logic
 ) (
   input logic       clk_i,
-  input logic       rst_ni,
+  input logic       rst_i,
   // salve port
   input  axi_req_t  slv_req_i,
   output axi_resp_t slv_resp_o,
@@ -51,7 +51,7 @@ module axi_cut #(
     .Bypass  ( BypassAw  )
   ) i_reg_aw (
     .clk_i   ( clk_i               ),
-    .rst_ni  ( rst_ni              ),
+    .rst_i  ( rst_i              ),
     .valid_i ( slv_req_i.aw_valid  ),
     .ready_o ( slv_resp_o.aw_ready ),
     .data_i  ( slv_req_i.aw        ),
@@ -65,7 +65,7 @@ module axi_cut #(
     .Bypass  ( BypassW  )
   ) i_reg_w  (
     .clk_i   ( clk_i              ),
-    .rst_ni  ( rst_ni             ),
+    .rst_i  ( rst_i             ),
     .valid_i ( slv_req_i.w_valid  ),
     .ready_o ( slv_resp_o.w_ready ),
     .data_i  ( slv_req_i.w        ),
@@ -79,7 +79,7 @@ module axi_cut #(
     .Bypass  ( BypassB  )
   ) i_reg_b  (
     .clk_i   ( clk_i              ),
-    .rst_ni  ( rst_ni             ),
+    .rst_i  ( rst_i             ),
     .valid_i ( mst_resp_i.b_valid ),
     .ready_o ( mst_req_o.b_ready  ),
     .data_i  ( mst_resp_i.b       ),
@@ -93,7 +93,7 @@ module axi_cut #(
     .Bypass  ( BypassAr  )
   ) i_reg_ar (
     .clk_i   ( clk_i               ),
-    .rst_ni  ( rst_ni              ),
+    .rst_i  ( rst_i              ),
     .valid_i ( slv_req_i.ar_valid  ),
     .ready_o ( slv_resp_o.ar_ready ),
     .data_i  ( slv_req_i.ar        ),
@@ -107,7 +107,7 @@ module axi_cut #(
     .Bypass  ( BypassR  )
   ) i_reg_r  (
     .clk_i   ( clk_i              ),
-    .rst_ni  ( rst_ni             ),
+    .rst_i  ( rst_i             ),
     .valid_i ( mst_resp_i.r_valid ),
     .ready_o ( mst_req_o.r_ready  ),
     .data_i  ( mst_resp_i.r       ),
@@ -139,7 +139,7 @@ module axi_cut_intf #(
   parameter int unsigned USER_WIDTH = 0
 ) (
   input logic     clk_i  ,
-  input logic     rst_ni ,
+  input logic     rst_i ,
   AXI_BUS.Slave   in     ,
   AXI_BUS.Master  out
 );
@@ -183,7 +183,7 @@ module axi_cut_intf #(
     .axi_resp_t ( axi_resp_t )
   ) i_axi_cut (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .slv_req_i  ( slv_req  ),
     .slv_resp_o ( slv_resp ),
     .mst_req_o  ( mst_req  ),
@@ -225,7 +225,7 @@ module axi_lite_cut_intf #(
   parameter int unsigned DATA_WIDTH = 0
 ) (
   input logic     clk_i  ,
-  input logic     rst_ni ,
+  input logic     rst_i ,
   AXI_LITE.Slave  in     ,
   AXI_LITE.Master out
 );
@@ -267,7 +267,7 @@ module axi_lite_cut_intf #(
     .axi_resp_t ( axi_resp_t )
   ) i_axi_cut (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .slv_req_i  ( slv_req  ),
     .slv_resp_o ( slv_resp ),
     .mst_req_o  ( mst_req  ),

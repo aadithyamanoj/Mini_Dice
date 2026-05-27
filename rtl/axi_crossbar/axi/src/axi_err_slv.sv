@@ -27,7 +27,7 @@ module axi_err_slv #(
   parameter int unsigned          MaxTrans    = 1                     // Maximum # of accepted transactions before stalling
 ) (
   input  logic      clk_i,   // Clock
-  input  logic      rst_ni,  // Asynchronous reset active low
+  input  logic      rst_i,  // Synchronous reset active high
   input  logic      test_i,  // Testmode enable
   // slave port
   input  axi_req_t  slv_req_i,
@@ -50,7 +50,7 @@ module axi_err_slv #(
       .axi_resp_t       ( axi_resp_t  )
     ) i_atop_filter (
       .clk_i,
-      .rst_ni,
+      .rst_i,
       .slv_req_i  ( slv_req_i   ),
       .slv_resp_o ( slv_resp_o  ),
       .mst_req_o  ( err_req     ),
@@ -93,7 +93,7 @@ module axi_err_slv #(
     .dtype        ( id_t      )
   ) i_w_fifo (
     .clk_i      ( clk_i             ),
-    .rst_ni     ( rst_ni            ),
+    .rst_i     ( rst_i            ),
     .flush_i    ( 1'b0              ),
     .testmode_i ( test_i            ),
     .full_o     ( w_fifo_full       ),
@@ -126,7 +126,7 @@ module axi_err_slv #(
     .dtype        ( id_t         )
   ) i_b_fifo (
     .clk_i      ( clk_i        ),
-    .rst_ni     ( rst_ni       ),
+    .rst_i     ( rst_i       ),
     .flush_i    ( 1'b0         ),
     .testmode_i ( test_i       ),
     .full_o     ( b_fifo_full  ),
@@ -168,7 +168,7 @@ module axi_err_slv #(
     .dtype        ( r_data_t  )
   ) i_r_fifo (
     .clk_i     ( clk_i        ),
-    .rst_ni    ( rst_ni       ),
+    .rst_i    ( rst_i       ),
     .flush_i   ( 1'b0         ),
     .testmode_i( test_i       ),
     .full_o    ( r_fifo_full  ),
@@ -220,8 +220,8 @@ module axi_err_slv #(
     end
   end
 
-  always_ff @(posedge clk_i, negedge rst_ni) begin
-    if (!rst_ni) begin
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
       r_busy_q <= '0;
     end else if (r_busy_load) begin
       r_busy_q <= r_busy_d;
@@ -232,7 +232,7 @@ module axi_err_slv #(
     .WIDTH     ($bits(axi_pkg::len_t))
   ) i_r_counter (
     .clk_i     ( clk_i           ),
-    .rst_ni    ( rst_ni          ),
+    .rst_i    ( rst_i          ),
     .clear_i   ( r_cnt_clear     ),
     .en_i      ( r_cnt_en        ),
     .load_i    ( r_cnt_load      ),
@@ -249,7 +249,7 @@ module axi_err_slv #(
       $fatal(1, "This module may only generate RESP_DECERR or RESP_SLVERR responses!");
   end
   `ifndef XSIM
-  default disable iff (!rst_ni);
+  default disable iff (rst_i);
   if (!ATOPs) begin : gen_assert_atops_unsupported
     assume property( @(posedge clk_i) (slv_req_i.aw_valid |-> slv_req_i.aw.atop == '0)) else
      $fatal(1, "Got ATOP but not configured to support ATOPs!");

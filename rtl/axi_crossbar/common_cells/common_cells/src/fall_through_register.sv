@@ -17,7 +17,7 @@ module fall_through_register #(
     parameter type T = logic  // Vivado requires a default value for type parameters.
 ) (
     input  logic    clk_i,          // Clock
-    input  logic    rst_ni,         // Asynchronous active-low reset
+    input  logic    rst_i,         // Synchronous active-high reset
     input  logic    clr_i,          // Synchronous clear
     input  logic    testmode_i,     // Test mode to bypass clock gating
     // Input port
@@ -39,7 +39,7 @@ module fall_through_register #(
         .dtype          (T)
     ) i_fifo (
         .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
+        .rst_i         (rst_i),
         .flush_i        (clr_i),
         .testmode_i     (testmode_i),
         .full_o         (fifo_full),

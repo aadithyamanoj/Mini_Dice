@@ -55,7 +55,7 @@ module axi_mux #(
   parameter bit          SpillR        = 1'b0
 ) (
   input  logic                       clk_i,    // Clock
-  input  logic                       rst_ni,   // Asynchronous reset active low
+  input  logic                       rst_i,   // Synchronous reset active high
   input  logic                       test_i,   // Test Mode enable
   // slave ports (AXI inputs), connect master modules here
   input  slv_req_t  [NoSlvPorts-1:0] slv_reqs_i,
@@ -75,7 +75,7 @@ module axi_mux #(
       .Bypass  ( ~SpillAw      )
     ) i_aw_spill_reg (
       .clk_i   ( clk_i                    ),
-      .rst_ni  ( rst_ni                   ),
+      .rst_i  ( rst_i                   ),
       .valid_i ( slv_reqs_i[0].aw_valid   ),
       .ready_o ( slv_resps_o[0].aw_ready  ),
       .data_i  ( slv_reqs_i[0].aw         ),
@@ -88,7 +88,7 @@ module axi_mux #(
       .Bypass  ( ~SpillW  )
     ) i_w_spill_reg (
       .clk_i   ( clk_i                   ),
-      .rst_ni  ( rst_ni                  ),
+      .rst_i  ( rst_i                  ),
       .valid_i ( slv_reqs_i[0].w_valid   ),
       .ready_o ( slv_resps_o[0].w_ready  ),
       .data_i  ( slv_reqs_i[0].w         ),
@@ -101,7 +101,7 @@ module axi_mux #(
       .Bypass  ( ~SpillB      )
     ) i_b_spill_reg (
       .clk_i   ( clk_i                  ),
-      .rst_ni  ( rst_ni                 ),
+      .rst_i  ( rst_i                 ),
       .valid_i ( mst_resp_i.b_valid     ),
       .ready_o ( mst_req_o.b_ready      ),
       .data_i  ( mst_resp_i.b           ),
@@ -114,7 +114,7 @@ module axi_mux #(
       .Bypass  ( ~SpillAr      )
     ) i_ar_spill_reg (
       .clk_i   ( clk_i                    ),
-      .rst_ni  ( rst_ni                   ),
+      .rst_i  ( rst_i                   ),
       .valid_i ( slv_reqs_i[0].ar_valid   ),
       .ready_o ( slv_resps_o[0].ar_ready  ),
       .data_i  ( slv_reqs_i[0].ar         ),
@@ -127,7 +127,7 @@ module axi_mux #(
       .Bypass  ( ~SpillR      )
     ) i_r_spill_reg (
       .clk_i   ( clk_i                  ),
-      .rst_ni  ( rst_ni                 ),
+      .rst_i  ( rst_i                 ),
       .valid_i ( mst_resp_i.r_valid     ),
       .ready_o ( mst_req_o.r_ready      ),
       .data_i  ( mst_resp_i.r           ),
@@ -268,7 +268,7 @@ module axi_mux #(
       .LockIn   ( 1'b1          )
     ) i_aw_arbiter (
       .clk_i  ( clk_i           ),
-      .rst_ni ( rst_ni          ),
+      .rst_i ( rst_i          ),
       .flush_i( 1'b0            ),
       .rr_i   ( '0              ),
       .req_i  ( slv_aw_valids   ),
@@ -312,7 +312,7 @@ module axi_mux #(
       end
     end
 
-    `FFLARN(lock_aw_valid_q, lock_aw_valid_d, load_aw_lock, '0, clk_i, rst_ni)
+    `FFLSR(lock_aw_valid_q, lock_aw_valid_d, load_aw_lock, '0, clk_i, rst_i)
 
     fifo_v3 #(
       .FALL_THROUGH ( FallThrough ),
@@ -320,7 +320,7 @@ module axi_mux #(
       .dtype        ( switch_id_t )
     ) i_w_fifo (
       .clk_i     ( clk_i                                     ),
-      .rst_ni    ( rst_ni                                    ),
+      .rst_i    ( rst_i                                    ),
       .flush_i   ( 1'b0                                      ),
       .testmode_i( test_i                                    ),
       .full_o    ( w_fifo_full                               ),
@@ -337,7 +337,7 @@ module axi_mux #(
       .Bypass  ( ~SpillAw      ) // Param indicated that we want a spill reg
     ) i_aw_spill_reg (
       .clk_i   ( clk_i               ),
-      .rst_ni  ( rst_ni              ),
+      .rst_i  ( rst_i              ),
       .valid_i ( mst_aw_valid        ),
       .ready_o ( mst_aw_ready        ),
       .data_i  ( mst_aw_chan         ),
@@ -371,7 +371,7 @@ module axi_mux #(
       .Bypass  ( ~SpillW  )
     ) i_w_spill_reg (
       .clk_i   ( clk_i              ),
-      .rst_ni  ( rst_ni             ),
+      .rst_i  ( rst_i             ),
       .valid_i ( mst_w_valid        ),
       .ready_o ( mst_w_ready        ),
       .data_i  ( mst_w_chan         ),
@@ -394,7 +394,7 @@ module axi_mux #(
       .Bypass  ( ~SpillB      )
     ) i_b_spill_reg (
       .clk_i   ( clk_i                      ),
-      .rst_ni  ( rst_ni                     ),
+      .rst_i  ( rst_i                     ),
       .valid_i ( mst_resp_i.b_valid         ),
       .ready_o ( mst_req_o.b_ready          ),
       .data_i  ( mst_resp_i.b               ),
@@ -413,7 +413,7 @@ module axi_mux #(
       .LockIn   ( 1'b1          )
     ) i_ar_arbiter (
       .clk_i  ( clk_i           ),
-      .rst_ni ( rst_ni          ),
+      .rst_i ( rst_i          ),
       .flush_i( 1'b0            ),
       .rr_i   ( '0              ),
       .req_i  ( slv_ar_valids   ),
@@ -430,7 +430,7 @@ module axi_mux #(
       .Bypass  ( ~SpillAr      )
     ) i_ar_spill_reg (
       .clk_i   ( clk_i               ),
-      .rst_ni  ( rst_ni              ),
+      .rst_i  ( rst_i              ),
       .valid_i ( ar_valid            ),
       .ready_o ( ar_ready            ),
       .data_i  ( mst_ar_chan         ),
@@ -453,7 +453,7 @@ module axi_mux #(
       .Bypass  ( ~SpillR      )
     ) i_r_spill_reg (
       .clk_i   ( clk_i                      ),
-      .rst_ni  ( rst_ni                     ),
+      .rst_i  ( rst_i                     ),
       .valid_i ( mst_resp_i.r_valid         ),
       .ready_o ( mst_req_o.r_ready          ),
       .data_i  ( mst_resp_i.r               ),
@@ -517,7 +517,7 @@ module axi_mux_intf #(
   parameter bit          SPILL_R          = 1'b0
 ) (
   input  logic   clk_i,                  // Clock
-  input  logic   rst_ni,                 // Asynchronous reset active low
+  input  logic   rst_i,                 // Synchronous reset active high
   input  logic   test_i,                 // Testmode enable
   AXI_BUS.Slave  slv [NO_SLV_PORTS-1:0], // slave ports
   AXI_BUS.Master mst                     // master port
@@ -588,7 +588,7 @@ module axi_mux_intf #(
     .SpillR        ( SPILL_R          )
   ) i_axi_mux (
     .clk_i       ( clk_i     ), // Clock
-    .rst_ni      ( rst_ni    ), // Asynchronous reset active low
+    .rst_i      ( rst_i    ), // Synchronous reset active high
     .test_i      ( test_i    ), // Test Mode enable
     .slv_reqs_i  ( slv_reqs  ),
     .slv_resps_o ( slv_resps ),

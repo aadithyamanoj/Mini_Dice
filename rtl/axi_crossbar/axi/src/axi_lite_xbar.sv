@@ -33,7 +33,7 @@ module axi_lite_xbar #(
   parameter int unsigned MstIdxWidth = (Cfg.NoMstPorts > 32'd1) ? $clog2(Cfg.NoMstPorts) : 32'd1
 ) (
   input  logic                                        clk_i,
-  input  logic                                        rst_ni,
+  input  logic                                        rst_i,
   input  logic                                        test_i,
   input  axi_req_t  [Cfg.NoSlvPorts-1:0]              slv_ports_req_i,
   output axi_resp_t [Cfg.NoSlvPorts-1:0]              slv_ports_resp_o,
@@ -115,7 +115,7 @@ module axi_lite_xbar #(
     // pragma translate_off
     `ifndef VERILATOR
     `ifndef XSIM
-    default disable iff (~rst_ni);
+    default disable iff (rst_i);
     default_aw_mst_port_en: assert property(
       @(posedge clk_i) (slv_ports_req_i[i].aw_valid && !slv_ports_resp_o[i].aw_ready)
           |=> $stable(en_default_mst_port_i[i]))
@@ -157,7 +157,7 @@ module axi_lite_xbar #(
       .SpillR         ( Cfg.LatencyMode[5] )
     ) i_axi_lite_demux (
       .clk_i,   // Clock
-      .rst_ni,  // Asynchronous reset active low
+      .rst_i,  // Synchronous reset active high
       .test_i,  // Testmode enable
       .slv_req_i       ( slv_ports_req_i[i]  ),
       .slv_aw_select_i ( slv_aw_select       ),
@@ -194,7 +194,7 @@ module axi_lite_xbar #(
                                              // transactions have only a single beat.
     ) i_axi_err_slv (
       .clk_i      ( clk_i       ),  // Clock
-      .rst_ni     ( rst_ni      ),  // Asynchronous reset active low
+      .rst_i     ( rst_i      ),  // Synchronous reset active high
       .test_i     ( test_i      ),  // Testmode enable
       // slave port
       .slv_req_i  ( decerr_req  ),
@@ -229,7 +229,7 @@ module axi_lite_xbar #(
       .SpillR      ( Cfg.LatencyMode[0] )
     ) i_axi_lite_mux (
       .clk_i,  // Clock
-      .rst_ni, // Asynchronous reset active low
+      .rst_i, // Synchronous reset active high
       .test_i, // Test Mode enable
       .slv_reqs_i  ( mst_reqs[i]         ),
       .slv_resps_o ( mst_resps[i]        ),
@@ -248,7 +248,7 @@ module axi_lite_xbar_intf #(
   localparam int unsigned MstIdxWidth = (Cfg.NoMstPorts > 32'd1) ? $clog2(Cfg.NoMstPorts) : 32'd1
 ) (
   input  logic                                                    clk_i,
-  input  logic                                                    rst_ni,
+  input  logic                                                    rst_i,
   input  logic                                                    test_i,
   AXI_LITE.Slave                                                  slv_ports [Cfg.NoSlvPorts-1:0],
   AXI_LITE.Master                                                 mst_ports [Cfg.NoMstPorts-1:0],
@@ -295,7 +295,7 @@ module axi_lite_xbar_intf #(
     .rule_t     ( rule_t     )
   ) i_xbar (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .test_i,
     .slv_ports_req_i  (slv_reqs ),
     .slv_ports_resp_o (slv_resps),

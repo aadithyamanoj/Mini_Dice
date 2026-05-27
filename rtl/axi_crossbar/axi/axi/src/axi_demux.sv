@@ -63,7 +63,7 @@ module axi_demux #(
   parameter type         select_t       = logic [SelectWidth-1:0]
 ) (
   input  logic                          clk_i,
-  input  logic                          rst_ni,
+  input  logic                          rst_i,
   input  logic                          test_i,
   // Slave Port
   input  axi_req_t                      slv_req_i,
@@ -91,7 +91,7 @@ module axi_demux #(
     .Bypass  ( ~SpillAw   )
   ) i_aw_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_req_i.aw_valid    ),
     .ready_o ( slv_aw_ready_chan     ),
     .data_i  ( slv_req_i.aw          ),
@@ -104,7 +104,7 @@ module axi_demux #(
     .Bypass  ( ~SpillAw )
   ) i_aw_select_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_req_i.aw_valid    ),
     .ready_o ( slv_aw_ready_sel      ),
     .data_i  ( slv_aw_select_i       ),
@@ -121,7 +121,7 @@ module axi_demux #(
     .Bypass  ( ~SpillW   )
   ) i_w_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_req_i.w_valid    ),
     .ready_o ( slv_resp_o.w_ready   ),
     .data_i  ( slv_req_i.w          ),
@@ -134,7 +134,7 @@ module axi_demux #(
     .Bypass  ( ~SpillAr   )
   ) i_ar_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_req_i.ar_valid    ),
     .ready_o ( slv_ar_ready_chan     ),
     .data_i  ( slv_req_i.ar          ),
@@ -147,7 +147,7 @@ module axi_demux #(
     .Bypass  ( ~SpillAr )
   ) i_ar_sel_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_req_i.ar_valid    ),
     .ready_o ( slv_ar_ready_sel      ),
     .data_i  ( slv_ar_select_i       ),
@@ -164,7 +164,7 @@ module axi_demux #(
     .Bypass  ( ~SpillB  )
   ) i_b_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_resp_cut.b_valid ),
     .ready_o ( slv_req_cut.b_ready  ),
     .data_i  ( slv_resp_cut.b       ),
@@ -177,7 +177,7 @@ module axi_demux #(
     .Bypass  ( ~SpillR  )
   ) i_r_spill_reg (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .valid_i ( slv_resp_cut.r_valid ),
     .ready_o ( slv_req_cut.r_ready  ),
     .data_i  ( slv_resp_cut.r       ),
@@ -197,7 +197,7 @@ module axi_demux #(
     .UniqueIds  ( UniqueIds   )
   ) i_demux_simple (
     .clk_i,
-    .rst_ni,
+    .rst_i,
     .test_i,
 
     .slv_req_i       ( slv_req_cut   ),
@@ -233,7 +233,7 @@ module axi_demux_intf #(
   parameter type         select_t       = logic [SELECT_WIDTH-1:0] // MST port select type
 ) (
   input  logic    clk_i,                 // Clock
-  input  logic    rst_ni,                // Asynchronous reset active low
+  input  logic    rst_i,                // Synchronous reset active high
   input  logic    test_i,                // Testmode enable
   input  select_t slv_aw_select_i,       // has to be stable, when aw_valid
   input  select_t slv_ar_select_i,       // has to be stable, when ar_valid
@@ -288,7 +288,7 @@ module axi_demux_intf #(
     .SpillR         ( SPILL_R       )
   ) i_axi_demux (
     .clk_i,   // Clock
-    .rst_ni,  // Asynchronous reset active low
+    .rst_i,  // Synchronous reset active high
     .test_i,  // Testmode enable
     // slave port
     .slv_req_i       ( slv_req         ),
