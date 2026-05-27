@@ -74,10 +74,16 @@ module tb_dice_frontend;
     .cm_wr_data_o            (cm_wr_data),
     .cm_wr_valid_o           (cm_wr_valid),
     .pred_regs_i             (pred_regs),
+    .prog_active_i           (1'b0),
+    .prog_active_buffer_i    (1'b0),
+    .disable_ucd_prefetch_sched_i(1'b0),
     .eblock_commit_valid_i   (eblock_commit_valid),
     .eblock_commit_id_i      (eblock_commit_id),
     .brt_info_i              (brt_info),
     .brt_info_write_enable_i (brt_info_write_enable),
+    .stack_overflow_o        (),
+    .stack_depth_o           (),
+    .stack_error_pc_o        (),
     .simt_stack_entry_count_o(simt_stack_entry_count)
   );
 

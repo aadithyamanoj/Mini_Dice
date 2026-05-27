@@ -24,6 +24,7 @@ module dice_core
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX5_i,
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX6_i,
     input logic [DICE_REG_DATA_WIDTH-1:0] csrX7_i,
+    input logic                           disable_ucd_prefetch_sched_i,
 
     // CGRA scan chain / bitstream outputs
     output logic cgra_prog_dout_o,
@@ -101,6 +102,7 @@ module dice_core
       .pred_regs_i         (frontend_pred_regs),
       .prog_active_i       (prog_active_lo),
       .prog_active_buffer_i(prog_active_buffer_lo),
+      .disable_ucd_prefetch_sched_i(disable_ucd_prefetch_sched_i),
 
       .eblock_commit_valid_i   (bct_pop_valid),
       .eblock_commit_id_i      (bct_pop_e_block_id),

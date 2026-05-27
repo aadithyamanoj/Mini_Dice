@@ -6,7 +6,8 @@
 // Connections:
 //   FPGA AXI4 → crossbar → fpga_mem → external bsg_link DDR → FPGA SRAM
 //   FPGA AXI4 → crossbar → cgra_csr → cgra_io_csr
-//   cgra_io_csr regs 0-7  → cta_if (start/start_pc) + boundary (cgra_reset, bsload_en)
+//   cgra_io_csr regs 0-7  → cta_if (start/start_pc), boundary controls,
+//                            and frontend chicken bits
 //   cgra_io_csr regs 8-15 → dice_core csrX0-7 (kernel arguments)
 //   dice_core mfetch/bsfetch (slv_req_t) → crossbar
 //   dice_core axi_* (dfetch) → crossbar
@@ -117,6 +118,7 @@ module mini_dice_top
   logic [                   15:0] csr_start_pc;
   logic [                   15:0] csr_thread_count;
   logic                           csr_cgra_reset;
+  logic                           csr_disable_ucd_prefetch_sched;
 
   // Hardware status wires from dice_core to cgra_io_csr
   logic                           core_hw_busy;
@@ -127,7 +129,7 @@ module mini_dice_top
   logic [                   15:0] core_bsload_cnt;
 
   // csrX kernel arguments: cgra_io_csr regs 8-15 → dice_core
-  logic [DICE_REG_DATA_WIDTH-1:0] csrX                [8];
+  logic [DICE_REG_DATA_WIDTH-1:0] csrX                           [8];
   logic                           cta_complete_fire;
 
   // Legacy flat FPGA AXI4 host interface is no longer consumed by
@@ -182,6 +184,7 @@ module mini_dice_top
       .csrX5_i(csrX[5]),
       .csrX6_i(csrX[6]),
       .csrX7_i(csrX[7]),
+      .disable_ucd_prefetch_sched_i(csr_disable_ucd_prefetch_sched),
 
       .cgra_prog_dout_o(cgra_prog_dout_o),
       .cgra_prog_we_o  (cgra_prog_we_o),
@@ -301,11 +304,12 @@ module mini_dice_top
       .axi_resp_o(csr_resp),
 
       // Regs 0-7: control outputs
-      .start_o       (csr_start),
-      .start_pc_o    (csr_start_pc),
-      .thread_count_o(csr_thread_count),
-      .cgra_reset_o  (csr_cgra_reset),
-      .bsload_en_o   (csr_bsload_en_o),
+      .start_o                     (csr_start),
+      .start_pc_o                  (csr_start_pc),
+      .thread_count_o              (csr_thread_count),
+      .cgra_reset_o                (csr_cgra_reset),
+      .bsload_en_o                 (csr_bsload_en_o),
+      .disable_ucd_prefetch_sched_o(csr_disable_ucd_prefetch_sched),
 
       // hw_* status exposed through CSR STATUS.
       .hw_busy_i          (core_hw_busy),

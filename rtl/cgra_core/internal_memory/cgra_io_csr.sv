@@ -18,7 +18,8 @@
 //   0x08    SIMT_STACK_DEPTH  RO    Current SIMT stack depth (from hardware)
 //   0x0A    ERROR_INFO        RO    Error address / code (sticky, clears on reset or start)
 //   0x0C    THREAD_COUNT      R/W   CTA thread count for next launch
-//   0x0E    RSVD_7            R/W   Reserved
+//   0x0E    RSVD_7            R/W   [0] disable_ucd_prefetch_sched
+//                                   [15:1] reserved
 //   0x10    CSRX0             R/W   Kernel argument CSR source 0
 //   0x12    CSRX1             R/W   Kernel argument CSR source 1
 //   0x14    CSRX2             R/W   Kernel argument CSR source 2
@@ -60,6 +61,7 @@ module cgra_io_csr
   output logic [15:0] thread_count_o,      // CTA thread count for next launch
   output logic        cgra_reset_o,        // active-high reset to CGRA core
   output logic        bsload_en_o,         // initiate bitstream load
+  output logic        disable_ucd_prefetch_sched_o, // chicken bit: suppress UCD prefetch schedules
 
   // --------------------------------------------------------------------------
   // Hardware inputs (CGRA core → CSR)
@@ -297,6 +299,7 @@ module cgra_io_csr
   assign start_o       = ctrl_r[0];
   assign cgra_reset_o  = ctrl_r[1];
   assign bsload_en_o   = ctrl_r[2];
+  assign disable_ucd_prefetch_sched_o = rsvd7_r[0];
   assign start_pc_o    = start_pc_r;
   assign thread_count_o = thread_count_r;
 

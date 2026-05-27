@@ -29,6 +29,7 @@ module cta_schedule_stage_syn_wrap
 
   input block_retire_status_t brt_info_i,
   input logic                 brt_info_write_enable_i,
+  input logic                 disable_ucd_prefetch_sched_i,
 
   input  logic               simt_update_valid_i,
   output logic               simt_update_ready_o,
@@ -67,6 +68,7 @@ module cta_schedule_stage_syn_wrap
       .cta_status_data_o       (cta_status_data_o),
       .brt_info_i              (brt_info_i),
       .brt_info_write_enable_i (brt_info_write_enable_i),
+      .disable_ucd_prefetch_sched_i(disable_ucd_prefetch_sched_i),
       .simt_update_valid_i     (simt_update_valid_i),
       .simt_update_ready_o     (simt_update_ready_o),
       .simt_update_stack_data_i(simt_update_stack_data_i),

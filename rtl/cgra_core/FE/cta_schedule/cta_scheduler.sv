@@ -5,6 +5,7 @@ module cta_scheduler
     input logic clk_i,
     input logic rst_i,
     input logic enable_i, // Enable signal for scheduler operation
+    input logic disable_ucd_prefetch_sched_i,
 
     // Active CTA Table (single entry)
     input active_cta_t active_cta_entry_i,
@@ -38,12 +39,14 @@ module cta_scheduler
   // Single-CTA scheduling signals
   logic cta_valid;
   logic cta_branch_resolving;
+  logic cta_prefetch_blocked;
   logic selection_valid;
 
   // CTA is schedulable when it is valid and the stack top is valid
   assign cta_valid = active_cta_entry_i.cta_valid && stack_top_valid_i;
   assign cta_branch_resolving = is_prefetch_i;
-  assign selection_valid = cta_valid;
+  assign cta_prefetch_blocked = disable_ucd_prefetch_sched_i && cta_branch_resolving;
+  assign selection_valid = cta_valid && !cta_prefetch_blocked;
 
   // Output assignments
   always_comb begin
