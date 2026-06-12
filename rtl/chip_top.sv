@@ -3,7 +3,6 @@
 //
 // 48-pad TSMC180 wrapper for the EE478b zeroscatter SoC. Integrates:
 //   - bsg_link 16-bit DDR upstream + downstream (config writes / status)
-//   - SPI slave (alternate path to write the same config registers)
 //   - BLE waveform generator (PIN_18 modulator output)
 //   - Optional DFT scan chain stitched through PAD[11], PAD[46], PAD[47]
 //
@@ -81,12 +80,6 @@ module chip_top (
   localparam int UP_VALID_PAD = 14;
   localparam int UP_CLK_PAD = 15;
 
-  // SPI
-  localparam int SCLK_PAD = 13;
-  localparam int MOSI_PAD = 24;
-  localparam int MISO_PAD = 25;
-  localparam int SS_N_PAD = 26;
-
   // BLE modulator output
   localparam int PIN_18_PAD = 27;
 
@@ -163,11 +156,6 @@ module chip_top (
   wire        up_valid;  // chip output, drives PAD[14]
   wire [15:0] up_data;  // chip outputs
 
-  wire        sclk_in;
-  wire        mosi_in;
-  wire        ss_n_in;
-  wire        miso_out;
-
   wire        pin_18_out;
 
   // Tie io_master_clk to core_clk to save the PAD that would otherwise
@@ -200,6 +188,20 @@ module chip_top (
   // ~16 more core_clk cycles after the async_token_reset pulse.
   wire io_link_reset_int = hard_reset_sync || (reset_cnt < 6'd16);
 
+  // Threshold reduced from 28→24 to account for the 2-cycle dn_clk synchronizer
+  // below: effective deassertion in dn_clk domain lands at ~count=28, preserving
+  // 4 core_clk cycles of margin before core_link_reset_int at count=32.
+  wire downstream_io_link_reset_int = hard_reset_sync || (reset_cnt < 6'd24);
+
+  // Re-synchronize downstream reset into dn_clk domain.
+  // bsg_link_ddr_downstream requires io_link_reset_i synchronous to its input clock.
+  wire downstream_io_link_reset_sync;
+  async_rst_sync_deassert u_dn_reset_sync (
+      .clk                    (dn_clk),
+      .rst                    (downstream_io_link_reset_int),
+      .async_rst_sync_deassert(downstream_io_link_reset_sync)
+  );
+
   // core link reset: released last (~32 cycles after hard_reset_sync).
   wire core_link_reset_int = hard_reset_sync || (reset_cnt < 6'd32);
 
@@ -218,10 +220,6 @@ module chip_top (
   assign dn_clk    = C[DN_CLK_PAD];
   assign dn_valid  = C[DN_VALID_PAD];
   assign token_clk = C[TOKEN_CLK_PAD];
-
-  assign sclk_in   = C[SCLK_PAD];
-  assign mosi_in   = C[MOSI_PAD];
-  assign ss_n_in   = C[SS_N_PAD];
 
   // RX data: gather 16 bits from interleaved PAD indices.
   genvar dn_i;
@@ -267,9 +265,6 @@ module chip_top (
     IE[DN_CLK_PAD]     = 1'b1;
     IE[DN_VALID_PAD]   = 1'b1;
     IE[TOKEN_CLK_PAD]  = 1'b1;
-    // IE[SCLK_PAD]       = 1'b1;
-    // IE[MOSI_PAD]       = 1'b1;
-    // IE[SS_N_PAD]       = 1'b1;
     for (k = 0; k < 16; k = k + 1) begin
       IE[dn_data_pad(k)] = 1'b1;
     end
@@ -281,8 +276,6 @@ module chip_top (
     I[UP_CLK_PAD]     = up_clk;
     OEN[UP_VALID_PAD] = 1'b0;
     I[UP_VALID_PAD]   = up_valid;
-    // OEN[MISO_PAD]     = 1'b0;
-    // I[MISO_PAD]       = miso_out;
     // OEN[PIN_18_PAD]   = 1'b0;
     // I[PIN_18_PAD]     = pin_18_out;
     for (k = 0; k < 16; k = k + 1) begin
@@ -319,7 +312,7 @@ module chip_top (
       .upstream_io_link_reset_i  (io_link_reset_int),
       .async_token_reset_i       (async_token_reset_int),
       .token_clk_i               (token_clk),
-      .downstream_io_link_reset_i(io_link_reset_int),
+      .downstream_io_link_reset_i(downstream_io_link_reset_sync),
       .downstream_io_clk_i       (dn_clk),
       .downstream_io_data_i      (dn_data),
       .downstream_io_valid_i     (dn_valid),
@@ -369,20 +362,44 @@ module async_rst_sync_deassert (
     input  wire rst,
     output wire async_rst_sync_deassert
 );
-  reg rst_sync1;
-  reg rst_sync2;
+  // Async-assert / sync-deassert reset synchronizer using TSMC180 DFSNQD1BWP7T
+  // (DFF with active-low async-set SDN).  Direct-instantiated (not inferred)
+  // so the SDN pin name resolves in every tool stage — needed for SDN routing
+  // bounds in cfg/constraints.tcl which target rst_sync*_reg/SDN by pin.
+  //
+  // Truth table:
+  //   rst = 1 (asserted, active high):  SDN = 0 → Q forced to 1 immediately
+  //                                     → async_rst_sync_deassert = 1 (reset)
+  //   rst = 0 (released):               SDN = 1 → FF samples D each CP edge
+  //                                     → after 2 clocks, Q chain rolls to 0
+  //                                     → async_rst_sync_deassert = 0 (run)
+  //
+  // The 2-FF depth gives 1 clock cycle for metastability on FF1/Q to resolve
+  // before FF2 samples it on the next edge.
+  //
+  // Excluded from scan via cfg/dft.yml dont_scan_instances list — the non-scan
+  // DFSNQD1BWP7T variant is used (not SDFSNQD2BWP7T), so DFT scan stitching
+  // would fail to wire SI/SE through this module.
 
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
-      rst_sync1 <= 1'b1;
-      rst_sync2 <= 1'b1;
-    end else begin
-      rst_sync1 <= 1'b0;
-      rst_sync2 <= rst_sync1;
-    end
-  end
+  wire rst_n;
+  wire rst_sync1;
 
-  assign async_rst_sync_deassert = rst_sync2;
+  INVD1BWP7T u_rst_inv (
+      .I (rst),
+      .ZN(rst_n)
+  );
+  DFSNQD1BWP7T rst_sync1_reg (
+      .SDN(rst_n),
+      .CP (clk),
+      .D  (1'b0),
+      .Q  (rst_sync1)
+  );
+  DFSNQD1BWP7T rst_sync2_reg (
+      .SDN(rst_n),
+      .CP (clk),
+      .D  (rst_sync1),
+      .Q  (async_rst_sync_deassert)
+  );
 endmodule
 
 // -----------------------------------------------------------------------
