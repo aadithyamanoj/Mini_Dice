@@ -1,4 +1,3 @@
-````markdown
 # MiniDICE
 
 **MiniDICE** is a General-Purpose Dataflow Intelligent Compute Engine developed as part of the University of Washington EE478 VLSI capstone.
@@ -13,16 +12,16 @@ The design was implemented in SystemVerilog, validated through FPGA prototyping,
 
 ## Key Features
 
-- GPU-style SIMT execution
-- Up to 16 threads per CTA
-- 4×4 CGRA with 16 processing elements
-- Spatial execution and direct PE-to-PE communication
-- Support for branches and thread divergence
-- Double-buffered CGRA configuration memory
-- Four load/store interfaces
-- AXI4-based communication
-- FPGA prototyping and validation
-- Complete RTL-to-GDS ASIC implementation
+* GPU-style SIMT execution
+* Up to 16 threads per CTA
+* 4×4 CGRA with 16 processing elements
+* Spatial execution and direct PE-to-PE communication
+* Support for branches and thread divergence
+* Double-buffered CGRA configuration memory
+* Four load/store interfaces
+* AXI4-based communication
+* FPGA prototyping and validation
+* Complete RTL-to-GDS ASIC implementation
 
 ---
 
@@ -62,23 +61,23 @@ The MiniDICE architecture contains two main compute sections: the SIMT frontend 
 
 The frontend manages:
 
-- CTA scheduling
-- Active-thread masks
-- Branch divergence and reconvergence
-- Program metadata
-- CGRA configuration loading
-- Thread execution control
+* CTA scheduling
+* Active-thread masks
+* Branch divergence and reconvergence
+* Program metadata
+* CGRA configuration loading
+* Thread execution control
 
 ### CGRA Backend
 
 The backend contains:
 
-- A thread dispatcher
-- Per-thread architectural registers
-- A 4×4 array of processing elements
-- Direct communication between neighboring processing elements
-- Four load/store interfaces
-- Execution and memory completion tracking
+* A thread dispatcher
+* Per-thread architectural registers
+* A 4×4 array of processing elements
+* Direct communication between neighboring processing elements
+* Four load/store interfaces
+* Execution and memory completion tracking
 
 ---
 
@@ -103,54 +102,45 @@ Double-buffered configuration memory allows one CGRA configuration to execute wh
 
 ## I/O and Crossbar Interface
 
-MiniDICE communicates with an FPGA host through a credit-based `bsg_link` interface. The physical interface transfers data between the FPGA and the ASIC, while internal adapters convert the link traffic into AXI transactions.
+MiniDICE communicates with an FPGA host through a credit-based `bsg_link` interface. The physical interface transfers data between the FPGA and the ASIC, while internal adapters convert link traffic into AXI transactions.
 
 The I/O subsystem is responsible for:
 
-- Receiving commands and data from the FPGA host
-- Converting serialized link traffic into AXI requests
-- Returning read data and status information to the FPGA
-- Applying credit-based flow control
-- Connecting the external host interface to the internal AXI network
+* Receiving commands and data from the FPGA host
+* Converting serialized link traffic into AXI requests
+* Returning read data and status information to the FPGA
+* Applying credit-based flow control
+* Connecting the external host interface to the internal AXI network
 
 The AXI crossbar routes transactions between the main system components:
 
-- FPGA-backed program and data memory
-- MiniDICE control and status registers
-- CGRA configuration memory
-- Program metadata fetch logic
-- Load/store interfaces in the CGRA backend
+* FPGA-backed program and data memory
+* MiniDICE control and status registers
+* CGRA configuration and program metadata fetch logic
+* Load/store interfaces in the CGRA backend
 
 ```mermaid
 flowchart LR
-    FPGA["FPGA Host"] -->|"bsg_link"| RXTX["Link RX / TX Adapters"]
-    RXTX --> XBAR["AXI Crossbar"]
+    FPGA["FPGA Host"] <-->|"bsg_link"| LINK["Link RX / TX Adapters"]
+    LINK <--> XBAR["AXI Crossbar"]
 
-    XBAR --> CSR["Control and Status Registers"]
-    XBAR --> MEMORY["FPGA-Backed Memory"]
-    XBAR --> FETCH["Program and Bitstream Fetch"]
-    XBAR --> LDST["CGRA Load / Store Unit"]
-
-    CSR --> XBAR
-    MEMORY --> XBAR
-    FETCH --> XBAR
-    LDST --> XBAR
-
-    XBAR --> RXTX
-    RXTX --> FPGA
+    XBAR <--> CSR["Control and Status Registers"]
+    XBAR <--> MEMORY["FPGA-Backed Memory"]
+    XBAR <--> FETCH["Program and Configuration Fetch"]
+    XBAR <--> LDST["CGRA Load / Store Unit"]
 ```
 
 The control and status register interface allows the FPGA host to:
 
-- Reset the CGRA core
-- Provide the starting program counter
-- Configure the number of threads
-- Pass kernel arguments
-- Start kernel execution
-- Check busy and completion status
-- Read error and execution information
+* Reset the CGRA core
+* Provide the starting program counter
+* Configure the number of threads
+* Pass kernel arguments
+* Start kernel execution
+* Check busy and completion status
+* Read error and execution information
 
-The same AXI network is used by the frontend to fetch p-graph metadata and CGRA configurations and by the backend to issue application load and store requests.
+The frontend uses the AXI network to fetch p-graph metadata and CGRA configurations. The backend uses the same network to issue application load and store requests.
 
 ---
 
@@ -160,14 +150,14 @@ MiniDICE was prototyped using an FPGA host environment.
 
 The FPGA prototype was used to validate:
 
-- Host-to-accelerator communication
-- AXI crossbar transaction routing
-- Program and configuration loading
-- CSR reads and writes
-- Kernel launch
-- Memory requests and responses
-- Completion reporting
-- End-to-end workload execution
+* Host-to-accelerator communication
+* AXI crossbar transaction routing
+* Program and configuration loading
+* CSR reads and writes
+* Kernel launch
+* Memory requests and responses
+* Completion reporting
+* End-to-end workload execution
 
 The FPGA communicates with MiniDICE through the `bsg_link` interface. The FPGA platform can also be used to communicate with and test the fabricated ASIC.
 
@@ -179,41 +169,41 @@ MiniDICE was taken through a complete RTL-to-GDS flow targeting the **TSMC 180 n
 
 The implementation flow included:
 
-- RTL synthesis
-- Formal equivalence checking
-- Floorplanning
-- Placement and routing
-- Static timing analysis
-- Design-rule checking
-- Layout-versus-schematic verification
-- Final GDS generation
+* RTL synthesis
+* Formal equivalence checking
+* Floorplanning
+* Placement and routing
+* Static timing analysis
+* Design-rule checking
+* Layout-versus-schematic verification
+* Final GDS generation
 
 ### Tools
 
-| Stage | Tool |
-|---|---|
-| Synthesis | Cadence Genus |
-| Formal verification | Cadence Conformal |
-| Place and route | Cadence Innovus |
-| Static timing analysis | Cadence Tempus |
-| DRC and LVS | Siemens Calibre |
+| Stage                  | Tool              |
+| ---------------------- | ----------------- |
+| Synthesis              | Cadence Genus     |
+| Formal verification    | Cadence Conformal |
+| Place and route        | Cadence Innovus   |
+| Static timing analysis | Cadence Tempus    |
+| DRC and LVS            | Siemens Calibre   |
 
 ---
 
 ## Implementation Results
 
-| Metric | Result |
-|---|---:|
-| Process technology | TSMC 180 nm |
-| Operating frequency | 51 MHz |
-| Power | 137.85 mW |
-| Die area | 2.27 mm² |
-| Core area | 1.75 mm² |
-| Placement utilization | 77% |
-| Standard-cell count | 76,669 |
-| Estimated transistor count | 278,850 |
-| Minimum setup slack | 0.362 ns |
-| Minimum hold slack | 0.030 ns |
+| Metric                     |      Result |
+| -------------------------- | ----------: |
+| Process technology         | TSMC 180 nm |
+| Operating frequency        |      51 MHz |
+| Power                      |   137.85 mW |
+| Die area                   |    2.27 mm² |
+| Core area                  |    1.75 mm² |
+| Placement utilization      |         77% |
+| Standard-cell count        |      76,669 |
+| Estimated transistor count |     278,850 |
+| Minimum setup slack        |    0.362 ns |
+| Minimum hold slack         |    0.030 ns |
 
 The final design completed synthesis, place and route, timing analysis, formal verification, DRC, and LVS with positive timing slack.
 
@@ -247,12 +237,12 @@ Mini_Dice/
 
 ## Contributors
 
-- Aadithya Manoj
-- Albert Ton
-- Elliot Norman
-- Juwon Jun
-- Patrick Howe
-- Sibo Zhang
+* Aadithya Manoj
+* Albert Ton
+* Elliot Norman
+* Juwon Jun
+* Patrick Howe
+* Sibo Zhang
 
 ---
 
@@ -262,21 +252,20 @@ This project was completed through the University of Washington Department of El
 
 We thank:
 
-- Professor Ang Li
-- Jiayi Wang
-- University of Washington PNCEL
-- TSMC
-- Apple
+* Professor Ang Li
+* Jiayi Wang
+* University of Washington PNCEL
+* TSMC
+* Apple
 
 ---
 
 ## Reference
 
-Jiayi Wang, Ang Da Lu, Zhichen Zeng, and Ang Li,  
-**“DICE: Enabling Efficient General-Purpose SIMT Execution with Statically Scheduled Coarse-Grained Reconfigurable Arrays.”**  
+Jiayi Wang, Ang Da Lu, Zhichen Zeng, and Ang Li,
+**“DICE: Enabling Efficient General-Purpose SIMT Execution with Statically Scheduled Coarse-Grained Reconfigurable Arrays.”**
 ISCA 2026.
 
 ## Repository
 
 https://github.com/aadithyamanoj/Mini_Dice
-````
