@@ -29,7 +29,7 @@ The design was implemented in SystemVerilog, validated through FPGA prototyping,
 
 <p align="center">
   <img
-    src="./MiniDICE_Architecture.png"
+    src="./images/MiniDICE_Architecture.png"
     alt="MiniDICE processor architecture"
     width="900"
   />
@@ -127,6 +127,18 @@ The control and status register interface allows the FPGA host to:
 
 MiniDICE was also validated using an FPGA host environment.
 
+<p align="center">
+  <img
+    src="./images/fpga_prototype.jpeg"
+    alt="MiniDICE FPGA prototype on a Xilinx ZYNQ UltraScale+ ZCU102 board"
+    width="900"
+  />
+</p>
+
+<p align="center">
+  <em>MiniDICE FPGA prototype running on a Xilinx ZYNQ UltraScale+ ZCU102 host board.</em>
+</p>
+
 The FPGA prototype was used to test:
 
 - Host-to-accelerator communication
@@ -145,6 +157,18 @@ The FPGA communicates with MiniDICE through the `bsg_link` interface and can als
 ## ASIC Implementation
 
 MiniDICE was taken through a complete RTL-to-GDS flow targeting the **TSMC 180 nm** process.
+
+<p align="center">
+  <img
+    src="./images/chip_layout.jpeg"
+    alt="MiniDICE final chip layout in TSMC 180 nm"
+    width="600"
+  />
+</p>
+
+<p align="center">
+  <em>Final MiniDICE chip layout after place and route in the TSMC 180 nm process.</em>
+</p>
 
 The implementation flow included:
 
@@ -207,7 +231,7 @@ Mini_Dice/
 │   ├── mini_dice_top/
 │   └── chip_top.sv
 ├── tb/                     # Testbenches and test vectors
-├── MiniDICE_Architecture.png
+├── images/                 # README figures (architecture, FPGA, layout)
 ├── source_me.sh
 ├── verible.filelist
 └── .gitmodules
